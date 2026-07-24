@@ -19,6 +19,7 @@ import argparse
 import logging
 import logging.handlers
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -76,9 +77,9 @@ class _TraceCompletion:
 
 
 # ---------------------------------------------------------------------------- #
-# Logging setup — structured text to logs/jarvis.log (parsed by analyze_latency)
+# Logging setup — latest run + a permanent, shareable per-session transcript.
 # ---------------------------------------------------------------------------- #
-def setup_logging(cfg: Config) -> Any:
+def setup_logging(cfg: Config) -> Path:
     log_cfg = cfg.logging or {}
     level = getattr(logging, str(log_cfg.get("level", "INFO")).upper(), logging.INFO)
     fmt = logging.Formatter(
@@ -99,12 +100,25 @@ def setup_logging(cfg: Config) -> Any:
     fh.setFormatter(fmt)
     root.addHandler(fh)
 
+    session_dir = Path(log_cfg.get("session_log_dir", "logs/sessions"))
+    session_dir.mkdir(parents=True, exist_ok=True)
+    session_name = (
+        f"jarvis_session_{datetime.now():%Y%m%d_%H%M%S_%f}_{os.getpid()}.txt"
+    )
+    session_path = session_dir / session_name
+    session_handler = logging.FileHandler(
+        session_path, mode="x", encoding="utf-8"
+    )
+    session_handler.setFormatter(fmt)
+    root.addHandler(session_handler)
+
     if log_cfg.get("console", True):
         ch = logging.StreamHandler()
         ch.setFormatter(fmt)
         root.addHandler(ch)
 
-    return fh
+    logger.info("SESSION_LOG_READY file=%s", session_path.resolve())
+    return session_path
 
 
 # ---------------------------------------------------------------------------- #

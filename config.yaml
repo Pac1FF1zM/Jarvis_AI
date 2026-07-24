@@ -66,6 +66,9 @@ memory:
 logging:
   level: INFO
   log_file: logs/jarvis.log     # parsed by scripts/analyze_latency.py
+  # Every start also gets its own UTF-8 transcript for ML feedback. Unlike
+  # jarvis.log, these files are never overwritten by the next session.
+  session_log_dir: logs/sessions
   console: true
 
 tools:
