@@ -1,0 +1,49 @@
+{"text":"будь добр сообщи который час","intent":"get_current_time","slots":{}}
+{"text":"глянь сколько времени","intent":"get_current_time","slots":{}}
+{"text":"часики показывают сколько","intent":"get_current_time","slots":{}}
+{"text":"можно узнать который теперь час","intent":"get_current_time","slots":{}}
+{"text":"сообщи время без лишних слов","intent":"get_current_time","slots":{}}
+{"text":"подскажи пожалуйста точное время","intent":"get_current_time","slots":{}}
+{"text":"сколько времени в данный момент","intent":"get_current_time","slots":{}}
+{"text":"через 9 минут напомни полить цветы","intent":"set_reminder","slots":{"minutes":"9","reminder_text":"полить цветы"}}
+{"text":"поставь напоминание на 22 минуты проверить замок","intent":"set_reminder","slots":{"minutes":"22","reminder_text":"проверить замок"}}
+{"text":"спустя 11 минут скажи мне достать бельё","intent":"set_reminder","slots":{"minutes":"11","reminder_text":"достать бельё"}}
+{"text":"через 13 минут напомни выключить утюг","intent":"set_reminder","slots":{"minutes":"13","reminder_text":"выключить утюг"}}
+{"text":"на 8 минут напомни проверить суп","intent":"set_reminder","slots":{"minutes":"8","reminder_text":"проверить суп"}}
+{"text":"напомни через 27 минут открыть дверь курьеру","intent":"set_reminder","slots":{"minutes":"27","reminder_text":"открыть дверь курьеру"}}
+{"text":"через 16 минут скажи мне забрать документы","intent":"set_reminder","slots":{"minutes":"16","reminder_text":"забрать документы"}}
+{"text":"запусти мне калькулятор","intent":"open_application","slots":{"application":"калькулятор"}}
+{"text":"открой приложение блокнот пожалуйста","intent":"open_application","slots":{"application":"блокнот"}}
+{"text":"включи мне проводник","intent":"open_application","slots":{"application":"проводник"}}
+{"text":"launch internet","intent":"open_application","slots":{"application":"internet"}}
+{"text":"запустить диспетчер задач","intent":"open_application","slots":{"application":"диспетчер задач"}}
+{"text":"мне нужно приложение paint","intent":"open_application","slots":{"application":"paint"}}
+{"text":"open calculator","intent":"open_application","slots":{"application":"calculator"}}
+{"text":"покажи весь перечень программ","intent":"list_applications","slots":{}}
+{"text":"какие программы разрешено запускать","intent":"list_applications","slots":{}}
+{"text":"перечисли доступные тебе приложения","intent":"list_applications","slots":{}}
+{"text":"что можешь включить на компьютере","intent":"list_applications","slots":{}}
+{"text":"дай список поддерживаемых программ","intent":"list_applications","slots":{}}
+{"text":"покажи варианты приложений для запуска","intent":"list_applications","slots":{}}
+{"text":"which apps can you launch","intent":"list_applications","slots":{}}
+{"text":"отмени последнюю команду","intent":"cancel","slots":{}}
+{"text":"ничего не выполняй","intent":"cancel","slots":{}}
+{"text":"я передумал останови","intent":"cancel","slots":{}}
+{"text":"прекрати пожалуйста","intent":"cancel","slots":{}}
+{"text":"не запускай это","intent":"cancel","slots":{}}
+{"text":"сними текущую задачу","intent":"cancel","slots":{}}
+{"text":"abort current action","intent":"cancel","slots":{}}
+{"text":"как научиться программировать","intent":"general_chat","slots":{}}
+{"text":"расскажи короткую шутку","intent":"general_chat","slots":{}}
+{"text":"чем отличается компьютер от сервера","intent":"general_chat","slots":{}}
+{"text":"что ты думаешь об искусственном интеллекте","intent":"general_chat","slots":{}}
+{"text":"помоги сформулировать идею","intent":"general_chat","slots":{}}
+{"text":"объясни зачем нужны нейроны","intent":"general_chat","slots":{}}
+{"text":"tell me about space travel","intent":"general_chat","slots":{}}
+{"text":"эм ну это","intent":"unknown","slots":{}}
+{"text":"сделай штуку","intent":"unknown","slots":{}}
+{"text":"туда потом сюда","intent":"unknown","slots":{}}
+{"text":"открой пожалуйста","intent":"unknown","slots":{}}
+{"text":"через несколько минут","intent":"unknown","slots":{}}
+{"text":"блаблабла","intent":"unknown","slots":{}}
+{"text":"команда команда","intent":"unknown","slots":{}}

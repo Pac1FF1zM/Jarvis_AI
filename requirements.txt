@@ -1,0 +1,25 @@
+# Jarvis — runtime + test dependencies
+#
+# Core async + config (required for the scaffold to run):
+pyyaml>=6.0
+torch>=2.0             # own NLU architectures/training; no pretrained weights
+#
+# NOTE: pydantic is NOT currently used — config_loader.py is dataclasses-only.
+# If a future config rewrite moves to pydantic-based validation, add it back
+# here as a real requirement then. Kept as a comment so it doesn't misrepresent
+# the current runtime deps.
+# pydantic>=2.5   # planned/optional
+
+# Audio/LLM/TTS engines. OpenAI Whisper and Ollama are imported by
+# modules/stt.py and modules/llm.py respectively (behind guarded imports, so
+# the project still runs without them installed).
+openai-whisper>=20250625
+ollama>=0.2
+silero>=0.4
+sounddevice>=0.4     # interruptible local audio playback for Silero TTS
+pynput==1.8.2        # Windows global push-to-talk hotkey (no admin required normally)
+silero-vad[onnx-cpu]==6.2.1  # streaming 16 kHz end-of-speech detection
+
+# Tests only:
+pytest>=8.0
+pytest-asyncio>=0.23

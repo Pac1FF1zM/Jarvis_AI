@@ -1,0 +1,68 @@
+# Jarvis configuration. See README.md for the full guide.
+#
+# Tune here, never in code. Module sections feed core.config_loader.ModuleConfig
+# (fields: enabled, device, compute_type, model, params).
+
+orchestrator:
+  listening_timeout_seconds: 8   # revert LISTENING -> IDLE if nothing happens
+  interaction_timeout_seconds: 60 # hard failure guard; completion is event-driven
+
+modules:
+  wake_word:
+    enabled: true
+    # wake word detection itself isn't GPU-heavy in the stub; keep on CPU.
+    device: cpu
+
+  # Official OpenAI Whisper (no Hugging Face dependency or endpoint).
+  stt:
+    enabled: true
+    device: cpu
+    model: base
+    params:
+      language: ru
+      download_root: models/openai-whisper
+      fp16: false
+
+  # Own word-level NLU model. All weights and its tokenizer are trained
+  # locally from random initialisation; no pretrained checkpoints are used.
+  nlu:
+    enabled: true
+    device: cpu
+    model: models/nlu_word_bigru_curriculum.pt
+    params:
+      confidence_threshold: 0.55
+
+  # Ollama qwen2.5:7b-instruct. Full 7B GPU offload will NOT fit in 3GB;
+  # run on CPU, or use Q4_K_M / smaller. See README §3.
+  llm:
+    enabled: true
+    device: cpu
+    compute_type: q4_k_m
+    model: qwen2.5:7b-instruct
+    params:
+      # The NLU model owns tool routing. Ollama handles only general dialogue;
+      # deterministic tool results are returned directly.
+      input_event: nlu_result
+
+  # Silero TTS. Light; CPU is fine, no GPU contention with STT/LLM.
+  tts:
+    enabled: true
+    device: cpu
+    model: v4_ru
+    params:
+      language: ru
+      speaker: xenia
+      sample_rate: 48000
+
+memory:
+  db_path: memory.db            # long-term SQLite store
+  short_term_turns: 8           # rolling conversational window size
+
+logging:
+  level: INFO
+  log_file: logs/jarvis.log     # parsed by scripts/analyze_latency.py
+  console: true
+
+tools:
+  # tools auto-discover from tools/ at startup; nothing to list here.
+  auto_discover: true

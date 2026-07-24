@@ -1,0 +1,15 @@
+{
+  "validation_intent_accuracy": 0.9411764705882353,
+  "validation_intent_macro_f1": 0.908263305322129,
+  "validation_slot_token_accuracy": 0.8373983739837398,
+  "validation_slot_entity_f1": 0.6363636363636364,
+  "test_intent_accuracy": 0.9014084507042254,
+  "test_intent_macro_f1": 0.8181405895691611,
+  "test_slot_token_accuracy": 0.8288043478260869,
+  "test_slot_entity_f1": 0.6697247706422018,
+  "train_examples": 3824,
+  "parameters": 58686,
+  "temperature": 0.6200000047683716,
+  "validation_ece_before": 0.1347314566373825,
+  "validation_ece_after": 0.1178385391831398
+}

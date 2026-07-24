@@ -1,0 +1,56 @@
+# All relative paths are resolved from this file's directory.
+base_checkpoint: ../models/nlu_word_bigru_curriculum.pt
+training_device: cuda
+require_cuda: true
+runs_dir: runs
+export_dir: export
+
+data:
+  train: data/train.jsonl
+  validation: data/validation.jsonl
+  # Keep this file secret from experiment design. It is evaluated only after
+  # a candidate has already won on validation. Empty is allowed.
+  private_holdout: data/private_holdout.jsonl
+
+experiments:
+  - name: conservative_augmented
+    method: augmented
+    epochs: 50
+    batch_size: 256
+    learning_rate: 0.0003
+    custom_repeat: 3
+    patience: 10
+    label_smoothing: 0.05
+    seed: 17
+
+  - name: balanced_curriculum
+    method: curriculum
+    epochs: 70
+    batch_size: 256
+    learning_rate: 0.0005
+    custom_repeat: 5
+    patience: 12
+    label_smoothing: 0.05
+    seed: 29
+
+  - name: focused_standard
+    method: standard
+    epochs: 50
+    batch_size: 256
+    learning_rate: 0.0008
+    custom_repeat: 8
+    patience: 10
+    label_smoothing: 0.08
+    seed: 43
+
+benchmark:
+  # CPU reflects the current Jarvis runtime deployment. Change to cuda only
+  # if the assistant will also run inference on the RTX 3090.
+  device: cpu
+  warmup: 30
+  repetitions: 500
+
+selection:
+  # Never export a candidate that is less accurate or violates the latency SLA.
+  min_macro_f1_improvement: 0.0
+  max_p95_latency_ms: 30.0

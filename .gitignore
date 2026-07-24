@@ -1,0 +1,52 @@
+# Python bytecode, test and tooling caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments and build output
+.venv/
+venv/
+.venv-training/
+build/
+dist/
+*.egg-info/
+
+# Local secrets and credentials (commit only the explicit example file)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+secrets*.json
+
+# Runtime state, private user data and logs
+logs/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+recordings/
+*.wav
+*.flac
+
+# Generated/downloaded ML artifacts. Project-owned NLU checkpoints in
+# models/*.pt intentionally remain tracked because they are small runtime data.
+models/openai-whisper/
+latest_silero_models.yml
+training_workspace/runs/
+training_workspace/export/
+training_workspace/data/private_holdout.jsonl
+
+# Local archives, IDE and OS metadata
+*.zip
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

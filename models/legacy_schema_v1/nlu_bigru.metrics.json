@@ -1,0 +1,12 @@
+{
+  "validation_intent_accuracy": 0.8666666666666667,
+  "validation_intent_macro_f1": 0.7166666666666667,
+  "validation_slot_token_accuracy": 0.8824074074074074,
+  "validation_slot_entity_f1": 0.7721893491124261,
+  "test_intent_accuracy": 0.8604651162790697,
+  "test_intent_macro_f1": 0.7039826839826839,
+  "test_slot_token_accuracy": 0.8089480048367593,
+  "test_slot_entity_f1": 0.7241379310344829,
+  "train_examples": 1850,
+  "parameters": 48186
+}

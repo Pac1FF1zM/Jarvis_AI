@@ -1,0 +1,7 @@
+{"text":"можешь посмотреть который сейчас час","intent":"get_current_time","slots":{}}
+{"text":"через 19 минут напомни достать ключи","intent":"set_reminder","slots":{"duration":"19","reminder_text":"достать ключи"}}
+{"text":"пожалуйста запусти калькулятор","intent":"open_application","slots":{"application":"калькулятор"}}
+{"text":"перечисли весь доступный софт","intent":"list_applications","slots":{}}
+{"text":"прерви эту операцию прямо сейчас","intent":"cancel","slots":{}}
+{"text":"расскажи почему компьютеры нагреваются","intent":"general_chat","slots":{}}
+{"text":"ну это самое сделай","intent":"unknown","slots":{}}

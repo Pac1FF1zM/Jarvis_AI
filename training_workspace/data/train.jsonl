@@ -1,0 +1,14 @@
+{"text":"пожалуйста проверь часы","intent":"get_current_time","slots":{}}
+{"text":"скажи точное местное время","intent":"get_current_time","slots":{}}
+{"text":"напомни через 14 минут вынуть зарядку","intent":"set_reminder","slots":{"duration":"14","reminder_text":"вынуть зарядку"}}
+{"text":"через 35 минут напомни проверить окна","intent":"set_reminder","slots":{"duration":"35","reminder_text":"проверить окна"}}
+{"text":"запусти приложение калькулятор","intent":"open_application","slots":{"application":"калькулятор"}}
+{"text":"открой мне блокнот","intent":"open_application","slots":{"application":"блокнот"}}
+{"text":"покажи полный список разрешённых программ","intent":"list_applications","slots":{}}
+{"text":"какие приложения ты способен открыть","intent":"list_applications","slots":{}}
+{"text":"отмени действие немедленно","intent":"cancel","slots":{}}
+{"text":"я передумал ничего не запускай","intent":"cancel","slots":{}}
+{"text":"объясни как работает машинное обучение","intent":"general_chat","slots":{}}
+{"text":"предложи тему для разговора","intent":"general_chat","slots":{}}
+{"text":"ээ сделай это там","intent":"unknown","slots":{}}
+{"text":"выполни неопределённую штуку","intent":"unknown","slots":{}}
