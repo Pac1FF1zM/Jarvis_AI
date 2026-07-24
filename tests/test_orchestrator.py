@@ -110,6 +110,7 @@ async def test_duplicate_wake_while_listening_is_noop(bus: EventBus, orch: Orche
     run_task = asyncio.create_task(bus.run())
     await asyncio.sleep(0.05)
     assert orch.state == State.LISTENING
+    assert orch._current_trace == "dup1"
     # Fire a duplicate wake.
     bus.publish("wake_word_detected", {}, trace_id="dup2")
     await asyncio.sleep(0.05)
@@ -117,6 +118,9 @@ async def test_duplicate_wake_while_listening_is_noop(bus: EventBus, orch: Orche
     await run_task
 
     assert orch.state == State.LISTENING  # unchanged, not reset/re-armed badly
+    assert orch._current_trace == "dup1", (
+        "ignored wake must not steal trace ownership"
+    )
     assert audio_events == [], "no audio_captured should be published by orchestrator"
 
 
@@ -145,6 +149,7 @@ async def test_wake_in_non_speaking_active_state_is_noop(
     """Fix #3: wake in any active state other than SPEAKING must not move state."""
     await orch.start()
     orch.state = blocked_state
+    orch._current_trace = "active"
     bus.publish("wake_word_detected", {}, trace_id="noop")
     run_task = asyncio.create_task(bus.run())
     await asyncio.sleep(0.1)
@@ -154,6 +159,7 @@ async def test_wake_in_non_speaking_active_state_is_noop(
         f"state changed from {blocked_state.value} on wake — barge-in is "
         f"SPEAKING-only, this should have been a no-op"
     )
+    assert orch._current_trace == "active"
 
 
 async def test_interaction_completed_is_published_only_after_idle(
@@ -167,13 +173,16 @@ async def test_interaction_completed_is_published_only_after_idle(
     await orch.start()
     bus.subscribe("interaction_completed", record)
     orch.state = State.SPEAKING
+    orch._current_trace = "complete-tr"
     run_task = asyncio.create_task(bus.run())
     bus.publish("speech_finished", {"text": "done"}, trace_id="complete-tr")
     await asyncio.sleep(0.1)
     await bus.stop()
     await run_task
 
-    assert completed == [("complete-tr", State.IDLE, {"state": "IDLE"})]
+    assert completed == [
+        ("complete-tr", State.IDLE, {"state": "IDLE", "ok": True})
+    ]
 
 
 async def test_thinking_ready_is_published_after_authoritative_transition(
@@ -187,6 +196,7 @@ async def test_thinking_ready_is_published_after_authoritative_transition(
     await orch.start()
     bus.subscribe("thinking_ready", record)
     orch.state = State.LISTENING
+    orch._current_trace = "think-tr"
     run_task = asyncio.create_task(bus.run())
     bus.publish("transcription_ready", {"text": "привет"}, trace_id="think-tr")
     await asyncio.sleep(0.1)
@@ -215,3 +225,77 @@ async def test_audio_captured_cancels_listening_timeout_during_slow_stt(bus: Eve
     await orch.stop()
 
     assert orch.state == State.THINKING
+
+
+async def test_handler_failure_recovers_to_idle_and_allows_next_trace(bus: EventBus):
+    orch = Orchestrator(
+        bus,
+        {"listening_timeout_seconds": 1, "interaction_timeout_seconds": 1},
+    )
+    completed: asyncio.Queue = asyncio.Queue()
+
+    async def broken_handler(event):
+        raise RuntimeError("tool exploded")
+
+    await orch.start()
+    bus.subscribe("explode", broken_handler)
+    bus.subscribe("interaction_completed", lambda event: completed.put(event))
+    run_task = asyncio.create_task(bus.run())
+
+    bus.publish("wake_word_detected", {}, trace_id="broken-trace")
+    await asyncio.sleep(0)
+    bus.publish("audio_captured", {"audio": b"pcm"}, trace_id="broken-trace")
+    bus.publish("transcription_ready", {"text": "test"}, trace_id="broken-trace")
+    bus.publish("explode", {}, trace_id="broken-trace")
+
+    failure = await asyncio.wait_for(completed.get(), timeout=1.0)
+    assert failure.trace_id == "broken-trace"
+    assert failure.payload == {
+        "state": "IDLE",
+        "ok": False,
+        "reason": "handler_exception",
+        "failed_state": "THINKING",
+    }
+    assert orch.state == State.IDLE
+    assert orch._current_trace is None
+
+    # Late output from the failed handler chain cannot resurrect the trace.
+    bus.publish("response_ready", {"text": "stale"}, trace_id="broken-trace")
+    bus.publish("speech_finished", {}, trace_id="broken-trace")
+    await asyncio.sleep(0.05)
+    assert orch.state == State.IDLE
+
+    bus.publish("wake_word_detected", {}, trace_id="next-trace")
+    await asyncio.sleep(0.05)
+    assert orch.state == State.LISTENING
+    assert orch._current_trace == "next-trace"
+
+    await bus.stop()
+    await run_task
+    await orch.stop()
+
+
+async def test_interaction_watchdog_recovers_thinking_trace(bus: EventBus):
+    orch = Orchestrator(
+        bus,
+        {"listening_timeout_seconds": 1, "interaction_timeout_seconds": 0.05},
+    )
+    completed: asyncio.Queue = asyncio.Queue()
+    await orch.start()
+    bus.subscribe("interaction_completed", lambda event: completed.put(event))
+    run_task = asyncio.create_task(bus.run())
+
+    bus.publish("wake_word_detected", {}, trace_id="timeout-trace")
+    await asyncio.sleep(0)
+    bus.publish("audio_captured", {"audio": b"pcm"}, trace_id="timeout-trace")
+    bus.publish("transcription_ready", {"text": "test"}, trace_id="timeout-trace")
+
+    failure = await asyncio.wait_for(completed.get(), timeout=1.0)
+    assert failure.payload["ok"] is False
+    assert failure.payload["reason"] == "interaction_timeout"
+    assert failure.payload["failed_state"] == "THINKING"
+    assert orch.state == State.IDLE
+
+    await bus.stop()
+    await run_task
+    await orch.stop()

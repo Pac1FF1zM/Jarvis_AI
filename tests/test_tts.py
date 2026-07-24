@@ -505,6 +505,56 @@ async def test_old_generation_cannot_stop_new_device_owner(
     assert sounddevice.stop_calls == 1
 
 
+async def test_interaction_failure_cancels_current_speech_without_stale_finish(
+    bus: EventBus, monkeypatch
+):
+    monkeypatch.setattr(tts_mod, "_SILERO_TTS", None)
+    monkeypatch.setattr(tts_mod, "_SOUNDDEVICE", None)
+    mod = TTSModule(ModuleConfig())
+    await mod.start(bus)
+    entered = asyncio.Event()
+    published: list[Event] = []
+    original_publish = bus.publish_event
+
+    async def blocked_speak(text: str, session) -> None:
+        entered.set()
+        await asyncio.Event().wait()
+
+    def record(event: Event) -> None:
+        published.append(event)
+        original_publish(event)
+
+    monkeypatch.setattr(mod, "_speak", blocked_speak)
+    monkeypatch.setattr(bus, "publish_event", record)
+    response_task = asyncio.create_task(
+        mod._on_response(
+            Event(
+                "response_ready",
+                {"text": "never finish"},
+                trace_id="failed-trace",
+            )
+        )
+    )
+    await asyncio.wait_for(entered.wait(), timeout=1.0)
+
+    await mod._on_interaction_failed(
+        Event(
+            "interaction_failed",
+            {"reason": "interaction_timeout"},
+            trace_id="failed-trace",
+        )
+    )
+    await asyncio.wait_for(response_task, timeout=1.0)
+    await mod.stop()
+
+    assert mod._session is None
+    assert mod._owner_trace_id is None
+    assert not any(
+        event.event_type == "speech_finished" and event.trace_id == "failed-trace"
+        for event in published
+    )
+
+
 async def _wait_until(predicate, timeout: float = 1.0) -> None:
     deadline = asyncio.get_running_loop().time() + timeout
     while not predicate():

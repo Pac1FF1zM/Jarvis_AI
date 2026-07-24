@@ -3,7 +3,11 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from core.config_loader import Config
+from core.event_bus import Event
+from core.orchestrator import State
 import main as main_module
 
 
@@ -55,3 +59,25 @@ async def test_text_mode_never_starts_voice_modules(monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert "Jarvis: Я могу открыть:" in captured.out
+
+
+async def test_text_mode_waiter_surfaces_recovered_interaction_failure():
+    completion = main_module._TraceCompletion()
+    await completion.record(
+        Event(
+            "interaction_completed",
+            {
+                "state": "IDLE",
+                "ok": False,
+                "reason": "handler_exception",
+                "failed_state": "THINKING",
+            },
+            trace_id="failed-text",
+        )
+    )
+
+    class IdleOrchestrator:
+        state = State.IDLE
+
+    with pytest.raises(RuntimeError, match="failed and recovered to IDLE"):
+        await completion.wait("failed-text", IdleOrchestrator(), timeout=0.1)

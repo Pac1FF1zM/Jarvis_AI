@@ -143,10 +143,32 @@ class EventBus:
     async def _safe_dispatch(self, handler: Handler, event: Event) -> None:
         try:
             await handler(event)
-        except Exception:  # noqa: BLE001 — log and keep the bus alive
+        except Exception as exc:  # noqa: BLE001 — report and keep the bus alive
             logger.exception(
                 "handler error on '%s' trace=%s", event.event_type, event.trace_id
             )
+            # Turn an otherwise terminal handler exception into an explicit
+            # lifecycle signal.  The orchestrator can then reset the current
+            # trace instead of remaining stuck in TRANSCRIBING/THINKING/etc.
+            # Never recurse if the recovery handler itself is defective.
+            if event.event_type != "interaction_failed":
+                handler_name = getattr(
+                    handler,
+                    "__qualname__",
+                    getattr(handler, "__name__", repr(handler)),
+                )
+                self.publish_event(
+                    event.child(
+                        "interaction_failed",
+                        {
+                            "reason": "handler_exception",
+                            "source_event": event.event_type,
+                            "handler": handler_name,
+                            "error_type": type(exc).__name__,
+                            "error": str(exc),
+                        },
+                    )
+                )
 
     async def stop(self) -> None:
         """Signal the run loop to exit, then drain in-flight handler tasks.

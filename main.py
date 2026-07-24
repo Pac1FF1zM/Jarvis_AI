@@ -46,11 +46,11 @@ class _TraceCompletion:
     """Wait for authoritative completion of one trace without polling state."""
 
     def __init__(self) -> None:
-        self._completed: set[str] = set()
+        self._completed: dict[str, Any] = {}
         self._waiters: dict[str, asyncio.Event] = {}
 
     async def record(self, event: Any) -> None:
-        self._completed.add(event.trace_id)
+        self._completed[event.trace_id] = event
         waiter = self._waiters.get(event.trace_id)
         if waiter is not None:
             waiter.set()
@@ -73,6 +73,13 @@ class _TraceCompletion:
             raise RuntimeError(
                 f"interaction_completed arrived for {trace_id} while state="
                 f"{orchestrator.state.value}"
+            )
+        completed = self._completed.pop(trace_id)
+        if completed.payload.get("ok", True) is False:
+            raise RuntimeError(
+                f"interaction {trace_id} failed and recovered to IDLE "
+                f"(reason={completed.payload.get('reason', 'unknown')}, "
+                f"failed_state={completed.payload.get('failed_state', 'unknown')})"
             )
 
 
@@ -205,13 +212,13 @@ async def run_pipeline(
                 trace_id=wake_event.trace_id,
             )
             await completion.wait(
-                wake_event.trace_id, orchestrator, timeout=interaction_timeout
+                wake_event.trace_id, orchestrator, timeout=interaction_timeout + 2.0
             )
         elif demo and wake_word is not None:
             logger.info("=== triggering one demo interaction ===")
             wake_event = await wake_word.trigger()
             await completion.wait(
-                wake_event.trace_id, orchestrator, timeout=interaction_timeout
+                wake_event.trace_id, orchestrator, timeout=interaction_timeout + 2.0
             )
         elif demo:
             logger.warning("wake_word module disabled — no demo interaction to run")

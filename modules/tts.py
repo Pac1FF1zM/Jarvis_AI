@@ -228,6 +228,7 @@ class TTSModule(BaseModule):
         self.bus = bus
         bus.subscribe("response_ready", self._on_response)
         bus.subscribe("wake_word_detected", self._on_wake)
+        bus.subscribe("interaction_failed", self._on_interaction_failed)
 
         silero_tts, sounddevice = _resolve_optional_dependencies()
         if silero_tts is None:
@@ -376,6 +377,19 @@ class TTSModule(BaseModule):
                 self._generation += 1
                 self._owner_trace_id = event.trace_id
             self._device_owner_generation = None
+
+    async def _on_interaction_failed(self, event: Event) -> None:
+        """Stop failed-trace audio before a later interaction can own output."""
+        async with self._state_lock:
+            session = self._session
+            if session is not None and session.trace_id == event.trace_id:
+                await self._cancel_and_drain_locked(session)
+                if self._session is session:
+                    self._session = None
+                self._clear_session_mirrors(session)
+            if self._owner_trace_id == event.trace_id:
+                self._owner_trace_id = None
+                self._device_owner_generation = None
 
     async def _cancel_and_drain_locked(self, session: _SpeechSession) -> None:
         """Cancel and fully drain one session while ``_state_lock`` is held."""

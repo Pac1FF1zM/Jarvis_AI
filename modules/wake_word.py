@@ -96,6 +96,7 @@ class WakeWordModule(BaseModule):
         self._activation_task: asyncio.Task[Event | None] | None = None
         self._capture_lock = asyncio.Lock()
         self._stop_capture = threading.Event()
+        self._active_trace_id: str | None = None
         self.real_activation_enabled = False
 
     def _validate_settings(self) -> None:
@@ -114,6 +115,7 @@ class WakeWordModule(BaseModule):
 
     async def start(self, bus: EventBus) -> None:
         self.bus = bus
+        bus.subscribe("interaction_failed", self._on_interaction_failed)
         self._loop = asyncio.get_running_loop()
         if self._force_simulated:
             logger.info("WakeWordModule started mode=simulated")
@@ -216,6 +218,7 @@ class WakeWordModule(BaseModule):
             wake_event = self.bus.publish(
                 "wake_word_detected", {"source": "push_to_talk"}
             )
+            self._active_trace_id = wake_event.trace_id
             try:
                 result = await asyncio.to_thread(self._record_microphone_sync)
             except Exception as exc:  # noqa: BLE001 - PortAudio errors vary
@@ -226,6 +229,8 @@ class WakeWordModule(BaseModule):
                     exc_info=True,
                 )
                 return wake_event
+            finally:
+                self._active_trace_id = None
             if result is None:
                 logger.warning(
                     "MICROPHONE_EMPTY no speech detected within %.1fs; returning to waiting",
@@ -253,6 +258,10 @@ class WakeWordModule(BaseModule):
                 result.end_reason,
             )
             return wake_event
+
+    async def _on_interaction_failed(self, event: Event) -> None:
+        if self._active_trace_id == event.trace_id:
+            self._stop_capture.set()
 
     def _record_microphone_sync(self) -> _CaptureResult | None:
         """Record and run streaming VAD; called only in a worker thread."""

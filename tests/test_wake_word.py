@@ -261,8 +261,9 @@ async def test_trigger_requires_start_first(bus: EventBus):
         await mod.trigger()
 
 
-async def test_wake_word_does_not_subscribe(bus: EventBus):
+async def test_wake_word_subscribes_only_to_failure_cleanup(bus: EventBus):
     mod = WakeWordModule(_config(), force_simulated=True)
-    before = sum(len(handlers) for handlers in bus._subscribers.values())
     await mod.start(bus)
-    assert sum(len(handlers) for handlers in bus._subscribers.values()) == before
+
+    assert set(bus._subscribers) == {"interaction_failed"}
+    assert bus._subscribers["interaction_failed"] == [mod._on_interaction_failed]

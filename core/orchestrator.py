@@ -6,7 +6,8 @@ transitions. It contains **no** business logic for any module and originates
 events by transitioning state, logging, and handling the two cross-cutting
 concerns:
 
-  * **Listening timeout** — revert to IDLE if nothing happens for N seconds.
+  * **Timeout recovery** — fail the trace and return to IDLE if listening or
+    the complete interaction exceeds its configured deadline.
   * **Barge-in** — a wake word while SPEAKING interrupts and returns to
     LISTENING. Barge-in is SPEAKING-only by design (fix #3, decision below):
     interrupting during THINKING/TOOL_CALL would require cancelling in-flight
@@ -81,7 +82,13 @@ class Orchestrator:
         self._listening_timeout: float = float(
             self.config.get("listening_timeout_seconds", 8)
         )
-        self._timeout_task: asyncio.Task[None] | None = None
+        self._interaction_timeout: float = float(
+            self.config.get("interaction_timeout_seconds", 60)
+        )
+        if self._listening_timeout <= 0 or self._interaction_timeout <= 0:
+            raise ValueError("orchestrator timeouts must be positive")
+        self._listening_timeout_task: asyncio.Task[None] | None = None
+        self._interaction_timeout_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
         """Subscribe to every lifecycle event the state machine cares about."""
@@ -93,10 +100,12 @@ class Orchestrator:
         self.bus.subscribe("tool_result", self._on_tool_result)
         self.bus.subscribe("speech_started", self._on_speech_started)
         self.bus.subscribe("speech_finished", self._on_speech_finished)
+        self.bus.subscribe("interaction_failed", self._on_interaction_failed)
         logger.info("Orchestrator started (initial=%s)", self.state.value)
 
     async def stop(self) -> None:
-        self._cancel_timeout()
+        self._cancel_listening_timeout()
+        self._cancel_interaction_timeout()
 
     # ------------------------------------------------------------------ #
     # Authoritative transition helper (fix #2)
@@ -152,7 +161,6 @@ class Orchestrator:
         subscribes to ``wake_word_detected`` like any other module — the
         orchestrator never originates payload data for other modules.
         """
-        self._current_trace = event.trace_id
         current = self.state
 
         if current == State.IDLE:
@@ -161,13 +169,17 @@ class Orchestrator:
                 return
             if not self._transition(State.LISTENING, event.trace_id):
                 return
+            self._current_trace = event.trace_id
             self._arm_listening_timeout(event.trace_id)
+            self._arm_interaction_timeout(event.trace_id)
         elif current == State.SPEAKING:
             # Barge-in (SPEAKING-only, per fix #3).
             logger.info("BARGE-IN during SPEAKING trace=%s", event.trace_id)
             if not self._transition(State.LISTENING, event.trace_id):
                 return
+            self._current_trace = event.trace_id
             self._arm_listening_timeout(event.trace_id)
+            self._arm_interaction_timeout(event.trace_id)
         else:
             # Wake during LISTENING / TRANSCRIBING / THINKING / TOOL_CALL /
             # WAKE_DETECTED: clean, explicit no-op. Barge-in is SPEAKING-only,
@@ -178,14 +190,21 @@ class Orchestrator:
                 event.trace_id,
             )
 
+    def _is_current_trace(self, event: Event, label: str) -> bool:
+        if self._current_trace == event.trace_id:
+            return True
+        logger.info(
+            "STALE_%s_IGNORED trace=%s current_trace=%s state=%s",
+            label,
+            event.trace_id,
+            self._current_trace,
+            self.state.value,
+        )
+        return False
+
     async def _on_audio_captured(self, event: Event) -> None:
         """End LISTENING as soon as bounded audio exists, before slow STT."""
-        if self._current_trace is not None and event.trace_id != self._current_trace:
-            logger.info(
-                "STALE_AUDIO_IGNORED trace=%s current_trace=%s",
-                event.trace_id,
-                self._current_trace,
-            )
+        if not self._is_current_trace(event, "AUDIO"):
             return
         if self.state != State.LISTENING:
             logger.info(
@@ -194,18 +213,13 @@ class Orchestrator:
                 event.trace_id,
             )
             return
-        self._cancel_timeout()
+        self._cancel_listening_timeout()
         self._transition(State.TRANSCRIBING, event.trace_id)
 
     async def _on_transcription(self, event: Event) -> None:
-        if self._current_trace is not None and event.trace_id != self._current_trace:
-            logger.info(
-                "STALE_TRANSCRIPTION_IGNORED trace=%s current_trace=%s",
-                event.trace_id,
-                self._current_trace,
-            )
+        if not self._is_current_trace(event, "TRANSCRIPTION"):
             return
-        self._cancel_timeout()
+        self._cancel_listening_timeout()
         # Text mode intentionally has no audio_captured event, so retain its
         # direct LISTENING -> TRANSCRIBING path. Real audio already moved the
         # state in _on_audio_captured.
@@ -225,52 +239,139 @@ class Orchestrator:
         self.bus.publish_event(event.child("thinking_ready"))
 
     async def _on_tool_call(self, event: Event) -> None:
+        if not self._is_current_trace(event, "TOOL_CALL"):
+            return
         if not self._transition(State.TOOL_CALL, event.trace_id):
             return
 
     async def _on_tool_result(self, event: Event) -> None:
+        if not self._is_current_trace(event, "TOOL_RESULT"):
+            return
         # LLM re-invokes with the tool output appended — back to THINKING.
         self._transition(State.THINKING, event.trace_id)
 
     async def _on_response(self, event: Event) -> None:
-        if not self._transition(State.SPEAKING, event.trace_id):
+        if not self._is_current_trace(event, "RESPONSE"):
             return
+        # response_ready and speech_started are dispatched concurrently. Both
+        # are allowed to establish SPEAKING; the second becomes an idempotent
+        # observation rather than an invalid-transition race.
+        if self.state != State.SPEAKING:
+            self._transition(State.SPEAKING, event.trace_id)
 
     async def _on_speech_started(self, event: Event) -> None:
         # response_ready already moved us into SPEAKING; keep it idempotent but
         # still authoritative — a stray speech_started from the wrong state is
         # rejected and diagnosed rather than silently applied.
+        if not self._is_current_trace(event, "SPEECH_STARTED"):
+            return
         if self.state != State.SPEAKING:
             self._transition(State.SPEAKING, event.trace_id)
 
     async def _on_speech_finished(self, event: Event) -> None:
+        if not self._is_current_trace(event, "SPEECH_FINISHED"):
+            return
         if not self._transition(State.IDLE, event.trace_id):
             return
+        self._cancel_listening_timeout()
+        self._cancel_interaction_timeout()
         self._current_trace = None
         # Authoritative end-of-interaction signal: published only after the
         # state machine has actually reached IDLE for this trace.
         self.bus.publish_event(
-            event.child("interaction_completed", {"state": State.IDLE.value})
+            event.child(
+                "interaction_completed", {"state": State.IDLE.value, "ok": True}
+            )
+        )
+
+    async def _on_interaction_failed(self, event: Event) -> None:
+        """Atomically close the current failed trace and make Jarvis reusable."""
+        if not self._is_current_trace(event, "FAILURE"):
+            return
+        failed_state = self.state
+        self._cancel_listening_timeout()
+        self._cancel_interaction_timeout()
+        if failed_state != State.IDLE and not self._transition(
+            State.IDLE, event.trace_id
+        ):
+            return
+        self._current_trace = None
+        logger.error(
+            "INTERACTION_RECOVERED trace=%s failed_state=%s reason=%s",
+            event.trace_id,
+            failed_state.value,
+            event.payload.get("reason", "unknown"),
+        )
+        self.bus.publish_event(
+            event.child(
+                "interaction_completed",
+                {
+                    "state": State.IDLE.value,
+                    "ok": False,
+                    "reason": event.payload.get("reason", "unknown"),
+                    "failed_state": failed_state.value,
+                },
+            )
         )
 
     # ------------------------------------------------------------------ #
     # Listening timeout
     # ------------------------------------------------------------------ #
     def _arm_listening_timeout(self, trace_id: str) -> None:
-        self._cancel_timeout()
-        self._timeout_task = asyncio.create_task(self._listening_watchdog(trace_id))
+        self._cancel_listening_timeout()
+        self._listening_timeout_task = asyncio.create_task(
+            self._listening_watchdog(trace_id)
+        )
 
     async def _listening_watchdog(self, trace_id: str) -> None:
         try:
             await asyncio.sleep(self._listening_timeout)
         except asyncio.CancelledError:
             return
-        if self.state == State.LISTENING:
-            logger.info("LISTENING_TIMEOUT trace=%s -> IDLE", trace_id)
-            if self._transition(State.IDLE, trace_id):
-                self._current_trace = None
+        if self.state == State.LISTENING and self._current_trace == trace_id:
+            logger.warning("LISTENING_TIMEOUT trace=%s", trace_id)
+            self.bus.publish(
+                "interaction_failed",
+                {"reason": "listening_timeout", "state": self.state.value},
+                trace_id=trace_id,
+            )
 
-    def _cancel_timeout(self) -> None:
-        if self._timeout_task and not self._timeout_task.done():
-            self._timeout_task.cancel()
-        self._timeout_task = None
+    def _cancel_listening_timeout(self) -> None:
+        if (
+            self._listening_timeout_task
+            and not self._listening_timeout_task.done()
+        ):
+            self._listening_timeout_task.cancel()
+        self._listening_timeout_task = None
+
+    def _arm_interaction_timeout(self, trace_id: str) -> None:
+        self._cancel_interaction_timeout()
+        self._interaction_timeout_task = asyncio.create_task(
+            self._interaction_watchdog(trace_id)
+        )
+
+    async def _interaction_watchdog(self, trace_id: str) -> None:
+        try:
+            await asyncio.sleep(self._interaction_timeout)
+        except asyncio.CancelledError:
+            return
+        if self.state != State.IDLE and self._current_trace == trace_id:
+            logger.error(
+                "INTERACTION_TIMEOUT trace=%s state=%s timeout=%.1fs",
+                trace_id,
+                self.state.value,
+                self._interaction_timeout,
+            )
+            self.bus.publish(
+                "interaction_failed",
+                {"reason": "interaction_timeout", "state": self.state.value},
+                trace_id=trace_id,
+            )
+
+    def _cancel_interaction_timeout(self) -> None:
+        if (
+            self._interaction_timeout_task
+            and not self._interaction_timeout_task.done()
+        ):
+            self._interaction_timeout_task.cancel()
+        self._interaction_timeout_task = None
