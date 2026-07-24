@@ -126,6 +126,38 @@ def test_discord_uses_fixed_windows_uri_instead_of_shell():
     assert discord.uri == "discord://"
 
 
+def test_running_discord_is_activated_without_secondary_instance(monkeypatch):
+    opened: list[str] = []
+    monkeypatch.setattr(
+        applications_module, "_activate_windows_process_window", lambda _name: True
+    )
+    monkeypatch.setattr(applications_module.os, "startfile", opened.append)
+    discord = resolve_application("дискорд")
+
+    assert discord is not None
+    applications_module.launch_application(discord)
+
+    assert opened == []
+
+
+def test_cold_discord_launch_waits_for_visible_window(monkeypatch):
+    opened: list[str] = []
+    activation_results = iter((False, False, True))
+    monkeypatch.setattr(
+        applications_module,
+        "_activate_windows_process_window",
+        lambda _name: next(activation_results),
+    )
+    monkeypatch.setattr(applications_module.os, "startfile", opened.append)
+    monkeypatch.setattr(applications_module.time, "sleep", lambda _seconds: None)
+    discord = resolve_application("discord")
+
+    assert discord is not None
+    applications_module.launch_application(discord)
+
+    assert opened == ["discord://"]
+
+
 def test_browser_uses_windows_default_https_handler(monkeypatch):
     opened: list[str] = []
     monkeypatch.setattr(applications_module.os, "startfile", opened.append)
