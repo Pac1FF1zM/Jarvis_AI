@@ -103,6 +103,11 @@ def test_explicit_phonetic_allowlisted_app_rescues_bad_neural_intent():
         ("Открой пеинт", "paint"),
         ("Открой дисорд", "discord"),
         ("Открой дискод", "discord"),
+        ("Запусти пожалуйста дискорд", "discord"),
+        ("Будь добр открой Paint", "paint"),
+        ("Мне сейчас нужен браузер", "browser"),
+        ("Давай включим калькулятор", "calculator"),
+        ("Открой-ка блокнот", "notepad"),
     ):
         normalised = _normalise_transcription_for_nlu(text)
         rescued = _apply_runtime_command_guardrails(normalised, bad_prediction)
@@ -112,7 +117,14 @@ def test_explicit_phonetic_allowlisted_app_rescues_bad_neural_intent():
 
 def test_guardrail_never_rescues_non_imperative_or_unknown_application():
     prediction = NLUResult("general_chat", 0.9, {})
-    for text in ("расскажи про калькулятор", "открой powershell", "запусти steam"):
+    for text in (
+        "расскажи про калькулятор",
+        "как открыть калькулятор",
+        "мне нравится дискорд",
+        "не открывай браузер",
+        "открой powershell",
+        "запусти steam",
+    ):
         normalised = _normalise_transcription_for_nlu(text)
         assert (
             _apply_runtime_command_guardrails(normalised, prediction)

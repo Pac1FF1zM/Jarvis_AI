@@ -22,11 +22,22 @@ from tools._applications import resolve_application
 
 logger = logging.getLogger("jarvis.module.nlu")
 
-_OPEN_REQUEST = re.compile(
-    r"^\s*(?:джарвис\s+)?"
-    r"(?:открой|открыть|запусти|запустить|запустим|включи|open|launch)"
-    r"(?:\s+мне)?(?:\s+приложение)?(?:\s+программу)?\s+(.+?)\s*$",
-    flags=re.IGNORECASE,
+_OPEN_REQUESTS = tuple(
+    re.compile(pattern, flags=re.IGNORECASE)
+    for pattern in (
+        # Direct imperative, including polite words before or after the verb.
+        r"^\s*(?:(?:джарвис|пожалуйста|будь\s+добр)\s+)*"
+        r"(?:открой(?:-ка)?|открыть|запусти|запустить|запустим|включи|open|launch)"
+        r"(?:\s+(?:мне|для\s+меня|пожалуйста|приложение|программу))*\s+(.+?)\s*$",
+        # Explicit request forms that still contain an unambiguous launch verb.
+        r"^\s*(?:(?:джарвис|пожалуйста)\s+)*"
+        r"(?:давай\s+(?:откроем|запустим|включим)|хочу\s+открыть|"
+        r"мне\s+нужно\s+открыть|мне\s+(?:сейчас\s+)?нуж(?:ен|на|но)|"
+        r"нужно\s+запустить|можешь\s+(?:открыть|запустить)|"
+        r"можно\s+(?:открыть|запустить)|пора\s+открыть|"
+        r"прошу\s+(?:открыть|запустить)|я\s+хочу\s+чтобы\s+ты\s+открыл)"
+        r"(?:\s+(?:мне|приложение|программу))*\s+(.+?)\s*$",
+    )
 )
 
 
@@ -57,7 +68,11 @@ def _apply_runtime_command_guardrails(
     launch an arbitrary executable: correction is allowed only when an
     imperative is present and the requested tail resolves to the fixed list.
     """
-    match = _OPEN_REQUEST.match(normalised_text)
+    match = None
+    for pattern in _OPEN_REQUESTS:
+        match = pattern.match(normalised_text)
+        if match:
+            break
     if not match:
         return result
     requested = re.sub(

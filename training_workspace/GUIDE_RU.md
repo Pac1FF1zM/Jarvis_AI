@@ -1,26 +1,34 @@
-# Fine-tuning собственной NLU-модели Jarvis на RTX 3090
+# Обучение собственной NLU-модели-менеджера Jarvis на RTX 3090
 
-Этот workspace дообучает только собственную `Word-BiGRU` Jarvis. Он не
-загружает модели, токенизаторы или датасеты Hugging Face. Исходный checkpoint
-был обучен с нуля, а PyTorch используется как вычислительный фреймворк.
+Этот workspace обучает с нуля компактный символьный `CharCNN`-менеджер Jarvis.
+Он не загружает модели, embeddings, токенизаторы или датасеты Hugging Face.
+PyTorch используется только как вычислительный фреймворк.
+
+Модель является мозгом маршрутизации, а не генератором текста: она выбирает
+маршрут `tool / control / dialogue / reject`, затем конкретный intent и слоты.
+Точные ответы времени и приложений формируют детерминированные инструменты;
+свободный разговор после маршрутизации выполняет Ollama.
 
 ## Что делает один запуск
 
 `START_TRAINING.ps1` последовательно:
 
-1. проверяет JSONL, отсутствие пересечения custom train/validation и CUDA;
-2. измеряет accuracy, macro-F1 и latency исходной модели;
-3. запускает три режима fine-tuning: `augmented`, `curriculum`, `standard`;
-4. для каждого режима загружает старые веса, расширяет vocabulary новыми
-   токенами и сохраняет старые token IDs/embedding rows;
-5. смешивает custom-примеры с базовым корпусом, чтобы не забыть старые команды;
-6. использует AMP, TF32, balanced sampling, gradient clipping, label smoothing
-   и early stopping по validation macro-F1;
-7. сравнивает кандидатов на одинаковом validation-наборе и CPU latency;
-8. экспортирует модель только если она не хуже baseline и укладывается в SLA;
-9. после выбора победителя один раз проверяет `evaluation_holdout.jsonl`.
+1. проверяет JSONL, отсутствие пересечения train/validation, два holdout и CUDA;
+2. измеряет baseline отдельно на новых, старых и финальных фразах;
+3. обучает с нуля три режима: `augmented`, `curriculum`, `standard`;
+4. использует символьный токенизатор, поэтому новые слова не превращаются в
+   один бесполезный `<unk>`;
+5. балансирует не только intents, но и долю старого/нового корпуса, не позволяя
+   новым шаблонам вытеснить старые навыки;
+6. добавляет иерархический route-loss роли менеджера вместе с intent/slot loss;
+7. применяет AMP, TF32, gradient clipping, label smoothing, калибровку и early
+   stopping по гармоническому балансу новых и старых validation-фраз;
+8. отбрасывает кандидатов с регрессией старых команд, низким recall любого
+   intent или превышением CPU latency SLA;
+9. проверяет победителя на двух holdout и создаёт `approved.json` только после
+   прохождения всех гейтов.
 
-RTX 3090 ускорит серию экспериментов, но NLU содержит меньше 100 тысяч
+RTX 3090 ускорит серию экспериментов, но manager содержит меньше 100 тысяч
 параметров. Главный источник роста точности — разнообразные и правильно
 размеченные данные, а не загрузка 24 ГБ VRAM.
 
@@ -59,7 +67,8 @@ gpu= NVIDIA GeForce RTX 3090
 
 - `train.jsonl`: 840 примеров, по 120 на каждый intent;
 - `validation.jsonl`: 210 примеров, по 30 на каждый intent;
-- `evaluation_holdout.jsonl`: 105 примеров, по 15 на каждый intent.
+- `evaluation_holdout.jsonl`: 105 примеров, по 15 на каждый intent;
+- `ml/nlu/holdout_v2.jsonl`: второй замороженный holdout из 49 фраз.
 
 Он включает все приложения allow-list, русские/английские варианты названий,
 реальные и безопасные ошибки Whisper, вежливые конструкции, отрицательные
@@ -77,6 +86,8 @@ python -m training_workspace.build_dataset
 - `data/validation.jsonl` — отдельные фразы для выбора эпохи и эксперимента;
 - `data/evaluation_holdout.jsonl` — финальная проверка, которую нельзя
   использовать при подборе настроек.
+- `ml/nlu/holdout_v2.jsonl` — независимая последняя проверка уже выбранного
+  кандидата; не редактируйте её после запуска экспериментов.
 
 Одна строка — один JSON-объект:
 
@@ -133,9 +144,10 @@ Fine-tuning улучшит распознавание intent/slots, но не с
 - каталоги `ml/nlu` и корневые Python-зависимости проекта.
 
 Не используйте старый `training_workspace/export/jarvis_nlu_best.pt`, который
-был получен на демонстрационном наборе из 14 train-примеров, как новую основу.
-Конфигурация уже правильно начинает fine-tuning от базового checkpoint, а
-после экспериментов заменяет файл в `export/` только прошедшим отбор победителем.
+был получен на демонстрационном наборе из 14 train-примеров. Базовый checkpoint
+нужен для контрольных метрик; новые manager-кандидаты обучаются с нуля. Старый
+файл в `export/` невозможно скопировать без свежего `approved.json` и совпадения
+SHA-256.
 
 ```powershell
 .\training_workspace\START_TRAINING.ps1
@@ -145,8 +157,9 @@ Fine-tuning улучшит распознавание intent/slots, но не с
 оставить `batch_size: 256`. Если возникает CUDA OOM, уменьшайте до 128/64; если
 GPU почти пуст и данных стало много — увеличивайте до 512.
 
-Не закрывайте PowerShell. Каждая эпоха печатает loss, validation macro-F1 и
-slot F1. Early stopping завершает бесполезные эпохи автоматически.
+Не закрывайте PowerShell. Каждая эпоха печатает loss, общий balanced score,
+новый custom F1, старый legacy F1 и slot F1. Early stopping завершает
+бесполезные эпохи автоматически.
 
 ## 5. Результаты
 
@@ -154,22 +167,25 @@ slot F1. Early stopping завершает бесполезные эпохи а�
 
 ```text
 training_workspace/runs/YYYYMMDD_HHMMSS/
-  conservative_augmented.pt
-  balanced_curriculum.pt
-  focused_standard.pt
+  manager_curriculum.pt
+  manager_augmented.pt
+  manager_standard.pt
   *.metrics.json
   report.json
 ```
 
-Если кандидат прошёл accuracy/latency-ограничения, победитель появится здесь:
+Если кандидат прошёл accuracy, worst-recall, regression и latency-гейты,
+победитель появится здесь:
 
 ```text
 training_workspace/export/jarvis_nlu_best.pt
+training_workspace/export/approved.json
 ```
 
-Если export не появился, это нормальная защита: ни одна модель не превзошла
-baseline. Изучите `report.json`, улучшите данные и запустите новый цикл; не
-понижайте пороги только ради появления файла.
+`COPY_BEST_TO_MODELS.ps1` принимает checkpoint только при наличии свежего
+`approved.json` с совпадающим SHA-256. Если approval не появился, это нормальная
+защита: модель не прошла regression/holdout. Изучите `report.json`; не понижайте
+пороги только ради появления файла.
 
 ## 6. Проверка скорости на компьютере, где будет работать Jarvis
 
@@ -203,7 +219,7 @@ RTX 3090 используется для обучения, но runtime сейч
 ```yaml
 modules:
   nlu:
-    model: models/nlu_word_bigru_finetuned.pt
+    model: models/nlu_manager_finetuned.pt
 ```
 
 И выполните:
@@ -219,12 +235,19 @@ python main.py --text "какие приложения ты можешь отк�
 
 ## Что настраивать в `config.yaml`
 
-- `experiments[].learning_rate`: обычно `0.0002–0.001` для fine-tuning;
-- `custom_repeat`: влияние новых примеров; слишком большое значение вызывает
-  forgetting/переобучение;
+- `experiments[].learning_rate`: скорость обучения с нуля;
+- `custom_fraction`: контролируемая доля нового корпуса в каждом intent;
+- `route_loss_weight`: сила вспомогательного обучения роли менеджера;
 - `label_smoothing`: снижает чрезмерную уверенность;
 - `patience`: сколько эпох ждать улучшения;
-- `selection.min_macro_f1_improvement`: минимальный прирост над baseline;
+- `selection.min_custom_macro_f1_improvement`: прирост на новых командах;
+- `selection.max_legacy_macro_f1_drop`: допустимая регрессия старых навыков;
+- `selection.min_regression_worst_recall`: нижняя граница recall любого intent
+  на старом regression-наборе;
+- `selection.min_holdout_worst_recall`: нижняя граница recall любого intent на
+  двух финальных наборах;
 - `selection.max_p95_latency_ms`: верхняя граница задержки решения.
 
-Не используйте evaluation holdout для выбора этих значений.
+Не используйте ни один holdout для выбора этих значений. Настройки выбираются
+только по train/validation и старому regression-набору; holdout подтверждает
+или отклоняет уже выбранный checkpoint.

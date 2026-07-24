@@ -154,9 +154,12 @@ python -m ml.nlu.evaluate_holdout --checkpoint models/nlu_word_bigru_curriculum.
 ## Fine-tuning на отдельном GPU-компьютере
 
 Готовое переносимое пространство находится в [`training_workspace/`](training_workspace/).
-Оно продолжает обучение собственного checkpoint без Hugging Face, расширяет
-локальный vocabulary, сравнивает три режима обучения, измеряет accuracy/latency
-и экспортирует только кандидата, который не хуже baseline.
+Оно обучает с нуля собственную символьную CharCNN без Hugging Face. Модель
+учится как менеджер: сначала различать маршруты `tool / control / dialogue /
+reject`, затем выбирать конкретный intent и извлекать слоты. Runner сравнивает
+`standard`, `augmented` и `curriculum`, контролирует старые команды, worst-class
+recall и CPU latency, а затем проверяет победителя на двух holdout-наборах.
+Экспорт разрешается только вместе с `approved.json` и контрольной SHA-256.
 
 На компьютере с RTX 3090:
 

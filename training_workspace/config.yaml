@@ -8,40 +8,51 @@ export_dir: export
 data:
   train: data/train.jsonl
   validation: data/validation.jsonl
-  # Public synthetic final split. It is evaluated only after a candidate has
-  # already won on validation and is never used for epoch/model selection.
-  private_holdout: data/evaluation_holdout.jsonl
+  # Used only after development/regression selection, never for early stopping.
+  evaluation_holdout: data/evaluation_holdout.jsonl
+  # Older frozen set, never used while designing the new manager experiments.
+  final_holdout: ../ml/nlu/holdout_v2.jsonl
 
 experiments:
-  - name: conservative_augmented
-    method: augmented
-    epochs: 50
+  - name: manager_curriculum
+    trainer: manager
+    architecture: char_cnn
+    method: curriculum
+    epochs: 60
     batch_size: 256
-    learning_rate: 0.0003
-    custom_repeat: 3
-    patience: 10
-    label_smoothing: 0.05
+    learning_rate: 0.001
+    custom_fraction: 0.40
+    curriculum_start_fraction: 0.20
+    route_loss_weight: 0.35
+    patience: 12
+    label_smoothing: 0.04
     seed: 17
 
-  - name: balanced_curriculum
-    method: curriculum
-    epochs: 70
+  - name: manager_augmented
+    trainer: manager
+    architecture: char_cnn
+    method: augmented
+    epochs: 55
     batch_size: 256
-    learning_rate: 0.0005
-    custom_repeat: 5
+    learning_rate: 0.0009
+    custom_fraction: 0.40
+    route_loss_weight: 0.40
     patience: 12
-    label_smoothing: 0.05
-    seed: 29
-
-  - name: focused_standard
-    method: standard
-    epochs: 50
-    batch_size: 256
-    learning_rate: 0.0008
-    custom_repeat: 8
-    patience: 10
-    label_smoothing: 0.08
+    label_smoothing: 0.04
     seed: 43
+
+  - name: manager_standard
+    trainer: manager
+    architecture: char_cnn
+    method: standard
+    epochs: 55
+    batch_size: 256
+    learning_rate: 0.0012
+    custom_fraction: 0.35
+    route_loss_weight: 0.30
+    patience: 12
+    label_smoothing: 0.04
+    seed: 29
 
 benchmark:
   # CPU reflects the current Jarvis runtime deployment. Change to cuda only
@@ -51,6 +62,11 @@ benchmark:
   repetitions: 500
 
 selection:
-  # Never export a candidate that is less accurate or violates the latency SLA.
-  min_macro_f1_improvement: 0.0
-  max_p95_latency_ms: 30.0
+  # A fast model is useless if it forgets old commands or overfits templates.
+  min_custom_macro_f1_improvement: 0.10
+  max_legacy_macro_f1_drop: 0.0
+  min_regression_worst_recall: 0.70
+  min_evaluation_holdout_macro_f1_improvement: 0.05
+  min_final_holdout_macro_f1_improvement: 0.0
+  min_holdout_worst_recall: 0.60
+  max_p95_latency_ms: 10.0

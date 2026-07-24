@@ -49,3 +49,13 @@ Run `python -m ml.nlu.evaluate_holdout --checkpoint
 models/nlu_word_bigru_curriculum.pt` to reproduce the frozen evaluation.
 Improving OOD rejection and pure neural slot exact-match remains the next ML
 milestone; future tuning requires a new holdout rather than training on this one.
+
+## Manager training workspace
+
+The original Word-BiGRU above remains a reproducible fallback. The current
+GPU workspace trains a new CharCNN from scratch with an auxiliary hierarchical
+route objective (`tool`, `control`, `dialogue`, `reject`), source-balanced
+sampling, and three independent training regimes. Selection cannot export a
+checkpoint unless it improves the new corpus, preserves the legacy regression
+set, meets worst-class recall and CPU latency gates, and passes two holdouts.
+See `training_workspace/GUIDE_RU.md` for the exact workflow.

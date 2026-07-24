@@ -29,12 +29,13 @@ modules:
         блокнот, проводник, Paint, Пейнт, Discord, Дискорд, диспетчер задач,
         браузер.
 
-  # Own word-level NLU model. All weights and its tokenizer are trained
+  # Own character-level NLU manager. It routes tool/control/dialogue/reject,
+  # then predicts intent and slots. All weights and its tokenizer are trained
   # locally from random initialisation; no pretrained checkpoints are used.
   nlu:
     enabled: true
     device: cpu
-    model: models/nlu_word_bigru_curriculum.pt
+    model: models/nlu_manager_finetuned.pt
     params:
       confidence_threshold: 0.55
 

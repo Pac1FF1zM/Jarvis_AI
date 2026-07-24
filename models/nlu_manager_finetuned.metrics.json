@@ -1,0 +1,59 @@
+{
+  "custom_validation_intent_accuracy": 0.919047619047619,
+  "custom_validation_intent_macro_f1": 0.9190065154463642,
+  "custom_validation_slot_token_accuracy": 0.9548338932437477,
+  "custom_validation_slot_entity_f1": 0.7629533678756476,
+  "legacy_validation_intent_accuracy": 1.0,
+  "legacy_validation_intent_macro_f1": 1.0,
+  "legacy_validation_slot_token_accuracy": 0.9540302267002518,
+  "legacy_validation_slot_entity_f1": 0.9099756690997567,
+  "legacy_regression_intent_accuracy": 0.9859154929577465,
+  "legacy_regression_intent_macro_f1": 0.963718820861678,
+  "legacy_regression_slot_token_accuracy": 0.9165580182529335,
+  "legacy_regression_slot_entity_f1": 0.8610121168923734,
+  "balanced_validation_score": 0.9577940544225841,
+  "temperature": 0.5199999809265137,
+  "validation_ece_before": 0.12427926063537598,
+  "validation_ece_after": 0.05016056075692177,
+  "best_epoch": 19,
+  "epochs_ran": 31,
+  "training_seconds": 29.238458799998625,
+  "parameters": 53919,
+  "vocabulary_size": 71,
+  "architecture": "char_cnn",
+  "method": "augmented",
+  "manager_routes": [
+    "tool",
+    "control",
+    "dialogue",
+    "reject"
+  ],
+  "route_loss_weight": 0.4,
+  "custom_fraction": 0.4,
+  "device": "cuda",
+  "gpu": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+  "amp": true,
+  "tf32": true,
+  "custom_data": {
+    "train_examples": 840,
+    "validation_examples": 210,
+    "train_intents": {
+      "cancel": 120,
+      "list_applications": 120,
+      "general_chat": 120,
+      "open_application": 120,
+      "set_reminder": 120,
+      "get_current_time": 120,
+      "unknown": 120
+    },
+    "validation_intents": {
+      "list_applications": 30,
+      "open_application": 30,
+      "unknown": 30,
+      "general_chat": 30,
+      "cancel": 30,
+      "set_reminder": 30,
+      "get_current_time": 30
+    }
+  }
+}
