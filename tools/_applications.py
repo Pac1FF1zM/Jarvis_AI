@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import re
 import subprocess
-import webbrowser
 from dataclasses import dataclass
 
 
@@ -63,7 +62,10 @@ APPLICATIONS = (
     ApplicationSpec(
         "browser",
         "Браузер",
-        url="about:blank",
+        # A normal HTTPS URL is handed to Windows' default browser.  Using
+        # ``about:blank`` here made Windows look for an ``about:`` protocol
+        # handler and offer the Microsoft Store instead.
+        url="https://www.google.com/",
         aliases=("браузер", "browser", "интернет"),
     ),
 )
@@ -139,8 +141,7 @@ def launch_application(spec: ApplicationSpec) -> int | None:
         )
         return process.pid
     if spec.url is not None:
-        if not webbrowser.open(spec.url, new=0, autoraise=True):
-            raise RuntimeError("default browser refused the request")
+        os.startfile(spec.url)  # type: ignore[attr-defined]  # Windows-only runtime
         return None
     if spec.uri is not None:
         os.startfile(spec.uri)  # type: ignore[attr-defined]  # Windows-only runtime

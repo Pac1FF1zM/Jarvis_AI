@@ -9,6 +9,7 @@ from tools.set_reminder import execute as execute_reminder
 from tools.open_application import execute as execute_open_application
 from tools.list_applications import execute as execute_list_applications
 import tools.open_application as open_application_module
+import tools._applications as applications_module
 from tools._applications import resolve_application
 from tools.registry import ToolRegistry
 
@@ -123,6 +124,20 @@ def test_discord_uses_fixed_windows_uri_instead_of_shell():
     assert discord is not None
     assert discord.command is None
     assert discord.uri == "discord://"
+
+
+def test_browser_uses_windows_default_https_handler(monkeypatch):
+    opened: list[str] = []
+    monkeypatch.setattr(applications_module.os, "startfile", opened.append)
+    browser = resolve_application("браузер")
+
+    assert browser is not None
+    assert browser.url == "https://www.google.com/"
+    assert browser.command is None
+
+    applications_module.launch_application(browser)
+
+    assert opened == ["https://www.google.com/"]
 
 
 @pytest.mark.parametrize(
