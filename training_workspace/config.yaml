@@ -8,9 +8,9 @@ export_dir: export
 data:
   train: data/train.jsonl
   validation: data/validation.jsonl
-  # Keep this file secret from experiment design. It is evaluated only after
-  # a candidate has already won on validation. Empty is allowed.
-  private_holdout: data/private_holdout.jsonl
+  # Public synthetic final split. It is evaluated only after a candidate has
+  # already won on validation and is never used for epoch/model selection.
+  private_holdout: data/evaluation_holdout.jsonl
 
 experiments:
   - name: conservative_augmented

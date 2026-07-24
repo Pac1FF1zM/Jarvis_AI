@@ -1,0 +1,49 @@
+{
+  "version": 2,
+  "generator": "training_workspace.build_dataset",
+  "external_sources": false,
+  "splits": {
+    "train": {
+      "file": "train.jsonl",
+      "examples": 840,
+      "intents": {
+        "cancel": 120,
+        "general_chat": 120,
+        "get_current_time": 120,
+        "list_applications": 120,
+        "open_application": 120,
+        "set_reminder": 120,
+        "unknown": 120
+      },
+      "sha256": "be56501d1e3f5175af1a18a9f5ab47277813a2766bce2e5cd02bb1dd04863dea"
+    },
+    "validation": {
+      "file": "validation.jsonl",
+      "examples": 210,
+      "intents": {
+        "cancel": 30,
+        "general_chat": 30,
+        "get_current_time": 30,
+        "list_applications": 30,
+        "open_application": 30,
+        "set_reminder": 30,
+        "unknown": 30
+      },
+      "sha256": "2e3190b03d2fc362a01a6616a176d13fe63e4b0a62d34333468e86cacf67999c"
+    },
+    "evaluation_holdout": {
+      "file": "evaluation_holdout.jsonl",
+      "examples": 105,
+      "intents": {
+        "cancel": 15,
+        "general_chat": 15,
+        "get_current_time": 15,
+        "list_applications": 15,
+        "open_application": 15,
+        "set_reminder": 15,
+        "unknown": 15
+      },
+      "sha256": "876ee4e1387c497c8ae6d7b83c5a02589fb8a6a5acba95dbe578ea555f93ff85"
+    }
+  }
+}

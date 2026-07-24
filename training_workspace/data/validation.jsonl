@@ -1,7 +1,210 @@
-{"text":"можешь посмотреть который сейчас час","intent":"get_current_time","slots":{}}
-{"text":"через 19 минут напомни достать ключи","intent":"set_reminder","slots":{"duration":"19","reminder_text":"достать ключи"}}
-{"text":"пожалуйста запусти калькулятор","intent":"open_application","slots":{"application":"калькулятор"}}
-{"text":"перечисли весь доступный софт","intent":"list_applications","slots":{}}
-{"text":"прерви эту операцию прямо сейчас","intent":"cancel","slots":{}}
-{"text":"расскажи почему компьютеры нагреваются","intent":"general_chat","slots":{}}
+{"text":"назови программы для быстрого запуска на данный момент","intent":"list_applications","slots":{}}
+{"text":"джарвис включи browser","intent":"open_application","slots":{"application":"browser"}}
+{"text":"открой что-нибудь наверное","intent":"unknown","slots":{}}
+{"text":"открой для меня paint","intent":"open_application","slots":{"application":"paint"}}
+{"text":"в общем ээ дальше туда","intent":"unknown","slots":{}}
+{"text":"поделись интересным фактом про квантовые компьютеры","intent":"general_chat","slots":{}}
+{"text":"прерви всё что сейчас делаешь сейчас","intent":"cancel","slots":{}}
+{"text":"назови программы для быстрого запуска для меня","intent":"list_applications","slots":{}}
+{"text":"передумал открывать приложение немедленно","intent":"cancel","slots":{}}
+{"text":"в общем открой что-нибудь","intent":"unknown","slots":{}}
+{"text":"отсчитай 8 минут и напомни подготовиться к звонку","intent":"set_reminder","slots":{"duration":"8","reminder_text":"подготовиться к звонку"}}
+{"text":"будь добр скажи время прямо сейчас в моём часовом поясе","intent":"get_current_time","slots":{}}
+{"text":"ээ дальше туда","intent":"unknown","slots":{}}
+{"text":"объясни мне принцип работы облачные технологии","intent":"general_chat","slots":{}}
+{"text":"что можно открыть через джарвис пожалуйста","intent":"list_applications","slots":{}}
+{"text":"сними последнюю команду джарвис","intent":"cancel","slots":{}}
+{"text":"установи напоминание спустя 35 минут проверить окна","intent":"set_reminder","slots":{"duration":"35","reminder_text":"проверить окна"}}
+{"text":"я отменяю запрос джарвис","intent":"cancel","slots":{}}
+{"text":"пожалуйста останови операцию пожалуйста","intent":"cancel","slots":{}}
+{"text":"будь добр открой браузер","intent":"open_application","slots":{"application":"браузер"}}
+{"text":"объясни мне принцип работы домашние сети","intent":"general_chat","slots":{}}
+{"text":"пожалуйста останови операцию немедленно","intent":"cancel","slots":{}}
+{"text":"ээ открой что-нибудь","intent":"unknown","slots":{}}
+{"text":"объясни мне принцип работы языки программирования","intent":"general_chat","slots":{}}
+{"text":"в общем не расслышал сам себя","intent":"unknown","slots":{}}
+{"text":"какие программы входят в белый список","intent":"list_applications","slots":{}}
+{"text":"прерви всё что сейчас делаешь я ошибся","intent":"cancel","slots":{}}
+{"text":"поделись интересным фактом про цифровую приватность","intent":"general_chat","slots":{}}
+{"text":"джарвис уточни текущий час","intent":"get_current_time","slots":{}}
+{"text":"напомни когда-нибудь","intent":"unknown","slots":{}}
+{"text":"в общем случайный набор слов","intent":"unknown","slots":{}}
+{"text":"глянь пожалуйста что показывают часы на системных часах","intent":"get_current_time","slots":{}}
+{"text":"запусти ту программу","intent":"unknown","slots":{}}
+{"text":"что можно открыть через джарвис джарвис","intent":"list_applications","slots":{}}
+{"text":"проверь для меня сколько времени сейчас без объяснений","intent":"get_current_time","slots":{}}
+{"text":"передумал открывать приложение","intent":"cancel","slots":{}}
+{"text":"какое твоё мнение насчёт солнечную систему","intent":"general_chat","slots":{}}
+{"text":"можно узнать который теперь час пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"какие приложения поддерживает ассистент на данный момент","intent":"list_applications","slots":{}}
+{"text":"какие программы входят в белый список джарвис","intent":"list_applications","slots":{}}
+{"text":"напомни мне через 8 минут что пора позвонить родителям","intent":"set_reminder","slots":{"duration":"8","reminder_text":"позвонить родителям"}}
 {"text":"ну это самое сделай","intent":"unknown","slots":{}}
+{"text":"как новичку понять языки программирования","intent":"general_chat","slots":{}}
+{"text":"какие программы входят в белый список пожалуйста","intent":"list_applications","slots":{}}
+{"text":"покажи весь доступный софт","intent":"list_applications","slots":{}}
+{"text":"я отменяю запрос я ошибся","intent":"cancel","slots":{}}
+{"text":"прерви всё что сейчас делаешь джарвис","intent":"cancel","slots":{}}
+{"text":"напомни мне через 35 минут что пора подготовиться к звонку","intent":"set_reminder","slots":{"duration":"35","reminder_text":"подготовиться к звонку"}}
+{"text":"я хочу чтобы ты открыл black note","intent":"open_application","slots":{"application":"black note"}}
+{"text":"передумал открывать приложение я ошибся","intent":"cancel","slots":{}}
+{"text":"будь добр открой notepad","intent":"open_application","slots":{"application":"notepad"}}
+{"text":"ээ ээ дальше туда","intent":"unknown","slots":{}}
+{"text":"включи мне приложение calc","intent":"open_application","slots":{"application":"calc"}}
+{"text":"пожалуйста останови операцию джарвис","intent":"cancel","slots":{}}
+{"text":"хочу напоминание через 8 минут забрать заказ","intent":"set_reminder","slots":{"duration":"8","reminder_text":"забрать заказ"}}
+{"text":"выведи перечень доступных программ целиком","intent":"list_applications","slots":{}}
+{"text":"не продолжай выполнение пожалуйста","intent":"cancel","slots":{}}
+{"text":"не продолжай выполнение","intent":"cancel","slots":{}}
+{"text":"через 8 минут сообщи что нужно позвонить родителям","intent":"set_reminder","slots":{"duration":"8","reminder_text":"позвонить родителям"}}
+{"text":"команда потерялась","intent":"unknown","slots":{}}
+{"text":"через 50 минут сообщи что нужно проверить замок","intent":"set_reminder","slots":{"duration":"50","reminder_text":"проверить замок"}}
+{"text":"глянь пожалуйста что показывают часы пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"глянь пожалуйста что показывают часы","intent":"get_current_time","slots":{}}
+{"text":"объясни мне принцип работы квантовые компьютеры","intent":"general_chat","slots":{}}
+{"text":"какие приложения поддерживает ассистент пожалуйста","intent":"list_applications","slots":{}}
+{"text":"запусти ту программу наверное","intent":"unknown","slots":{}}
+{"text":"будь добр открой файлы","intent":"open_application","slots":{"application":"файлы"}}
+{"text":"как новичку понять солнечную систему","intent":"general_chat","slots":{}}
+{"text":"будь добр открой calc","intent":"open_application","slots":{"application":"calc"}}
+{"text":"через 35 минут сообщи что нужно забрать заказ","intent":"set_reminder","slots":{"duration":"35","reminder_text":"забрать заказ"}}
+{"text":"какое твоё мнение насчёт языки программирования","intent":"general_chat","slots":{}}
+{"text":"включи мне приложение калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
+{"text":"проверь для меня сколько времени сейчас пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"хочу напоминание через 50 минут достать ключи","intent":"set_reminder","slots":{"duration":"50","reminder_text":"достать ключи"}}
+{"text":"поделись интересным фактом про солнечную систему","intent":"general_chat","slots":{}}
+{"text":"напомни мне через 14 минут что пора полить цветы","intent":"set_reminder","slots":{"duration":"14","reminder_text":"полить цветы"}}
+{"text":"сними последнюю команду сейчас","intent":"cancel","slots":{}}
+{"text":"поделись интересным фактом про архитектуру нейросетей","intent":"general_chat","slots":{}}
+{"text":"не расслышал сам себя","intent":"unknown","slots":{}}
+{"text":"передумал открывать приложение джарвис","intent":"cancel","slots":{}}
+{"text":"будь добр скажи время прямо сейчас пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"какие приложения поддерживает ассистент для меня","intent":"list_applications","slots":{}}
+{"text":"джарвис включи пеинт","intent":"open_application","slots":{"application":"пеинт"}}
+{"text":"в общем команда потерялась","intent":"unknown","slots":{}}
+{"text":"напомни мне через 14 минут что пора подготовиться к звонку","intent":"set_reminder","slots":{"duration":"14","reminder_text":"подготовиться к звонку"}}
+{"text":"отсчитай 19 минут и напомни проверить окна","intent":"set_reminder","slots":{"duration":"19","reminder_text":"проверить окна"}}
+{"text":"с чего начать изучение темы языки программирования","intent":"general_chat","slots":{}}
+{"text":"ээ напомни когда-нибудь","intent":"unknown","slots":{}}
+{"text":"можно узнать который теперь час без объяснений","intent":"get_current_time","slots":{}}
+{"text":"я хочу чтобы ты открыл паинт","intent":"open_application","slots":{"application":"паинт"}}
+{"text":"передумал открывать приложение сейчас","intent":"cancel","slots":{}}
+{"text":"ээ команда потерялась","intent":"unknown","slots":{}}
+{"text":"сообщи без лишних слов точное время без объяснений","intent":"get_current_time","slots":{}}
+{"text":"включи мне приложение browser","intent":"open_application","slots":{"application":"browser"}}
+{"text":"я хочу чтобы ты открыл task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"через 50 минут сообщи что нужно выключить утюг","intent":"set_reminder","slots":{"duration":"50","reminder_text":"выключить утюг"}}
+{"text":"выведи перечень доступных программ для меня","intent":"list_applications","slots":{}}
+{"text":"отсчитай 19 минут и напомни подготовиться к звонку","intent":"set_reminder","slots":{"duration":"19","reminder_text":"подготовиться к звонку"}}
+{"text":"не продолжай выполнение я ошибся","intent":"cancel","slots":{}}
+{"text":"джарвис включи explorer","intent":"open_application","slots":{"application":"explorer"}}
+{"text":"выведи перечень доступных программ","intent":"list_applications","slots":{}}
+{"text":"объясни мне принцип работы солнечную систему","intent":"general_chat","slots":{}}
+{"text":"можно запустить блокнот","intent":"open_application","slots":{"application":"блокнот"}}
+{"text":"прерви всё что сейчас делаешь немедленно","intent":"cancel","slots":{}}
+{"text":"можно запустить explorer","intent":"open_application","slots":{"application":"explorer"}}
+{"text":"какие программы входят в белый список для меня","intent":"list_applications","slots":{}}
+{"text":"сними последнюю команду я ошибся","intent":"cancel","slots":{}}
+{"text":"как новичку понять квантовые компьютеры","intent":"general_chat","slots":{}}
+{"text":"пожалуйста останови операцию","intent":"cancel","slots":{}}
+{"text":"прерви всё что сейчас делаешь","intent":"cancel","slots":{}}
+{"text":"что можно открыть через джарвис для меня","intent":"list_applications","slots":{}}
+{"text":"глянь пожалуйста что показывают часы в моём часовом поясе","intent":"get_current_time","slots":{}}
+{"text":"через 50 минут сообщи что нужно полить цветы","intent":"set_reminder","slots":{"duration":"50","reminder_text":"полить цветы"}}
+{"text":"какие приложения поддерживает ассистент джарвис","intent":"list_applications","slots":{}}
+{"text":"джарвис уточни текущий час пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"открой для меня диспетчер задач","intent":"open_application","slots":{"application":"диспетчер задач"}}
+{"text":"с чего начать изучение темы цифровую приватность","intent":"general_chat","slots":{}}
+{"text":"отсчитай 8 минут и напомни проверить замок","intent":"set_reminder","slots":{"duration":"8","reminder_text":"проверить замок"}}
+{"text":"какое твоё мнение насчёт облачные технологии","intent":"general_chat","slots":{}}
+{"text":"через 4 минут сообщи что нужно полить цветы","intent":"set_reminder","slots":{"duration":"4","reminder_text":"полить цветы"}}
+{"text":"будь добр скажи время прямо сейчас на системных часах","intent":"get_current_time","slots":{}}
+{"text":"через 35 минут сообщи что нужно выключить утюг","intent":"set_reminder","slots":{"duration":"35","reminder_text":"выключить утюг"}}
+{"text":"пожалуйста останови операцию я ошибся","intent":"cancel","slots":{}}
+{"text":"как новичку понять облачные технологии","intent":"general_chat","slots":{}}
+{"text":"какие программы входят в белый список на данный момент","intent":"list_applications","slots":{}}
+{"text":"проверь для меня сколько времени сейчас","intent":"get_current_time","slots":{}}
+{"text":"как новичку понять домашние сети","intent":"general_chat","slots":{}}
+{"text":"проверь для меня сколько времени сейчас в моём часовом поясе","intent":"get_current_time","slots":{}}
+{"text":"сними последнюю команду пожалуйста","intent":"cancel","slots":{}}
+{"text":"включи мне приложение пейнт","intent":"open_application","slots":{"application":"пейнт"}}
+{"text":"какие приложения поддерживает ассистент целиком","intent":"list_applications","slots":{}}
+{"text":"можно узнать который теперь час в моём часовом поясе","intent":"get_current_time","slots":{}}
+{"text":"можно запустить дискор","intent":"open_application","slots":{"application":"дискор"}}
+{"text":"проверь для меня сколько времени сейчас на системных часах","intent":"get_current_time","slots":{}}
+{"text":"как новичку понять цифровую приватность","intent":"general_chat","slots":{}}
+{"text":"выведи перечень доступных программ джарвис","intent":"list_applications","slots":{}}
+{"text":"установи напоминание спустя 8 минут достать ключи","intent":"set_reminder","slots":{"duration":"8","reminder_text":"достать ключи"}}
+{"text":"с чего начать изучение темы архитектуру нейросетей","intent":"general_chat","slots":{}}
+{"text":"случайный набор слов наверное","intent":"unknown","slots":{}}
+{"text":"сообщи без лишних слов точное время в моём часовом поясе","intent":"get_current_time","slots":{}}
+{"text":"через 14 минут сообщи что нужно подготовиться к звонку","intent":"set_reminder","slots":{"duration":"14","reminder_text":"подготовиться к звонку"}}
+{"text":"будь добр скажи время прямо сейчас джарвис","intent":"get_current_time","slots":{}}
+{"text":"сообщи без лишних слов точное время","intent":"get_current_time","slots":{}}
+{"text":"с чего начать изучение темы энергопотребление компьютера","intent":"general_chat","slots":{}}
+{"text":"будь добр открой task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"хочу напоминание через 35 минут выключить утюг","intent":"set_reminder","slots":{"duration":"35","reminder_text":"выключить утюг"}}
+{"text":"пожалуйста останови операцию сейчас","intent":"cancel","slots":{}}
+{"text":"ээ случайный набор слов","intent":"unknown","slots":{}}
+{"text":"через 4 минут сообщи что нужно проверить окна","intent":"set_reminder","slots":{"duration":"4","reminder_text":"проверить окна"}}
+{"text":"объясни мне принцип работы архитектуру нейросетей","intent":"general_chat","slots":{}}
+{"text":"что можно открыть через джарвис на данный момент","intent":"list_applications","slots":{}}
+{"text":"выведи перечень доступных программ пожалуйста","intent":"list_applications","slots":{}}
+{"text":"поделись интересным фактом про облачные технологии","intent":"general_chat","slots":{}}
+{"text":"назови программы для быстрого запуска","intent":"list_applications","slots":{}}
+{"text":"глянь пожалуйста что показывают часы без объяснений","intent":"get_current_time","slots":{}}
+{"text":"будь добр скажи время прямо сейчас без объяснений","intent":"get_current_time","slots":{}}
+{"text":"назови программы для быстрого запуска джарвис","intent":"list_applications","slots":{}}
+{"text":"я хочу чтобы ты открыл дисорд","intent":"open_application","slots":{"application":"дисорд"}}
+{"text":"я хочу чтобы ты открыл блокнот","intent":"open_application","slots":{"application":"блокнот"}}
+{"text":"поделись интересным фактом про домашние сети","intent":"general_chat","slots":{}}
+{"text":"я хочу чтобы ты открыл диспетчер задач","intent":"open_application","slots":{"application":"диспетчер задач"}}
+{"text":"напомни мне через 4 минут что пора подготовиться к звонку","intent":"set_reminder","slots":{"duration":"4","reminder_text":"подготовиться к звонку"}}
+{"text":"я отменяю запрос сейчас","intent":"cancel","slots":{}}
+{"text":"напомни мне через 14 минут что пора выключить утюг","intent":"set_reminder","slots":{"duration":"14","reminder_text":"выключить утюг"}}
+{"text":"ээ дальше туда наверное","intent":"unknown","slots":{}}
+{"text":"сними последнюю команду","intent":"cancel","slots":{}}
+{"text":"установи напоминание спустя 4 минут позвонить родителям","intent":"set_reminder","slots":{"duration":"4","reminder_text":"позвонить родителям"}}
+{"text":"ээ запусти ту программу","intent":"unknown","slots":{}}
+{"text":"случайный набор слов","intent":"unknown","slots":{}}
+{"text":"команда потерялась наверное","intent":"unknown","slots":{}}
+{"text":"ээ ну это самое сделай","intent":"unknown","slots":{}}
+{"text":"можно запустить блекнот","intent":"open_application","slots":{"application":"блекнот"}}
+{"text":"назови программы для быстрого запуска пожалуйста","intent":"list_applications","slots":{}}
+{"text":"хочу напоминание через 14 минут выключить утюг","intent":"set_reminder","slots":{"duration":"14","reminder_text":"выключить утюг"}}
+{"text":"назови программы для быстрого запуска целиком","intent":"list_applications","slots":{}}
+{"text":"проверь для меня сколько времени сейчас джарвис","intent":"get_current_time","slots":{}}
+{"text":"не расслышал сам себя наверное","intent":"unknown","slots":{}}
+{"text":"открой для меня браузер","intent":"open_application","slots":{"application":"браузер"}}
+{"text":"с чего начать изучение темы квантовые компьютеры","intent":"general_chat","slots":{}}
+{"text":"установи напоминание спустя 8 минут позвонить родителям","intent":"set_reminder","slots":{"duration":"8","reminder_text":"позвонить родителям"}}
+{"text":"хочу напоминание через 35 минут проверить окна","intent":"set_reminder","slots":{"duration":"35","reminder_text":"проверить окна"}}
+{"text":"включи мне приложение дискод","intent":"open_application","slots":{"application":"дискод"}}
+{"text":"напомни мне через 50 минут что пора проверить окна","intent":"set_reminder","slots":{"duration":"50","reminder_text":"проверить окна"}}
+{"text":"прерви всё что сейчас делаешь пожалуйста","intent":"cancel","slots":{}}
+{"text":"в общем запусти ту программу","intent":"unknown","slots":{}}
+{"text":"я отменяю запрос","intent":"cancel","slots":{}}
+{"text":"покажи весь доступный софт на данный момент","intent":"list_applications","slots":{}}
+{"text":"какое твоё мнение насчёт архитектуру нейросетей","intent":"general_chat","slots":{}}
+{"text":"с чего начать изучение темы солнечную систему","intent":"general_chat","slots":{}}
+{"text":"можно узнать который теперь час джарвис","intent":"get_current_time","slots":{}}
+{"text":"в общем напомни когда-нибудь","intent":"unknown","slots":{}}
+{"text":"поделись интересным фактом про энергопотребление компьютера","intent":"general_chat","slots":{}}
+{"text":"сообщи без лишних слов точное время пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"глянь пожалуйста что показывают часы джарвис","intent":"get_current_time","slots":{}}
+{"text":"через 8 минут сообщи что нужно проверить окна","intent":"set_reminder","slots":{"duration":"8","reminder_text":"проверить окна"}}
+{"text":"в общем ну это самое сделай","intent":"unknown","slots":{}}
+{"text":"что можно открыть через джарвис целиком","intent":"list_applications","slots":{}}
+{"text":"поделись интересным фактом про языки программирования","intent":"general_chat","slots":{}}
+{"text":"я хочу чтобы ты открыл файлы","intent":"open_application","slots":{"application":"файлы"}}
+{"text":"какие приложения поддерживает ассистент","intent":"list_applications","slots":{}}
+{"text":"открой что-нибудь","intent":"unknown","slots":{}}
+{"text":"открой для меня калькулятор","intent":"open_application","slots":{"application":"калькулятор"}}
+{"text":"я хочу чтобы ты открыл дискод","intent":"open_application","slots":{"application":"дискод"}}
+{"text":"я хочу чтобы ты открыл calc","intent":"open_application","slots":{"application":"calc"}}
+{"text":"сообщи без лишних слов точное время на системных часах","intent":"get_current_time","slots":{}}
+{"text":"напомни когда-нибудь наверное","intent":"unknown","slots":{}}
+{"text":"покажи весь доступный софт для меня","intent":"list_applications","slots":{}}
+{"text":"джарвис уточни текущий час джарвис","intent":"get_current_time","slots":{}}
+{"text":"я отменяю запрос немедленно","intent":"cancel","slots":{}}
+{"text":"джарвис уточни текущий час на системных часах","intent":"get_current_time","slots":{}}

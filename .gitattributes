@@ -1,0 +1,2 @@
+# Dataset hashes are defined over canonical UTF-8 files with LF endings.
+training_workspace/data/*.jsonl text eol=lf
