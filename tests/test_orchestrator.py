@@ -194,3 +194,24 @@ async def test_thinking_ready_is_published_after_authoritative_transition(
     await run_task
 
     assert observed == [("think-tr", State.THINKING, {})]
+
+
+async def test_audio_captured_cancels_listening_timeout_during_slow_stt(bus: EventBus):
+    orch = Orchestrator(bus, {"listening_timeout_seconds": 0.05})
+    await orch.start()
+    run_task = asyncio.create_task(bus.run())
+    bus.publish("wake_word_detected", {}, trace_id="slow-stt")
+    await asyncio.sleep(0.01)
+    bus.publish("audio_captured", {"audio": b"pcm"}, trace_id="slow-stt")
+    await asyncio.sleep(0.1)
+
+    assert orch.state == State.TRANSCRIBING
+    bus.publish(
+        "transcription_ready", {"text": "который час"}, trace_id="slow-stt"
+    )
+    await asyncio.sleep(0.05)
+    await bus.stop()
+    await run_task
+    await orch.stop()
+
+    assert orch.state == State.THINKING

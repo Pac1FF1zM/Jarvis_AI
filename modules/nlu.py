@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from pathlib import Path
 from typing import Any, Callable
 
@@ -17,8 +18,59 @@ from core.event_bus import Event, EventBus
 from core.gpu_lock import GPULock
 from ml.nlu.inference import NLUPredictor
 from ml.nlu.schema import NLUResult
+from tools._applications import resolve_application
 
 logger = logging.getLogger("jarvis.module.nlu")
+
+_OPEN_REQUEST = re.compile(
+    r"^\s*(?:джарвис\s+)?"
+    r"(?:открой|открыть|запусти|запустить|запустим|включи|open|launch)"
+    r"(?:\s+мне)?(?:\s+приложение)?(?:\s+программу)?\s+(.+?)\s*$",
+    flags=re.IGNORECASE,
+)
+
+
+def _normalise_transcription_for_nlu(text: str) -> str:
+    """Repair a few observed Russian Whisper errors before neural routing."""
+    corrected = text.lower().replace("ё", "е")
+    replacements = (
+        (r"\bотпрой\b", "открой"),
+        (r"\bколька\s+времени\b", "сколько времени"),
+        (r"\bк\s+а(?:л|ль)кулятор(?:ы|а|ом)?\b", "калькулятор"),
+        (r"\bкалькуляторы\b", "калькулятор"),
+        (r"\bблокноты\b", "блокнот"),
+        (r"\b(?:паинт|пайнт|пейнт|пеинт|пэйнт)\b", "paint"),
+        (r"\b(?:дисорд|дискод|дискор)\b", "дискорд"),
+    )
+    for pattern, replacement in replacements:
+        corrected = re.sub(pattern, replacement, corrected, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", corrected).strip()
+
+
+def _apply_runtime_command_guardrails(
+    normalised_text: str,
+    result: NLUResult,
+) -> NLUResult:
+    """Rescue explicit safe launches while keeping the allow-list authoritative.
+
+    A distorted verb/name may fool the neural intent head, but it still cannot
+    launch an arbitrary executable: correction is allowed only when an
+    imperative is present and the requested tail resolves to the fixed list.
+    """
+    match = _OPEN_REQUEST.match(normalised_text)
+    if not match:
+        return result
+    requested = re.sub(
+        r"\s+(?:пожалуйста|джарвис)$", "", match.group(1), flags=re.IGNORECASE
+    ).strip(" ,.:;!?-")
+    application = resolve_application(requested)
+    if application is None:
+        return result
+    return NLUResult(
+        "open_application",
+        max(result.confidence, 0.99),
+        {"application": application.name},
+    )
 
 
 class NLUModule(BaseModule):
@@ -97,15 +149,22 @@ class NLUModule(BaseModule):
     async def _process_transcription(self, event: Event) -> None:
         assert self.bus is not None
         text = str(event.payload.get("text", "")).strip()
+        normalised_text = _normalise_transcription_for_nlu(text)
         if self._predictor is None or not text:
             result = NLUResult("unknown", 0.0, {})
         else:
             try:
                 async with self.gpu_lock.section("nlu"):
-                    result = await asyncio.to_thread(self._predictor.predict, text)
+                    result = await asyncio.to_thread(
+                        self._predictor.predict, normalised_text
+                    )
+                result = _apply_runtime_command_guardrails(normalised_text, result)
             except Exception:  # noqa: BLE001 - keep voice pipeline responsive
                 logger.exception("NLU inference failed; rejecting turn as unknown")
                 result = NLUResult("unknown", 0.0, {})
+
+        if normalised_text != text.casefold():
+            logger.info("NLU_NORMALIZED original=%r normalized=%r", text, normalised_text)
 
         raw_intent = result.intent
         accepted_intent = raw_intent if result.confidence >= self._threshold else "unknown"

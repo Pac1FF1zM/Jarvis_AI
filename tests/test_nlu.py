@@ -12,7 +12,11 @@ from core.gpu_lock import GPULock
 from ml.nlu.data import build_examples
 from ml.nlu.inference import NLUPredictor
 from ml.nlu.schema import NLUResult
-from modules.nlu import NLUModule
+from modules.nlu import (
+    NLUModule,
+    _apply_runtime_command_guardrails,
+    _normalise_transcription_for_nlu,
+)
 
 
 MODEL_PATH = (
@@ -79,6 +83,41 @@ def test_talking_about_application_does_not_trigger_launch_intent():
         "зачем нужен калькулятор",
     ):
         assert predictor.predict(text).intent == "general_chat"
+
+
+def test_observed_whisper_errors_are_normalised_before_neural_routing():
+    assert (
+        _normalise_transcription_for_nlu("Отпрой к алкулятор.")
+        == "открой калькулятор."
+    )
+    assert _normalise_transcription_for_nlu("Запусти блокноты") == "запусти блокнот"
+    assert _normalise_transcription_for_nlu("Открой пеинт") == "открой paint"
+    assert _normalise_transcription_for_nlu("Колька времени") == "сколько времени"
+
+
+def test_explicit_phonetic_allowlisted_app_rescues_bad_neural_intent():
+    bad_prediction = NLUResult("cancel", 0.999, {})
+    for text, expected in (
+        ("Отпрой к алкулятор", "calculator"),
+        ("Запусти блокноты", "notepad"),
+        ("Открой пеинт", "paint"),
+        ("Открой дисорд", "discord"),
+        ("Открой дискод", "discord"),
+    ):
+        normalised = _normalise_transcription_for_nlu(text)
+        rescued = _apply_runtime_command_guardrails(normalised, bad_prediction)
+        assert rescued.intent == "open_application"
+        assert rescued.slots == {"application": expected}
+
+
+def test_guardrail_never_rescues_non_imperative_or_unknown_application():
+    prediction = NLUResult("general_chat", 0.9, {})
+    for text in ("расскажи про калькулятор", "открой powershell", "запусти steam"):
+        normalised = _normalise_transcription_for_nlu(text)
+        assert (
+            _apply_runtime_command_guardrails(normalised, prediction)
+            == prediction
+        )
 
 
 async def test_module_publishes_nlu_result_with_same_trace():

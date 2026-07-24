@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import logging
+import re
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
@@ -35,6 +36,97 @@ _DEFAULT_SPEAKER = "xenia"
 _DEFAULT_SAMPLE_RATE = 48000
 _RUSSIAN_SPEAKERS = frozenset({"aidar", "baya", "eugene", "kseniya", "xenia"})
 _RUSSIAN_SAMPLE_RATES = frozenset({8000, 24000, 48000})
+
+_RU_ONES = (
+    "", "один", "два", "три", "четыре", "пять", "шесть", "семь",
+    "восемь", "девять",
+)
+_RU_TEENS = (
+    "десять", "одиннадцать", "двенадцать", "тринадцать", "четырнадцать",
+    "пятнадцать", "шестнадцать", "семнадцать", "восемнадцать", "девятнадцать",
+)
+_RU_TENS = (
+    "", "", "двадцать", "тридцать", "сорок", "пятьдесят", "шестьдесят",
+    "семьдесят", "восемьдесят", "девяносто",
+)
+_RU_HUNDREDS = (
+    "", "сто", "двести", "триста", "четыреста", "пятьсот", "шестьсот",
+    "семьсот", "восемьсот", "девятьсот",
+)
+
+
+def _ru_plural(value: int, one: str, few: str, many: str) -> str:
+    last_two = value % 100
+    if 11 <= last_two <= 14:
+        return many
+    last = value % 10
+    if last == 1:
+        return one
+    if 2 <= last <= 4:
+        return few
+    return many
+
+
+def _ru_under_thousand(value: int, *, feminine: bool = False) -> str:
+    words: list[str] = []
+    if value >= 100:
+        words.append(_RU_HUNDREDS[value // 100])
+        value %= 100
+    if 10 <= value <= 19:
+        words.append(_RU_TEENS[value - 10])
+        return " ".join(words)
+    if value >= 20:
+        words.append(_RU_TENS[value // 10])
+        value %= 10
+    if value:
+        if feminine and value == 1:
+            words.append("одна")
+        elif feminine and value == 2:
+            words.append("две")
+        else:
+            words.append(_RU_ONES[value])
+    return " ".join(words)
+
+
+def _integer_to_russian(value: int) -> str:
+    """Spell a non-negative integer for the Russian Silero frontend."""
+    if value == 0:
+        return "ноль"
+    if value < 0:
+        return "минус " + _integer_to_russian(-value)
+    if value >= 1_000_000:
+        return " ".join(_RU_ONES[int(digit)] or "ноль" for digit in str(value))
+    words: list[str] = []
+    thousands, remainder = divmod(value, 1000)
+    if thousands:
+        words.append(_ru_under_thousand(thousands, feminine=True))
+        words.append(_ru_plural(thousands, "тысяча", "тысячи", "тысяч"))
+    if remainder:
+        words.append(_ru_under_thousand(remainder))
+    return " ".join(words)
+
+
+def _prepare_russian_speech_text(text: str) -> str:
+    """Convert clock times and remaining digits into pronounceable words."""
+    def replace_time(match: re.Match[str]) -> str:
+        hours = int(match.group(1))
+        minutes = int(match.group(2))
+        return " ".join(
+            (
+                _integer_to_russian(hours),
+                _ru_plural(hours, "час", "часа", "часов"),
+                _integer_to_russian(minutes),
+                _ru_plural(minutes, "минута", "минуты", "минут"),
+            )
+        )
+
+    prepared = re.sub(r"(?<!\d)([01]?\d|2[0-3]):([0-5]\d)(?!\d)", replace_time, text)
+    prepared = re.sub(
+        r"(?<![\w])\d+(?![\w])",
+        lambda match: _integer_to_russian(int(match.group(0))),
+        prepared,
+    )
+    return prepared
 
 
 @dataclass
@@ -358,7 +450,12 @@ class TTSModule(BaseModule):
             return
 
         try:
-            audio = await self._synthesize_audio(text, session)
+            speech_text = (
+                _prepare_russian_speech_text(text)
+                if self._language == "ru"
+                else text
+            )
+            audio = await self._synthesize_audio(speech_text, session)
             await self._play_audio(audio, session)
         except asyncio.CancelledError:
             raise

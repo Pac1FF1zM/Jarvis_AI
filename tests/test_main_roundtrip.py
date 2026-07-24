@@ -199,7 +199,7 @@ async def test_own_nlu_opens_allowlisted_application_end_to_end(monkeypatch):
     assert nlu.payload["intent"] == "open_application"
     assert request.payload == {
         "tool": "open_application",
-        "params": {"application": "калькулятор"},
+        "params": {"application": "calculator"},
     }
     assert result.payload["result"]["ok"] is True
     assert launched == ["calculator"]

@@ -15,7 +15,7 @@ import pytest
 from core.config_loader import ModuleConfig
 from core.event_bus import EventBus, Event
 import modules.tts as tts_mod
-from modules.tts import TTSModule
+from modules.tts import TTSModule, _prepare_russian_speech_text
 
 
 @pytest.fixture
@@ -172,6 +172,37 @@ async def test_real_synthesis_runs_off_event_loop(bus: EventBus, fake_silero):
     assert all(tid != event_loop_thread_id for tid in model.apply_thread_ids)
     assert sounddevice.play_thread_ids
     assert all(tid != event_loop_thread_id for tid in sounddevice.play_thread_ids)
+
+
+def test_russian_speech_text_spells_clock_time_and_digits():
+    assert _prepare_russian_speech_text("Сейчас 20:55.") == (
+        "Сейчас двадцать часов пятьдесят пять минут."
+    )
+    assert _prepare_russian_speech_text("Через 12 минут") == (
+        "Через двенадцать минут"
+    )
+
+
+async def test_russian_silero_receives_pronounceable_time(bus: EventBus, fake_silero):
+    model, _factory, _sounddevice = fake_silero
+    mod = TTSModule(ModuleConfig(device="cpu", model="v4_ru"))
+    await mod.start(bus)
+    finished = asyncio.Event()
+
+    async def record(_event: Event) -> None:
+        finished.set()
+
+    bus.subscribe("speech_finished", record)
+    run_task = asyncio.create_task(bus.run())
+    bus.publish("response_ready", {"text": "Сейчас 20:55."}, trace_id="time-tts")
+    await asyncio.wait_for(finished.wait(), timeout=1.0)
+    await bus.stop()
+    await run_task
+    await mod.stop()
+
+    assert model.apply_calls[0]["text"] == (
+        "Сейчас двадцать часов пятьдесят пять минут."
+    )
 
 
 async def test_russian_configuration_loads_matching_model(bus: EventBus, fake_silero):

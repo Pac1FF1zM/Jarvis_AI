@@ -21,6 +21,7 @@ stops immediately on ``False`` — no timers armed, no follow-up events publishe
 State graph::
 
     IDLE -> WAKE_DETECTED -> LISTENING -> TRANSCRIBING -> THINKING
+                                      audio_captured     transcription_ready
           ^                                                |
           |                                                v
           +-- SPEAKING <---- response_ready ---- (response / tool_result)
@@ -85,6 +86,7 @@ class Orchestrator:
     async def start(self) -> None:
         """Subscribe to every lifecycle event the state machine cares about."""
         self.bus.subscribe("wake_word_detected", self._on_wake)
+        self.bus.subscribe("audio_captured", self._on_audio_captured)
         self.bus.subscribe("transcription_ready", self._on_transcription)
         self.bus.subscribe("response_ready", self._on_response)
         self.bus.subscribe("tool_call_requested", self._on_tool_call)
@@ -176,9 +178,42 @@ class Orchestrator:
                 event.trace_id,
             )
 
-    async def _on_transcription(self, event: Event) -> None:
+    async def _on_audio_captured(self, event: Event) -> None:
+        """End LISTENING as soon as bounded audio exists, before slow STT."""
+        if self._current_trace is not None and event.trace_id != self._current_trace:
+            logger.info(
+                "STALE_AUDIO_IGNORED trace=%s current_trace=%s",
+                event.trace_id,
+                self._current_trace,
+            )
+            return
+        if self.state != State.LISTENING:
+            logger.info(
+                "AUDIO_LIFECYCLE_IGNORED state=%s trace=%s",
+                self.state.value,
+                event.trace_id,
+            )
+            return
         self._cancel_timeout()
-        if not self._transition(State.TRANSCRIBING, event.trace_id):
+        self._transition(State.TRANSCRIBING, event.trace_id)
+
+    async def _on_transcription(self, event: Event) -> None:
+        if self._current_trace is not None and event.trace_id != self._current_trace:
+            logger.info(
+                "STALE_TRANSCRIPTION_IGNORED trace=%s current_trace=%s",
+                event.trace_id,
+                self._current_trace,
+            )
+            return
+        self._cancel_timeout()
+        # Text mode intentionally has no audio_captured event, so retain its
+        # direct LISTENING -> TRANSCRIBING path. Real audio already moved the
+        # state in _on_audio_captured.
+        if self.state == State.LISTENING:
+            if not self._transition(State.TRANSCRIBING, event.trace_id):
+                return
+        elif self.state != State.TRANSCRIBING:
+            self._transition(State.TRANSCRIBING, event.trace_id)
             return
         # TRANSCRIBING -> THINKING is always valid from TRANSCRIBING, but we
         # still honour the authoritative contract.
@@ -232,7 +267,8 @@ class Orchestrator:
             return
         if self.state == State.LISTENING:
             logger.info("LISTENING_TIMEOUT trace=%s -> IDLE", trace_id)
-            self._transition(State.IDLE, trace_id)
+            if self._transition(State.IDLE, trace_id):
+                self._current_trace = None
 
     def _cancel_timeout(self) -> None:
         if self._timeout_task and not self._timeout_task.done():

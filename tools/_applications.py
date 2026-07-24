@@ -20,10 +20,19 @@ class ApplicationSpec:
 
 APPLICATIONS = (
     ApplicationSpec(
-        "calculator", "Калькулятор", ("calc.exe",), aliases=("калькулятор", "calc"),
+        "calculator",
+        "Калькулятор",
+        ("calc.exe",),
+        aliases=("калькулятор", "калькуляторы", "calc"),
     ),
     ApplicationSpec(
-        "notepad", "Блокнот", ("notepad.exe",), aliases=("блокнот", "notepad"),
+        "notepad",
+        "Блокнот",
+        ("notepad.exe",),
+        aliases=(
+            "блокнот", "блокноты", "блакнот", "блекнот", "notepad",
+            "black note", "blacknote",
+        ),
     ),
     ApplicationSpec(
         "explorer",
@@ -32,7 +41,18 @@ APPLICATIONS = (
         aliases=("проводник", "файлы", "file explorer", "explorer"),
     ),
     ApplicationSpec(
-        "paint", "Paint", uri="ms-paint:", aliases=("paint", "паинт", "пейнт"),
+        "paint",
+        "Пейнт",
+        uri="ms-paint:",
+        aliases=("paint", "паинт", "пайнт", "пейнт", "пеинт", "пэйнт"),
+    ),
+    ApplicationSpec(
+        "discord",
+        "Дискорд",
+        uri="discord://",
+        aliases=(
+            "discord", "дискорд", "дисорд", "дискод", "дискор", "дискорд",
+        ),
     ),
     ApplicationSpec(
         "task_manager",
@@ -54,13 +74,57 @@ def normalise_name(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip(" .,!?:;\"'")
 
 
+def _compact_name(value: str) -> str:
+    """Remove separators so Whisper's ``к алкулятор`` can match safely."""
+    return re.sub(r"[^a-zа-я0-9]+", "", normalise_name(value))
+
+
+def _edit_distance(left: str, right: str) -> int:
+    """Small Levenshtein distance helper for the tiny fixed allow-list."""
+    previous = list(range(len(right) + 1))
+    for left_index, left_char in enumerate(left, start=1):
+        current = [left_index]
+        for right_index, right_char in enumerate(right, start=1):
+            current.append(
+                min(
+                    current[-1] + 1,
+                    previous[right_index] + 1,
+                    previous[right_index - 1] + (left_char != right_char),
+                )
+            )
+        previous = current
+    return previous[-1]
+
+
 def resolve_application(value: str) -> ApplicationSpec | None:
     requested = normalise_name(value)
+    requested_compact = _compact_name(requested)
+    if not requested_compact:
+        return None
+
+    ranked: list[tuple[int, ApplicationSpec]] = []
     for spec in APPLICATIONS:
         candidates = (spec.name, spec.display_name, *spec.aliases)
-        if requested in {normalise_name(candidate) for candidate in candidates}:
+        normalised = {normalise_name(candidate) for candidate in candidates}
+        compact = {_compact_name(candidate) for candidate in candidates}
+        if requested in normalised or requested_compact in compact:
             return spec
-    return None
+        if len(requested_compact) >= 4:
+            distance = min(
+                _edit_distance(requested_compact, candidate)
+                for candidate in compact
+            )
+            ranked.append((distance, spec))
+
+    # Fuzzy matching never creates a launch target: it can only select one of
+    # the fixed entries above. Require a strong, unambiguous match so an
+    # unrelated application name cannot accidentally launch something else.
+    ranked.sort(key=lambda item: item[0])
+    if not ranked or ranked[0][0] > 1:
+        return None
+    if len(ranked) > 1 and ranked[0][0] == ranked[1][0]:
+        return None
+    return ranked[0][1]
 
 
 def launch_application(spec: ApplicationSpec) -> int | None:

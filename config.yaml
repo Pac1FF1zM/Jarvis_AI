@@ -22,6 +22,11 @@ modules:
       language: ru
       download_root: models/openai-whisper
       fp16: false
+      # Bias mixed Russian/English application names without changing the
+      # Russian recognition language. This is a prompt, not another model.
+      initial_prompt: >-
+        Команды голосового ассистента Джарвис. Приложения: калькулятор,
+        блокнот, проводник, Пейнт, Дискорд, диспетчер задач, браузер.
 
   # Own word-level NLU model. All weights and its tokenizer are trained
   # locally from random initialisation; no pretrained checkpoints are used.

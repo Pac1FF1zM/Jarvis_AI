@@ -105,6 +105,16 @@ class STTModule(BaseModule):
             params.get("download_root", "models/openai-whisper")
         )
         self._fp16 = bool(params.get("fp16", str(config.device).lower() == "cuda"))
+        self._initial_prompt = str(
+            params.get(
+                "initial_prompt",
+                (
+                    "Команды голосового ассистента Джарвис. Приложения: "
+                    "калькулятор, блокнот, проводник, Пейнт, Дискорд, "
+                    "диспетчер задач, браузер."
+                ),
+            )
+        ).strip()
 
     async def start(self, bus: EventBus) -> None:
         self.bus = bus
@@ -259,7 +269,10 @@ class STTModule(BaseModule):
                 language=self._language,
                 task="transcribe",
                 fp16=self._fp16,
-                verbose=False,
+                # In OpenAI Whisper ``False`` still renders a tqdm progress
+                # bar. ``None`` disables both per-segment text and the bar.
+                verbose=None,
+                initial_prompt=self._initial_prompt or None,
             )
 
         try:

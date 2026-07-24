@@ -116,3 +116,33 @@ def test_paint_uses_fixed_windows_uri_instead_of_shell():
     assert paint is not None
     assert paint.command is None
     assert paint.uri == "ms-paint:"
+
+
+def test_discord_uses_fixed_windows_uri_instead_of_shell():
+    discord = resolve_application("дисорд")
+    assert discord is not None
+    assert discord.command is None
+    assert discord.uri == "discord://"
+
+
+@pytest.mark.parametrize(
+    ("heard", "expected"),
+    [
+        ("блокноты", "notepad"),
+        ("black note", "notepad"),
+        ("к алкулятор", "calculator"),
+        ("пеинт", "paint"),
+        ("пейнт", "paint"),
+        ("дисорд", "discord"),
+        ("дискод", "discord"),
+    ],
+)
+def test_allowlist_resolves_common_russian_whisper_variants(heard, expected):
+    resolved = resolve_application(heard)
+    assert resolved is not None
+    assert resolved.name == expected
+
+
+def test_fuzzy_resolver_still_rejects_unrelated_or_dangerous_names():
+    for name in ("powershell", "командная строка", "дисковод", "steam"):
+        assert resolve_application(name) is None

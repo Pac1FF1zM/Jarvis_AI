@@ -39,6 +39,7 @@ def _config(device: str = "cpu") -> ModuleConfig:
             "language": "ru",
             "download_root": "models/openai-whisper",
             "fp16": device == "cuda",
+            "initial_prompt": "Калькулятор, Пейнт, Дискорд.",
         },
     )
 
@@ -159,7 +160,8 @@ async def test_decodable_audio_uses_real_result_and_runs_off_loop(
     assert call["language"] == "ru"
     assert call["task"] == "transcribe"
     assert call["fp16"] is False
-    assert call["verbose"] is False
+    assert call["verbose"] is None
+    assert call["initial_prompt"] == "Калькулятор, Пейнт, Дискорд."
     assert all(
         tid != event_loop_thread for tid in fake_whisper.model.transcribe_thread_ids
     )
