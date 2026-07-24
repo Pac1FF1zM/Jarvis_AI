@@ -203,3 +203,20 @@ def test_project_has_no_faster_whisper_dependency():
     )
     assert "faster-whisper" not in requirements.lower()
     assert "huggingface" not in requirements.lower()
+
+
+@pytest.mark.parametrize(
+    ("cuda_available", "expected_device", "expected_fp16"),
+    [(True, "cuda", True), (False, "cpu", False)],
+)
+def test_auto_device_selects_cuda_or_cpu(
+    gpu_lock, monkeypatch, cuda_available, expected_device, expected_fp16
+):
+    monkeypatch.setattr(stt_mod, "_cuda_is_available", lambda: cuda_available)
+    config = _config(device="auto")
+    config.params.pop("fp16")
+
+    mod = STTModule(config, gpu_lock)
+
+    assert mod._device == expected_device
+    assert mod._fp16 is expected_fp16

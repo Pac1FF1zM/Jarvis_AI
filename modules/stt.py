@@ -10,7 +10,7 @@ fully runnable without it installed:
 - If ``whisper`` is importable AND ``self.config.enabled`` is true, the
   model is loaded **once** in :meth:`STTModule.start` (loading is expensive —
   never per-call) and used for every transcribe.
-- If ``faster_whisper`` is not importable, the module logs an actionable
+- If ``whisper`` is not importable, the module logs an actionable
   message and stays in stub-only mode: it still handles events, still emits
   ``transcription_ready``, just with stub text.
 - If the incoming ``audio_captured`` payload is not decodable audio (e.g. the
@@ -18,8 +18,9 @@ fully runnable without it installed:
   no real microphone exists), the module logs a clear warning and returns the
   existing stub text/confidence so the demo round-trip keeps working.
 
-CUDA OOM is detected and re-raised with an actionable message — config drives
-behavior in this project, so the module never silently switches device.
+CUDA OOM is detected and re-raised with an actionable message. An explicit
+``cpu`` or ``cuda`` setting is respected; ``auto`` selects CUDA when PyTorch
+can use it and otherwise selects CPU.
 
 Model names are resolved by the official package from OpenAI's Azure storage;
 an explicit local checkpoint path is also accepted. No Hugging Face client,
@@ -85,6 +86,24 @@ def _is_cuda_oom(exc: BaseException) -> bool:
     return False
 
 
+def _cuda_is_available() -> bool:
+    """Return whether the installed PyTorch runtime can use CUDA."""
+    try:
+        import torch
+
+        return bool(torch.cuda.is_available())
+    except (ImportError, OSError):
+        return False
+
+
+def _resolve_device(requested: Any) -> str:
+    """Resolve ``auto`` once while preserving explicit device choices."""
+    device = str(requested or "cpu").strip().lower()
+    if device == "auto":
+        return "cuda" if _cuda_is_available() else "cpu"
+    return device
+
+
 class STTModule(BaseModule):
     """Transcribes captured audio into text."""
 
@@ -104,7 +123,8 @@ class STTModule(BaseModule):
         self._download_root = str(
             params.get("download_root", "models/openai-whisper")
         )
-        self._fp16 = bool(params.get("fp16", str(config.device).lower() == "cuda"))
+        self._device = _resolve_device(config.device)
+        self._fp16 = bool(params.get("fp16", self._device == "cuda"))
         self._initial_prompt = str(
             params.get(
                 "initial_prompt",
@@ -138,14 +158,14 @@ class STTModule(BaseModule):
                         "'%s' (device=%s). Set STT device: cpu or choose a "
                         "smaller model in config.yaml.",
                         self.config.model,
-                        self.config.device,
+                        self._device,
                     )
                 raise
 
         logger.info(
             "STTModule started (mode=%s) device=%s model=%s language=%s",
             "real" if self._model is not None else "stub",
-            self.config.device,
+            self._device,
             self.config.model,
             self._language,
         )
@@ -162,7 +182,7 @@ class STTModule(BaseModule):
         return await asyncio.to_thread(
             _WHISPER.load_model,
             self.config.model,
-            device=self.config.device,
+            device=self._device,
             download_root=self._download_root,
         )
 
@@ -284,7 +304,7 @@ class STTModule(BaseModule):
                     "CUDA out of memory while running OpenAI Whisper "
                     "(device=%s). Set STT device: cpu or choose a smaller "
                     "model in config.yaml.",
-                    self.config.device,
+                    self._device,
                 )
             raise
 

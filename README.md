@@ -26,9 +26,10 @@ wake_word_detected
   Захват микрофона настоящий: `sounddevice`, mono PCM16, 16 кГц, с Silero VAD
   и ограничением максимальной длительности записи. Без аудиобиблиотек доступен
   безопасный одноразовый режим `python main.py --demo`.
-- STT подключён к официальному `openai-whisper` без Hugging Face; без пакета
-  или настоящего аудио использует
-  безопасную заглушку.
+- STT подключён к многоязычному `small` из официального `openai-whisper` без
+  Hugging Face. При доступной NVIDIA CUDA он работает на GPU в FP16, иначе
+  переходит на CPU/FP32; без пакета или настоящего аудио использует безопасную
+  заглушку.
 - NLU — собственная нейросеть проекта, обученная с нуля. Она выбирает
   намерение и маршрутизирует инструменты.
 - Ollama используется только для свободного диалога. Решения о запуске
@@ -86,6 +87,24 @@ python -m pip install -r requirements.txt
 python main.py               # постоянный режим, Ctrl+Alt+Space для записи
 python main.py --demo        # один цикл без микрофона и глобальной клавиши
 ```
+
+Чтобы Whisper использовал NVIDIA GPU, после основных зависимостей установите
+CUDA-вариант PyTorch (эта команда проверена с CUDA 12.8):
+
+```powershell
+python -m pip install --upgrade --force-reinstall torch `
+  --index-url https://download.pytorch.org/whl/cu128
+```
+
+Проверка должна вывести `True` и название видеокарты:
+
+```powershell
+python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+```
+
+Без CUDA-варианта PyTorch настройка `device: auto` безопасно выберет CPU.
+Checkpoint Whisper `small` (около 461 МБ) скачивается только при первом запуске
+в `models/openai-whisper/` и не добавляется в Git.
 
 Команду также можно передать текстом, полностью минуя микрофон и STT:
 
@@ -174,8 +193,10 @@ memory/     краткосрочная память и SQLite-хранилище
 tests/      unit, regression и end-to-end тесты
 ```
 
-Конфигурация модулей находится в `config.yaml`. На GTX 1060 3 ГБ NLU работает
-на CPU; GPU-доступ остальных моделей сериализуется через `GPULock`.
+Конфигурация модулей находится в `config.yaml`. Whisper `small` автоматически
+выбирает CUDA/FP16, когда установлен CUDA-вариант PyTorch и доступна NVIDIA GPU;
+с CPU-вариантом PyTorch он запускается на CPU/FP32. Собственная NLU работает на
+CPU, а GPU-доступ моделей сериализуется через `GPULock`.
 
 ## Пока не реализовано
 

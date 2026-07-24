@@ -31,7 +31,7 @@ class ModuleConfig:
 
     Attributes:
         enabled: whether the orchestrator should load this module.
-        device: ``"cuda"`` or ``"cpu"`` — where inference runs.
+        device: ``"cuda"``, ``"cpu"``, or module-supported ``"auto"``.
         compute_type: e.g. ``"int8"``, ``"float16"``, ``"q4_k_m"``.
         model: model name / path passed to the underlying engine.
         params: extra engine-specific kwargs.

@@ -16,17 +16,18 @@ modules:
   # Official OpenAI Whisper (no Hugging Face dependency or endpoint).
   stt:
     enabled: true
-    device: cpu
-    model: base
+    # Uses CUDA + FP16 when PyTorch sees an NVIDIA GPU, otherwise CPU + FP32.
+    device: auto
+    model: small
     params:
       language: ru
       download_root: models/openai-whisper
-      fp16: false
       # Bias mixed Russian/English application names without changing the
       # Russian recognition language. This is a prompt, not another model.
       initial_prompt: >-
         Команды голосового ассистента Джарвис. Приложения: калькулятор,
-        блокнот, проводник, Пейнт, Дискорд, диспетчер задач, браузер.
+        блокнот, проводник, Paint, Пейнт, Discord, Дискорд, диспетчер задач,
+        браузер.
 
   # Own word-level NLU model. All weights and its tokenizer are trained
   # locally from random initialisation; no pretrained checkpoints are used.
