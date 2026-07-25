@@ -185,6 +185,8 @@ class NLUModule(BaseModule):
         self.bus = bus
         bus.subscribe("transcription_ready", self._on_transcription)
         bus.subscribe("thinking_ready", self._on_thinking_ready)
+        bus.subscribe("interaction_cancelled", self._on_trace_closed)
+        bus.subscribe("interaction_failed", self._on_trace_closed)
         checkpoint = Path(self.config.model or "models/nlu_word_bigru_curriculum.pt")
         if not checkpoint.is_file():
             logger.error(
@@ -223,6 +225,9 @@ class NLUModule(BaseModule):
     ) -> None:
         """Run inference only after both sides of the lifecycle barrier arrive."""
         trace_id = (transcription or thinking_event).trace_id  # type: ignore[union-attr]
+        assert self.bus is not None
+        if self.bus.is_trace_closed(trace_id):
+            return
         ready: Event | None = None
         async with self._pending_lock:
             if transcription is not None:
@@ -234,6 +239,12 @@ class NLUModule(BaseModule):
                 self._thinking_ready.remove(trace_id)
         if ready is not None:
             await self._process_transcription(ready)
+
+    async def _on_trace_closed(self, event: Event) -> None:
+        """Discard either half of the NLU barrier for a terminated trace."""
+        async with self._pending_lock:
+            self._pending_transcriptions.pop(event.trace_id, None)
+            self._thinking_ready.discard(event.trace_id)
 
     async def _process_transcription(self, event: Event) -> None:
         assert self.bus is not None
@@ -258,6 +269,26 @@ class NLUModule(BaseModule):
 
         raw_intent = result.intent
         accepted_intent = raw_intent if result.confidence >= self._threshold else "unknown"
+        if self.bus.is_trace_closed(event.trace_id):
+            logger.info("NLU_RESULT_DISCARDED cancelled trace=%s", event.trace_id)
+            return
+        if accepted_intent == "cancel":
+            self.bus.publish_event(
+                event.child(
+                    "cancel_requested",
+                    {
+                        "reason": "user_requested",
+                        "text": text,
+                        "intent_confidence": result.confidence,
+                    },
+                )
+            )
+            logger.info(
+                "CANCEL_REQUESTED trace=%s conf=%.3f",
+                event.trace_id,
+                result.confidence,
+            )
+            return
         output = event.child(
             "nlu_result",
             {

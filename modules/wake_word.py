@@ -115,6 +115,7 @@ class WakeWordModule(BaseModule):
 
     async def start(self, bus: EventBus) -> None:
         self.bus = bus
+        bus.subscribe("interaction_cancelled", self._on_interaction_failed)
         bus.subscribe("interaction_failed", self._on_interaction_failed)
         self._loop = asyncio.get_running_loop()
         if self._force_simulated:

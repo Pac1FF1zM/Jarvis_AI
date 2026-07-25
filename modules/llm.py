@@ -108,6 +108,9 @@ class LLMModule(BaseModule):
         # Remember the last transcription per trace so tool_result re-entry
         # knows which conversation it belongs to. trace_id -> last user text.
         self._pending_trace_text: dict[str, str] = {}
+        self._active_tool_tasks: dict[
+            str, tuple[str, asyncio.Task[dict[str, Any]]]
+        ] = {}
         # Cached engine state. ``_server_down`` is set on the first connection
         # failure and stays set so we don't retry-and-fail on every turn.
         self._server_down: bool = False
@@ -116,6 +119,8 @@ class LLMModule(BaseModule):
         self.bus = bus
         bus.subscribe(self._input_event, self._on_transcription)
         bus.subscribe("tool_result", self._on_tool_result)
+        bus.subscribe("interaction_cancelled", self._on_trace_closed)
+        bus.subscribe("interaction_failed", self._on_trace_closed)
         if _OLLAMA is None:
             logger.warning(
                 "ollama package not installed — pip install ollama; "
@@ -135,7 +140,35 @@ class LLMModule(BaseModule):
         )
 
     async def stop(self) -> None:
+        active = list(self._active_tool_tasks.values())
+        for tool_name, task in active:
+            if not task.done() and self.tools.cancellation_mode(tool_name) == "cancel":
+                task.cancel()
+        if active:
+            await asyncio.gather(
+                *(task for _tool_name, task in active), return_exceptions=True
+            )
+        self._active_tool_tasks.clear()
+        self._pending_trace_text.clear()
         logger.info("LLMModule stopped")
+
+    async def _on_trace_closed(self, event: Event) -> None:
+        """Forget trace-local state and cooperatively cancel an async tool."""
+        self._pending_trace_text.pop(event.trace_id, None)
+        active = self._active_tool_tasks.get(event.trace_id)
+        if active is None:
+            return
+        tool_name, task = active
+        if task.done():
+            return
+        if self.tools.cancellation_mode(tool_name) == "cancel":
+            task.cancel()
+        else:
+            logger.info(
+                "TOOL_DRAINING_AFTER_CANCEL name=%s trace=%s",
+                tool_name,
+                event.trace_id,
+            )
 
     # ------------------------------------------------------------------ #
     # New user turn
@@ -208,7 +241,10 @@ class LLMModule(BaseModule):
             await self._request_tool(event, "list_applications", {}, direct_response=True)
             return
         if intent == "cancel":
-            await self._publish_text(event, "Текущая команда отменена.")
+            assert self.bus is not None
+            self.bus.publish_event(
+                event.child("cancel_requested", {"reason": "user_requested"})
+            )
             return
         if intent == "unknown":
             await self._publish_text(event, "Я не уверен, что правильно понял команду.")
@@ -244,6 +280,9 @@ class LLMModule(BaseModule):
         assert self.bus is not None
 
         kind, payload = await self._infer_or_tool_call(user_text, tool_output)
+        if self.bus.is_trace_closed(event.trace_id):
+            logger.info("LLM_RESULT_DISCARDED cancelled trace=%s", event.trace_id)
+            return
 
         if kind == "tool" and tool_output is None:
             # First-pass tool call. Execute the tool, publish the result, and
@@ -266,14 +305,36 @@ class LLMModule(BaseModule):
         direct_response: bool = False,
     ) -> None:
         assert self.bus is not None
+        if self.bus.is_trace_closed(event.trace_id):
+            return
         if not self.tools.has(tool_name):
             await self._publish_text(event, f"Инструмент {tool_name} недоступен.")
             return
         logger.info("TOOL_CALL name=%s params=%s", tool_name, params)
-        self.bus.publish_event(
+        if not self.bus.publish_event(
             event.child("tool_call_requested", {"tool": tool_name, "params": params})
-        )
-        result = await self.tools.execute(tool_name, params)
+        ):
+            return
+        tool_task = asyncio.create_task(self.tools.execute(tool_name, params))
+        self._active_tool_tasks[event.trace_id] = (tool_name, tool_task)
+        try:
+            result = await asyncio.shield(tool_task)
+        except asyncio.CancelledError:
+            if self.bus.is_trace_cancelled(event.trace_id):
+                logger.info(
+                    "TOOL_CANCELLED name=%s trace=%s", tool_name, event.trace_id
+                )
+                return
+            raise
+        finally:
+            active = self._active_tool_tasks.get(event.trace_id)
+            if active is not None and active[1] is tool_task:
+                self._active_tool_tasks.pop(event.trace_id, None)
+        if self.bus.is_trace_closed(event.trace_id):
+            logger.info(
+                "TOOL_RESULT_DISCARDED name=%s trace=%s", tool_name, event.trace_id
+            )
+            return
         self.bus.publish_event(
             event.child(
                 "tool_result",
@@ -287,6 +348,9 @@ class LLMModule(BaseModule):
 
     async def _publish_text(self, event: Event, response_text: str) -> None:
         assert self.bus is not None
+        if self.bus.is_trace_closed(event.trace_id):
+            logger.info("RESPONSE_DISCARDED cancelled trace=%s", event.trace_id)
+            return
         self.short_term.add("assistant", response_text)
         self.bus.publish_event(
             event.child("response_ready", {"text": response_text})

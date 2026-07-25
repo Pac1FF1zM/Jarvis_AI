@@ -13,11 +13,16 @@ import asyncio
 import logging
 import time
 import uuid
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
 logger = logging.getLogger("jarvis.bus")
+
+_TERMINAL_EVENTS = frozenset(
+    {"interaction_cancelled", "interaction_failed", "interaction_completed"}
+)
+_MAX_CLOSED_TRACES = 1024
 
 # A handler is any async callable that accepts an Event.
 Handler = Callable[["Event"], Awaitable[None]]
@@ -65,6 +70,11 @@ class EventBus:
         # In-flight dispatch tasks (fix #4): kept so stop() can drain them
         # instead of dropping/truncating in-flight handler work on shutdown.
         self._tasks: set[asyncio.Task] = set()
+        # A closed trace is a tombstone, not a force-cancelled asyncio task.
+        # Blocking STT/LLM workers cannot be pre-empted safely, so they drain
+        # while every queued or late downstream event for that trace is
+        # rejected here. Bounded retention prevents growth in persistent mode.
+        self._closed_traces: OrderedDict[str, dict[str, Any]] = OrderedDict()
 
     # ------------------------------------------------------------------ #
     # Lazy properties (avoid binding asyncio primitives to the wrong loop)
@@ -109,12 +119,108 @@ class EventBus:
             payload=payload or {},
             trace_id=trace_id or uuid.uuid4().hex[:12],
         )
-        self.queue.put_nowait(event)
-        logger.info("PUBLISH %s trace=%s", event.event_type, event.trace_id)
+        self._publish_or_drop(event)
         return event
 
-    def publish_event(self, event: Event) -> None:
+    def publish_event(self, event: Event) -> bool:
         """Publish an already-constructed :class:`Event` (keeps its trace_id)."""
+        return self._publish_or_drop(event)
+
+    def _publish_or_drop(self, event: Event) -> bool:
+        if event.event_type == "interaction_cancelled":
+            details = dict(event.payload)
+            reason = str(details.pop("reason", "cancelled"))
+            return self.cancel_trace(
+                event.trace_id,
+                reason=reason,
+                details=details,
+            )
+        if event.event_type == "interaction_failed":
+            return self.fail_trace(event.trace_id, event.payload)
+        if (
+            self.is_trace_closed(event.trace_id)
+            and event.event_type not in _TERMINAL_EVENTS
+        ):
+            logger.info(
+                "CLOSED_TRACE_EVENT_DROPPED type=%s trace=%s outcome=%s",
+                event.event_type,
+                event.trace_id,
+                self._closed_traces[event.trace_id]["outcome"],
+            )
+            return False
+        self.queue.put_nowait(event)
+        logger.info("PUBLISH %s trace=%s", event.event_type, event.trace_id)
+        return True
+
+    # ------------------------------------------------------------------ #
+    # Trace lifecycle / cooperative cancellation
+    # ------------------------------------------------------------------ #
+    def is_trace_closed(self, trace_id: str) -> bool:
+        return trace_id in self._closed_traces
+
+    def is_trace_cancelled(self, trace_id: str) -> bool:
+        record = self._closed_traces.get(trace_id)
+        return bool(record and record["outcome"] in {"cancelled", "failed"})
+
+    def trace_outcome(self, trace_id: str) -> dict[str, Any] | None:
+        record = self._closed_traces.get(trace_id)
+        return dict(record) if record is not None else None
+
+    def cancel_trace(
+        self,
+        trace_id: str,
+        *,
+        reason: str,
+        details: dict[str, Any] | None = None,
+    ) -> bool:
+        """Atomically tombstone ``trace_id`` and announce its cancellation.
+
+        Already-running handlers are deliberately not force-cancelled: a
+        ``to_thread`` worker would continue outside asyncio and could release
+        a shared GPU/device lock too early. Their results are discarded by the
+        tombstone instead. Async tools receive the cancellation event and may
+        stop cooperatively.
+        """
+        payload = {"reason": reason, **(details or {})}
+        if not self._close_trace(trace_id, "cancelled", payload):
+            return False
+        self._enqueue_terminal(
+            Event("interaction_cancelled", payload, trace_id=trace_id)
+        )
+        return True
+
+    def fail_trace(self, trace_id: str, payload: dict[str, Any]) -> bool:
+        """Atomically tombstone a failed trace before recovery is dispatched."""
+        failure = dict(payload)
+        failure.setdefault("reason", "unknown")
+        if not self._close_trace(trace_id, "failed", failure):
+            logger.info("DUPLICATE_TRACE_FAILURE_IGNORED trace=%s", trace_id)
+            return False
+        self._enqueue_terminal(
+            Event("interaction_failed", failure, trace_id=trace_id)
+        )
+        return True
+
+    def complete_trace(self, trace_id: str) -> bool:
+        """Close a successful trace so delayed duplicate output is rejected."""
+        return self._close_trace(trace_id, "completed", {})
+
+    def _close_trace(
+        self, trace_id: str, outcome: str, details: dict[str, Any]
+    ) -> bool:
+        if trace_id in self._closed_traces:
+            return False
+        self._closed_traces[trace_id] = {
+            "outcome": outcome,
+            "closed_at": time.time(),
+            **details,
+        }
+        while len(self._closed_traces) > _MAX_CLOSED_TRACES:
+            self._closed_traces.popitem(last=False)
+        logger.info("TRACE_CLOSED trace=%s outcome=%s", trace_id, outcome)
+        return True
+
+    def _enqueue_terminal(self, event: Event) -> None:
         self.queue.put_nowait(event)
         logger.info("PUBLISH %s trace=%s", event.event_type, event.trace_id)
 
@@ -141,6 +247,16 @@ class EventBus:
         logger.info("EventBus run loop exited")
 
     async def _safe_dispatch(self, handler: Handler, event: Event) -> None:
+        if (
+            self.is_trace_closed(event.trace_id)
+            and event.event_type not in _TERMINAL_EVENTS
+        ):
+            logger.info(
+                "CLOSED_TRACE_DISPATCH_SKIPPED type=%s trace=%s",
+                event.event_type,
+                event.trace_id,
+            )
+            return
         try:
             await handler(event)
         except Exception as exc:  # noqa: BLE001 — report and keep the bus alive
@@ -151,23 +267,23 @@ class EventBus:
             # lifecycle signal.  The orchestrator can then reset the current
             # trace instead of remaining stuck in TRANSCRIBING/THINKING/etc.
             # Never recurse if the recovery handler itself is defective.
-            if event.event_type != "interaction_failed":
+            if event.event_type not in _TERMINAL_EVENTS and not self.is_trace_closed(
+                event.trace_id
+            ):
                 handler_name = getattr(
                     handler,
                     "__qualname__",
                     getattr(handler, "__name__", repr(handler)),
                 )
-                self.publish_event(
-                    event.child(
-                        "interaction_failed",
-                        {
-                            "reason": "handler_exception",
-                            "source_event": event.event_type,
-                            "handler": handler_name,
-                            "error_type": type(exc).__name__,
-                            "error": str(exc),
-                        },
-                    )
+                self.fail_trace(
+                    event.trace_id,
+                    {
+                        "reason": "handler_exception",
+                        "source_event": event.event_type,
+                        "handler": handler_name,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    },
                 )
 
     async def stop(self) -> None:

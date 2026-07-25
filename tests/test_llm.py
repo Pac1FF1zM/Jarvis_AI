@@ -67,6 +67,96 @@ async def _noop(event: Event) -> None:
     pass
 
 
+async def test_trace_cancellation_stops_async_tool_and_suppresses_output(
+    bus: EventBus,
+):
+    started = asyncio.Event()
+    tool_cancelled = asyncio.Event()
+    tools = ToolRegistry()
+
+    async def slow_tool(params):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            tool_cancelled.set()
+            raise
+
+    tools._schemas["slow_tool"] = {
+        "name": "slow_tool",
+        "x-cancellation-mode": "cancel",
+    }
+    tools._executors["slow_tool"] = slow_tool
+    mod = _build_llm(bus, tools=tools)
+    outputs: list[Event] = []
+    bus.subscribe("tool_result", _recorder(outputs))
+    bus.subscribe("response_ready", _recorder(outputs))
+    await mod.start(bus)
+
+    run_task = asyncio.create_task(bus.run())
+    input_event = Event("transcription_ready", {"text": "slow"}, trace_id="slow-trace")
+    tool_handler = asyncio.create_task(
+        mod._request_tool(input_event, "slow_tool", {}, direct_response=True)
+    )
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+    bus.cancel_trace("slow-trace", reason="user_requested")
+    await asyncio.wait_for(tool_cancelled.wait(), timeout=1.0)
+    await asyncio.wait_for(tool_handler, timeout=1.0)
+    await asyncio.sleep(0.02)
+    await bus.stop()
+    await run_task
+    await mod.stop()
+
+    assert outputs == []
+    assert mod._active_tool_tasks == {}
+
+
+async def test_non_preemptible_tool_drains_after_cancel_without_stale_output(
+    bus: EventBus,
+):
+    started = asyncio.Event()
+    release = asyncio.Event()
+    finished = asyncio.Event()
+    tools = ToolRegistry()
+
+    async def thread_style_tool(params):
+        started.set()
+        await release.wait()
+        finished.set()
+        return {"response_text": "stale side effect result"}
+
+    # No opt-in cancellation flag: side-effecting tools default to drain.
+    tools._schemas["thread_tool"] = {"name": "thread_tool"}
+    tools._executors["thread_tool"] = thread_style_tool
+    mod = _build_llm(bus, tools=tools)
+    outputs: list[Event] = []
+    bus.subscribe("tool_result", _recorder(outputs))
+    bus.subscribe("response_ready", _recorder(outputs))
+    await mod.start(bus)
+
+    run_task = asyncio.create_task(bus.run())
+    input_event = Event("transcription_ready", {"text": "run"}, trace_id="drain-tool")
+    tool_handler = asyncio.create_task(
+        mod._request_tool(input_event, "thread_tool", {}, direct_response=True)
+    )
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+    bus.cancel_trace("drain-tool", reason="user_requested")
+    await asyncio.sleep(0.02)
+
+    assert not tool_handler.done()
+    assert not finished.is_set()
+    release.set()
+    await asyncio.wait_for(finished.wait(), timeout=1.0)
+    await asyncio.wait_for(tool_handler, timeout=1.0)
+    await asyncio.sleep(0.02)
+
+    assert outputs == []
+    assert mod._active_tool_tasks == {}
+    await bus.stop()
+    await run_task
+    await mod.stop()
+
+
 # =========================================================================== #
 # EXISTING TESTS — stub/fallback path (must keep passing unchanged)
 # =========================================================================== #

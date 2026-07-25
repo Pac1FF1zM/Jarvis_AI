@@ -261,9 +261,12 @@ async def test_trigger_requires_start_first(bus: EventBus):
         await mod.trigger()
 
 
-async def test_wake_word_subscribes_only_to_failure_cleanup(bus: EventBus):
+async def test_wake_word_subscribes_to_all_trace_termination_cleanup(bus: EventBus):
     mod = WakeWordModule(_config(), force_simulated=True)
     await mod.start(bus)
 
-    assert set(bus._subscribers) == {"interaction_failed"}
+    assert set(bus._subscribers) == {
+        "interaction_cancelled",
+        "interaction_failed",
+    }
     assert bus._subscribers["interaction_failed"] == [mod._on_interaction_failed]

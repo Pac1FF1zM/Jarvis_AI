@@ -135,3 +135,86 @@ async def test_failure_handler_exception_does_not_recurse_forever():
     await run_task
 
     assert calls == 1
+
+
+async def test_cancelled_trace_drops_queued_and_late_work_but_emits_terminal_event():
+    bus = EventBus()
+    handled = []
+    cancelled = []
+
+    async def record_work(event):
+        handled.append(event.event_type)
+
+    async def record_cancel(event):
+        cancelled.append(event)
+
+    bus.subscribe("work", record_work)
+    bus.subscribe("response_ready", record_work)
+    bus.subscribe("interaction_cancelled", record_cancel)
+
+    bus.publish("work", {}, trace_id="cancel-me")
+    assert bus.cancel_trace("cancel-me", reason="user_requested") is True
+    assert bus.publish("response_ready", {}, trace_id="cancel-me")
+
+    run_task = asyncio.create_task(bus.run())
+    await asyncio.sleep(0.05)
+    await bus.stop()
+    await run_task
+
+    assert handled == []
+    assert len(cancelled) == 1
+    assert cancelled[0].payload["reason"] == "user_requested"
+    assert bus.is_trace_cancelled("cancel-me")
+
+
+async def test_running_handler_drains_but_its_post_cancel_output_is_discarded():
+    bus = EventBus()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    drained = asyncio.Event()
+    stale_responses = []
+
+    async def non_preemptible_handler(event):
+        started.set()
+        await release.wait()
+        bus.publish_event(event.child("response_ready", {"text": "stale"}))
+        drained.set()
+
+    async def record_response(event):
+        stale_responses.append(event)
+
+    bus.subscribe("work", non_preemptible_handler)
+    bus.subscribe("response_ready", record_response)
+    run_task = asyncio.create_task(bus.run())
+    bus.publish("work", {}, trace_id="drain-me")
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+
+    bus.cancel_trace("drain-me", reason="superseded")
+    release.set()
+    await asyncio.wait_for(drained.wait(), timeout=1.0)
+    await asyncio.sleep(0.02)
+    await bus.stop()
+    await run_task
+
+    assert stale_responses == []
+    assert bus.trace_outcome("drain-me")["outcome"] == "cancelled"
+
+
+async def test_double_cancel_is_idempotent():
+    bus = EventBus()
+    cancellations = []
+
+    async def record(event):
+        cancellations.append(event)
+
+    bus.subscribe("interaction_cancelled", record)
+    assert bus.cancel_trace("once", reason="first") is True
+    assert bus.cancel_trace("once", reason="second") is False
+
+    run_task = asyncio.create_task(bus.run())
+    await asyncio.sleep(0.05)
+    await bus.stop()
+    await run_task
+
+    assert len(cancellations) == 1
+    assert cancellations[0].payload["reason"] == "first"

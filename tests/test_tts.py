@@ -505,8 +505,11 @@ async def test_old_generation_cannot_stop_new_device_owner(
     assert sounddevice.stop_calls == 1
 
 
-async def test_interaction_failure_cancels_current_speech_without_stale_finish(
-    bus: EventBus, monkeypatch
+@pytest.mark.parametrize(
+    "terminal_event", ["interaction_failed", "interaction_cancelled"]
+)
+async def test_trace_termination_cancels_current_speech_without_stale_finish(
+    bus: EventBus, monkeypatch, terminal_event: str
 ):
     monkeypatch.setattr(tts_mod, "_SILERO_TTS", None)
     monkeypatch.setattr(tts_mod, "_SOUNDDEVICE", None)
@@ -539,7 +542,7 @@ async def test_interaction_failure_cancels_current_speech_without_stale_finish(
 
     await mod._on_interaction_failed(
         Event(
-            "interaction_failed",
+            terminal_event,
             {"reason": "interaction_timeout"},
             trace_id="failed-trace",
         )

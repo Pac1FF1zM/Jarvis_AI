@@ -2,7 +2,7 @@
 
 #1 — orchestrator must NOT publish fabricated module payloads (audio_captured).
 #2 — invalid transitions are authoritative: no side effects leak past a reject.
-#3 — barge-in is SPEAKING-only; wake in other active states is a clean no-op.
+#3 — any new activation supersedes the active trace through IDLE.
 """
 from __future__ import annotations
 
@@ -93,13 +93,10 @@ async def test_invalid_transition_publishes_diagnostic(bus: EventBus, orch: Orch
     assert diagnostics[0]["attempted_target"] == "LISTENING"
 
 
-async def test_duplicate_wake_while_listening_is_noop(bus: EventBus, orch: Orchestrator):
-    """Fix #2 regression: a second wake word while LISTENING must not re-arm.
-
-    The original code armed a fresh listening timeout AND published a fake
-    audio_captured on duplicate wake. After the fix, the duplicate wake is a
-    clean no-op: state stays LISTENING and no audio_captured is emitted.
-    """
+async def test_duplicate_event_for_same_trace_while_listening_is_noop(
+    bus: EventBus, orch: Orchestrator
+):
+    """The same activation event cannot cancel and replace itself."""
     audio_events: list[str] = []
     bus.subscribe(
         "audio_captured",
@@ -111,55 +108,94 @@ async def test_duplicate_wake_while_listening_is_noop(bus: EventBus, orch: Orche
     await asyncio.sleep(0.05)
     assert orch.state == State.LISTENING
     assert orch._current_trace == "dup1"
-    # Fire a duplicate wake.
-    bus.publish("wake_word_detected", {}, trace_id="dup2")
+    bus.publish("wake_word_detected", {}, trace_id="dup1")
     await asyncio.sleep(0.05)
     await bus.stop()
     await run_task
 
     assert orch.state == State.LISTENING  # unchanged, not reset/re-armed badly
-    assert orch._current_trace == "dup1", (
-        "ignored wake must not steal trace ownership"
-    )
+    assert orch._current_trace == "dup1"
     assert audio_events == [], "no audio_captured should be published by orchestrator"
 
 
 # --------------------------------------------------------------------------- #
-# Fix #3 — barge-in is SPEAKING-only
+# Fix #3 — every active state supports safe supersession
 # --------------------------------------------------------------------------- #
 async def test_barge_in_from_speaking(bus: EventBus, orch: Orchestrator):
     """Wake while SPEAKING must transition to LISTENING (barge-in)."""
     await orch.start()
     orch.state = State.SPEAKING
+    orch._current_trace = "old-speech"
     bus.publish("wake_word_detected", {}, trace_id="barge")
     run_task = asyncio.create_task(bus.run())
     await asyncio.sleep(0.1)
     await bus.stop()
     await run_task
     assert orch.state == State.LISTENING
+    assert orch._current_trace == "barge"
+    assert bus.is_trace_cancelled("old-speech")
 
 
 @pytest.mark.parametrize(
     "blocked_state",
     [State.TRANSCRIBING, State.THINKING, State.TOOL_CALL, State.LISTENING, State.WAKE_DETECTED],
 )
-async def test_wake_in_non_speaking_active_state_is_noop(
+async def test_wake_supersedes_trace_from_every_active_state(
     bus: EventBus, orch: Orchestrator, blocked_state: State
 ):
-    """Fix #3: wake in any active state other than SPEAKING must not move state."""
+    """Old ownership is closed before the replacement enters LISTENING."""
+    completed = []
+
+    async def record(event):
+        completed.append(event)
+
     await orch.start()
+    bus.subscribe("interaction_completed", record)
     orch.state = blocked_state
     orch._current_trace = "active"
-    bus.publish("wake_word_detected", {}, trace_id="noop")
+    bus.publish("wake_word_detected", {}, trace_id="replacement")
     run_task = asyncio.create_task(bus.run())
     await asyncio.sleep(0.1)
     await bus.stop()
     await run_task
-    assert orch.state == blocked_state, (
-        f"state changed from {blocked_state.value} on wake — barge-in is "
-        f"SPEAKING-only, this should have been a no-op"
+    assert orch.state == State.LISTENING
+    assert orch._current_trace == "replacement"
+    assert bus.is_trace_cancelled("active")
+    assert len(completed) == 1
+    assert completed[0].trace_id == "active"
+    assert completed[0].payload["cancelled"] is True
+    assert completed[0].payload["reason"] == "superseded"
+    assert completed[0].payload["superseded_by"] == "replacement"
+
+
+async def test_cancel_requested_closes_current_trace_without_speech(
+    bus: EventBus, orch: Orchestrator
+):
+    completed = []
+
+    async def record(event):
+        completed.append(event)
+
+    await orch.start()
+    bus.subscribe("interaction_completed", record)
+    run_task = asyncio.create_task(bus.run())
+    bus.publish("wake_word_detected", {}, trace_id="cancel-command")
+    await asyncio.sleep(0.02)
+    bus.publish(
+        "cancel_requested",
+        {"reason": "user_requested"},
+        trace_id="cancel-command",
     )
-    assert orch._current_trace == "active"
+    await asyncio.sleep(0.05)
+    await bus.stop()
+    await run_task
+
+    assert orch.state == State.IDLE
+    assert orch._current_trace is None
+    assert bus.is_trace_cancelled("cancel-command")
+    assert len(completed) == 1
+    assert completed[0].payload["cancelled"] is True
+    assert completed[0].payload["reason"] == "user_requested"
 
 
 async def test_interaction_completed_is_published_only_after_idle(

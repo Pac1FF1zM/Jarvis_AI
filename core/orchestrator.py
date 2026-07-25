@@ -8,11 +8,9 @@ concerns:
 
   * **Timeout recovery** — fail the trace and return to IDLE if listening or
     the complete interaction exceeds its configured deadline.
-  * **Barge-in** — a wake word while SPEAKING interrupts and returns to
-    LISTENING. Barge-in is SPEAKING-only by design (fix #3, decision below):
-    interrupting during THINKING/TOOL_CALL would require cancelling in-flight
-    LLM inference, which is a separate concern. Wake-during-any-other-state is
-    an explicit, logged no-op rather than a silent partial state change.
+  * **Trace cancellation** — any new activation supersedes the active trace,
+    closes it on the EventBus, and only then transfers ownership to the new
+    LISTENING trace. A spoken ``cancel`` intent closes its own trace immediately.
 
 Every state transition is **authoritative** (fix #2): ``_transition()`` returns
 ``False`` for an invalid attempt, publishes an ``invalid_transition`` diagnostic
@@ -26,9 +24,8 @@ State graph::
           ^                                                |
           |                                                v
           +-- SPEAKING <---- response_ready ---- (response / tool_result)
-                   ^
-                   |
-              (barge-in: SPEAKING -> LISTENING on wake_word_detected)
+
+    Any active state -> IDLE (cancel old trace) -> LISTENING (new activation)
 """
 from __future__ import annotations
 
@@ -56,11 +53,9 @@ class State(str, enum.Enum):
 
 # Allowed source -> {target states} transitions.
 #
-# Barge-in (fix #3) is SPEAKING-only: SPEAKING -> LISTENING is the sole
-# interrupt path. A wake_word_detected arriving in any other active state
-# (LISTENING / TRANSCRIBING / THINKING / TOOL_CALL / WAKE_DETECTED) is an
-# explicit no-op handled in _on_wake, so those states deliberately do NOT
-# list a wake-driven target here.
+# Supersession always closes the old trace via its valid state -> IDLE edge,
+# then starts the replacement from IDLE. There is never an illegal direct
+# THINKING/TOOL_CALL -> LISTENING jump.
 VALID_TRANSITIONS: dict[State, set[State]] = {
     State.IDLE: {State.WAKE_DETECTED, State.LISTENING, State.SPEAKING},
     State.WAKE_DETECTED: {State.LISTENING, State.IDLE},
@@ -103,6 +98,7 @@ class Orchestrator:
         self.bus.subscribe("tool_result", self._on_tool_result)
         self.bus.subscribe("speech_started", self._on_speech_started)
         self.bus.subscribe("speech_finished", self._on_speech_finished)
+        self.bus.subscribe("cancel_requested", self._on_cancel_requested)
         self.bus.subscribe("interaction_failed", self._on_interaction_failed)
         self.bus.subscribe("notification_ready", self._on_notification_ready)
         self.bus.subscribe("reminder_cancelled", self._on_reminder_cancelled)
@@ -159,43 +155,106 @@ class Orchestrator:
     async def _on_wake(self, event: Event) -> None:
         """Handle a wake word.
 
-        - IDLE      -> WAKE_DETECTED -> LISTENING  (normal wake)
-        - SPEAKING  -> LISTENING                   (barge-in, SPEAKING-only)
-        - any other active state                   (explicit no-op)
+        - IDLE -> WAKE_DETECTED -> LISTENING for a normal activation.
+        - Any different active trace is cancelled and completed first, then
+          the new trace follows the same IDLE -> WAKE_DETECTED -> LISTENING path.
+        - A duplicate event carrying the current trace id is ignored.
 
         Per fix #1 this handler does NOT publish ``audio_captured``. Triggering
         audio capture is the job of a dedicated audio-capture module that
         subscribes to ``wake_word_detected`` like any other module — the
         orchestrator never originates payload data for other modules.
         """
-        current = self.state
-
-        if current == State.IDLE:
-            # Normal wake: IDLE -> WAKE_DETECTED -> LISTENING.
-            if not self._transition(State.WAKE_DETECTED, event.trace_id):
-                return
-            if not self._transition(State.LISTENING, event.trace_id):
-                return
-            self._current_trace = event.trace_id
-            self._arm_listening_timeout(event.trace_id)
-            self._arm_interaction_timeout(event.trace_id)
-        elif current == State.SPEAKING:
-            # Barge-in (SPEAKING-only, per fix #3).
-            logger.info("BARGE-IN during SPEAKING trace=%s", event.trace_id)
-            if not self._transition(State.LISTENING, event.trace_id):
-                return
-            self._current_trace = event.trace_id
-            self._arm_listening_timeout(event.trace_id)
-            self._arm_interaction_timeout(event.trace_id)
-        else:
-            # Wake during LISTENING / TRANSCRIBING / THINKING / TOOL_CALL /
-            # WAKE_DETECTED: clean, explicit no-op. Barge-in is SPEAKING-only,
-            # so we log + ignore rather than attempting a partial state change.
+        if self._current_trace == event.trace_id:
             logger.info(
-                "WAKE_IGNORED state=%s trace=%s (barge-in is SPEAKING-only)",
-                current.value,
+                "DUPLICATE_WAKE_IGNORED state=%s trace=%s",
+                self.state.value,
                 event.trace_id,
             )
+            return
+
+        if self.state != State.IDLE or self._current_trace is not None:
+            old_trace = self._current_trace
+            logger.info(
+                "TRACE_SUPERSEDED old_trace=%s new_trace=%s state=%s",
+                old_trace,
+                event.trace_id,
+                self.state.value,
+            )
+            self._cancel_current_trace(
+                reason="superseded",
+                superseded_by=event.trace_id,
+                start_notifications=False,
+            )
+
+        if not self._transition(State.WAKE_DETECTED, event.trace_id):
+            return
+        if not self._transition(State.LISTENING, event.trace_id):
+            return
+        self._current_trace = event.trace_id
+        self._arm_listening_timeout(event.trace_id)
+        self._arm_interaction_timeout(event.trace_id)
+
+    async def _on_cancel_requested(self, event: Event) -> None:
+        """Honor a routed user cancellation without producing more speech."""
+        target_trace = str(event.payload.get("target_trace_id") or event.trace_id)
+        if target_trace != self._current_trace:
+            logger.info(
+                "STALE_CANCEL_IGNORED trace=%s target=%s current_trace=%s",
+                event.trace_id,
+                target_trace,
+                self._current_trace,
+            )
+            return
+        self._cancel_current_trace(
+            reason=str(event.payload.get("reason") or "user_requested"),
+            start_notifications=True,
+        )
+
+    def _cancel_current_trace(
+        self,
+        *,
+        reason: str,
+        superseded_by: str | None = None,
+        start_notifications: bool,
+    ) -> None:
+        """Atomically close the owner trace, return to IDLE, and complete it."""
+        trace_id = self._current_trace
+        cancelled_state = self.state
+        self._cancel_listening_timeout()
+        self._cancel_interaction_timeout()
+
+        if trace_id is not None:
+            details: dict[str, Any] = {"cancelled_state": cancelled_state.value}
+            if superseded_by is not None:
+                details["superseded_by"] = superseded_by
+            self.bus.cancel_trace(trace_id, reason=reason, details=details)
+
+        if self.state != State.IDLE and not self._transition(State.IDLE, trace_id):
+            return
+        self._current_trace = None
+
+        if trace_id is not None:
+            payload: dict[str, Any] = {
+                "state": State.IDLE.value,
+                "ok": True,
+                "cancelled": True,
+                "reason": reason,
+                "cancelled_state": cancelled_state.value,
+            }
+            if superseded_by is not None:
+                payload["superseded_by"] = superseded_by
+            self.bus.publish(
+                "interaction_completed", payload, trace_id=trace_id
+            )
+            logger.info(
+                "INTERACTION_CANCELLED trace=%s state=%s reason=%s",
+                trace_id,
+                cancelled_state.value,
+                reason,
+            )
+        if start_notifications:
+            self._start_next_notification()
 
     def _is_current_trace(self, event: Event, label: str) -> bool:
         if self._current_trace == event.trace_id:
@@ -283,6 +342,11 @@ class Orchestrator:
         self._cancel_listening_timeout()
         self._cancel_interaction_timeout()
         self._current_trace = None
+        if not self.bus.complete_trace(event.trace_id):
+            logger.info(
+                "SPEECH_COMPLETION_SUPPRESSED closed_trace=%s", event.trace_id
+            )
+            return
         # Authoritative end-of-interaction signal: published only after the
         # state machine has actually reached IDLE for this trace.
         self.bus.publish_event(
@@ -394,10 +458,9 @@ class Orchestrator:
             return
         if self.state == State.LISTENING and self._current_trace == trace_id:
             logger.warning("LISTENING_TIMEOUT trace=%s", trace_id)
-            self.bus.publish(
-                "interaction_failed",
+            self.bus.fail_trace(
+                trace_id,
                 {"reason": "listening_timeout", "state": self.state.value},
-                trace_id=trace_id,
             )
 
     def _cancel_listening_timeout(self) -> None:
@@ -426,10 +489,9 @@ class Orchestrator:
                 self.state.value,
                 self._interaction_timeout,
             )
-            self.bus.publish(
-                "interaction_failed",
+            self.bus.fail_trace(
+                trace_id,
                 {"reason": "interaction_timeout", "state": self.state.value},
-                trace_id=trace_id,
             )
 
     def _cancel_interaction_timeout(self) -> None:

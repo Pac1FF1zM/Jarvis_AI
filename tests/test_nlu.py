@@ -256,3 +256,43 @@ async def test_low_confidence_prediction_is_rejected_as_unknown():
     assert output[0].payload["intent"] == "unknown"
     assert output[0].payload["raw_intent"] == "set_reminder"
     assert output[0].payload["slots"] == {}
+
+
+async def test_cancel_intent_publishes_control_event_instead_of_nlu_result():
+    class CancelPredictor:
+        def __init__(self, checkpoint, device):
+            pass
+
+        def predict(self, text):
+            return NLUResult("cancel", 0.99, {})
+
+    bus = EventBus()
+    module = NLUModule(
+        ModuleConfig(device="cpu", model=str(MODEL_PATH)),
+        GPULock(),
+        predictor_factory=CancelPredictor,
+    )
+    cancel_events: list[Event] = []
+    nlu_events: list[Event] = []
+
+    async def record_cancel(event: Event) -> None:
+        cancel_events.append(event)
+
+    async def record_nlu(event: Event) -> None:
+        nlu_events.append(event)
+
+    bus.subscribe("cancel_requested", record_cancel)
+    bus.subscribe("nlu_result", record_nlu)
+    await module.start(bus)
+    run_task = asyncio.create_task(bus.run())
+    bus.publish("transcription_ready", {"text": "стоп"}, trace_id="stop-trace")
+    bus.publish("thinking_ready", trace_id="stop-trace")
+    await asyncio.sleep(0.1)
+    await bus.stop()
+    await run_task
+    await module.stop()
+
+    assert nlu_events == []
+    assert len(cancel_events) == 1
+    assert cancel_events[0].trace_id == "stop-trace"
+    assert cancel_events[0].payload["reason"] == "user_requested"

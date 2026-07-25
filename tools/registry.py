@@ -77,8 +77,26 @@ class ToolRegistry:
     def has(self, name: str) -> bool:
         return name in self._executors
 
+    def cancellation_mode(self, name: str) -> str:
+        """Return ``cancel`` only for tools that explicitly opt in.
+
+        ``drain`` is the safe default because cancelling an asyncio task does
+        not stop a thread that may already be launching an application or
+        committing SQLite. Such work must finish under its original owner;
+        the closed-trace barrier then discards its result.
+        """
+        schema = self._schemas.get(name, {})
+        mode = str(schema.get("x-cancellation-mode", "drain")).casefold()
+        return "cancel" if mode == "cancel" else "drain"
+
     async def execute(self, name: str, params: dict[str, Any]) -> dict[str, Any]:
-        """Run tool ``name`` with ``params``; raises ``KeyError`` if unknown."""
+        """Run tool ``name`` with ``params``; raises ``KeyError`` if unknown.
+
+        Cancellation is opt-in through schema field
+        ``x-cancellation-mode: cancel``. Such executors must not swallow
+        :class:`asyncio.CancelledError`. The safe default is ``drain`` for a
+        tool that delegates a non-preemptible side effect to a thread.
+        """
         if name not in self._executors:
             raise KeyError(f"unknown tool: {name}")
         return await self._executors[name](params or {})
