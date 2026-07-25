@@ -45,6 +45,9 @@ latest_silero_models.yml
 training_workspace/runs/
 training_workspace/export/
 training_workspace/data/private_holdout.jsonl
+installer/cache/
+installer/output/
+installer/.tools/
 
 # Local archives, IDE and OS metadata
 *.zip

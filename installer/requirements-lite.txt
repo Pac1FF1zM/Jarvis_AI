@@ -1,0 +1,9 @@
+# Tested Jarvis Lite runtime. Torch is installed separately from the matching
+# CPU/CUDA index by bootstrap_runtime.ps1.
+PyYAML==6.0.3
+openai-whisper==20250625
+silero==0.5.5
+sounddevice==0.5.5
+pynput==1.8.2
+silero-vad[onnx-cpu]==6.2.1
+onnxruntime==1.23.2

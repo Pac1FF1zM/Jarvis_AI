@@ -12,7 +12,9 @@ device=cpu) and mask the mistake. Both directions are now logged once.
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -112,7 +114,7 @@ def load_config(path: str) -> Config:
             sorted(EXPECTED_MODULE_NAMES),
         )
 
-    return Config(
+    config = Config(
         orchestrator=raw.get("orchestrator") or {},
         modules=modules,
         memory=raw.get("memory") or {},
@@ -121,3 +123,11 @@ def load_config(path: str) -> Config:
         reminders=raw.get("reminders") or {},
         raw=raw,
     )
+    data_dir = os.environ.get("JARVIS_DATA_DIR", "").strip()
+    if data_dir:
+        root = Path(data_dir).expanduser().resolve()
+        config.logging["log_file"] = str(root / "logs" / "jarvis.log")
+        config.logging["session_log_dir"] = str(root / "logs" / "sessions")
+        config.memory["db_path"] = str(root / "memory.db")
+        config.reminders["db_path"] = str(root / "reminders.db")
+    return config

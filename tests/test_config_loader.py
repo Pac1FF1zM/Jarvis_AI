@@ -100,3 +100,20 @@ def test_expected_module_names_is_canonical_set():
     assert EXPECTED_MODULE_NAMES == frozenset(
         {"wake_word", "stt", "nlu", "llm", "tts"}
     )
+
+
+def test_installed_runtime_keeps_user_state_outside_application_dir(
+    tmp_path, monkeypatch
+):
+    config_path = _write_config(tmp_path, "modules: {}\n")
+    data_dir = tmp_path / "user-data"
+    monkeypatch.setenv("JARVIS_DATA_DIR", str(data_dir))
+
+    config = load_config(config_path)
+
+    assert config.logging["log_file"] == str(data_dir / "logs" / "jarvis.log")
+    assert config.logging["session_log_dir"] == str(
+        data_dir / "logs" / "sessions"
+    )
+    assert config.memory["db_path"] == str(data_dir / "memory.db")
+    assert config.reminders["db_path"] == str(data_dir / "reminders.db")
