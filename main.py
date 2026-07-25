@@ -27,16 +27,7 @@ from core.config_loader import Config, load_config
 from core.event_bus import EventBus
 from core.gpu_lock import GPULock
 from core.orchestrator import Orchestrator, State
-from memory.long_term import LongTermMemory
-from memory.short_term import ShortTermMemory
-from modules.llm import LLMModule
-from modules.nlu import NLUModule
-from modules.reminders import ReminderScheduler
-from modules.stt import STTModule
-from modules.text_output import TextOutputModule
-from modules.tts import TTSModule
-from modules.wake_word import WakeWordModule
-from tools.registry import ToolRegistry
+from core.runtime_diagnostics import run_doctor
 
 CONFIG_PATH = os.environ.get("JARVIS_CONFIG", "config.yaml")
 
@@ -139,6 +130,19 @@ async def run_pipeline(
     demo: bool = False,
     shutdown_event: asyncio.Event | None = None,
 ) -> None:
+    # Keep runtime engines lazy so ``main.py --doctor`` can still explain a
+    # missing/broken Torch, Whisper, Silero or audio installation.
+    from memory.long_term import LongTermMemory
+    from memory.short_term import ShortTermMemory
+    from modules.llm import LLMModule
+    from modules.nlu import NLUModule
+    from modules.reminders import ReminderScheduler
+    from modules.stt import STTModule
+    from modules.text_output import TextOutputModule
+    from modules.tts import TTSModule
+    from modules.wake_word import WakeWordModule
+    from tools.registry import ToolRegistry
+
     cfg = load_config(config_path)
     setup_logging(cfg)
     logger.info("=== Jarvis starting (config=%s) ===", config_path)
@@ -164,7 +168,7 @@ async def run_pipeline(
     long_term = LongTermMemory.from_config(cfg.memory)
 
     # Build only the modules the config enables.
-    wake_word: WakeWordModule | None = None
+    wake_word: Any | None = None
     modules_started: list[Any] = []
 
     async def start_if(name: str, factory: Any) -> Any | None:
@@ -304,10 +308,24 @@ def main() -> None:
         action="store_true",
         help="Run one simulated audio interaction and exit",
     )
+    mode.add_argument(
+        "--doctor",
+        action="store_true",
+        help="Check runtime, CUDA, engines and audio devices without starting Jarvis",
+    )
     parser.add_argument(
         "--config", default=CONFIG_PATH, help="Path to config.yaml"
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON (valid only with --doctor)",
+    )
     args = parser.parse_args()
+    if args.json and not args.doctor:
+        parser.error("--json is valid only together with --doctor")
+    if args.doctor:
+        raise SystemExit(run_doctor(args.config, json_output=args.json))
     try:
         asyncio.run(
             run_pipeline(args.config, text_input=args.text, demo=args.demo)

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 
 import main as jarvis_main
+import modules.wake_word as wake_word_module
 from modules.wake_word import WakeWordModule
 
 
@@ -36,7 +37,9 @@ async def test_persistent_mode_handles_repeated_interactions_and_clean_shutdown(
     monkeypatch,
 ):
     _TrackingSimulatedWakeWord.instances.clear()
-    monkeypatch.setattr(jarvis_main, "WakeWordModule", _TrackingSimulatedWakeWord)
+    monkeypatch.setattr(
+        wake_word_module, "WakeWordModule", _TrackingSimulatedWakeWord
+    )
     shutdown = asyncio.Event()
     pipeline = asyncio.create_task(
         jarvis_main.run_pipeline("config.yaml", shutdown_event=shutdown)
@@ -66,7 +69,9 @@ async def test_persistent_mode_handles_repeated_interactions_and_clean_shutdown(
 
 async def test_persistent_mode_cancellation_uses_clean_shutdown_path(monkeypatch):
     _TrackingSimulatedWakeWord.instances.clear()
-    monkeypatch.setattr(jarvis_main, "WakeWordModule", _TrackingSimulatedWakeWord)
+    monkeypatch.setattr(
+        wake_word_module, "WakeWordModule", _TrackingSimulatedWakeWord
+    )
     pipeline = asyncio.create_task(jarvis_main.run_pipeline("config.yaml"))
     wake = await _wait_until_ready()
 

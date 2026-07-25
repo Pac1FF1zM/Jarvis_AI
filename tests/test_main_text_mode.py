@@ -9,6 +9,9 @@ from core.config_loader import Config
 from core.event_bus import Event
 from core.orchestrator import State
 import main as main_module
+from modules.stt import STTModule
+from modules.tts import TTSModule
+from modules.wake_word import WakeWordModule
 
 
 def test_setup_logging_creates_shareable_per_session_transcript(tmp_path):
@@ -49,9 +52,9 @@ async def test_text_mode_never_starts_voice_modules(monkeypatch, capsys):
     async def forbidden_start(self, bus):
         raise AssertionError("voice module initialized during --text mode")
 
-    monkeypatch.setattr(main_module.WakeWordModule, "start", forbidden_start)
-    monkeypatch.setattr(main_module.STTModule, "start", forbidden_start)
-    monkeypatch.setattr(main_module.TTSModule, "start", forbidden_start)
+    monkeypatch.setattr(WakeWordModule, "start", forbidden_start)
+    monkeypatch.setattr(STTModule, "start", forbidden_start)
+    monkeypatch.setattr(TTSModule, "start", forbidden_start)
 
     await main_module.run_pipeline(
         "config.yaml", text_input="какие приложения ты можешь открыть"
