@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,6 +48,46 @@ def test_setup_does_not_package_private_or_generated_workspace_data():
     assert "ml\\nlu\\train.py" not in script
     assert "holdout_v2" not in script
     assert "python-3.12.9-amd64.exe" in script
+
+
+def test_packaged_nlu_runtime_runs_inference_without_training_workspace(tmp_path):
+    """Smoke the exact ML subset declared by Inno Setup, not the source tree."""
+    setup = (INSTALLER / "Jarvis.iss").read_text(encoding="utf-8")
+    sources = re.findall(r'^Source: "\.\.\\(ml\\[^"*]+\.py)";', setup, re.M)
+    assert sources
+
+    for windows_relative in sources:
+        relative = Path(*windows_relative.split("\\"))
+        destination = tmp_path / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / relative, destination)
+
+    checkpoint = tmp_path / "models" / "nlu_manager_finetuned.pt"
+    checkpoint.parent.mkdir(parents=True)
+    shutil.copy2(ROOT / "models" / checkpoint.name, checkpoint)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            (
+                "import sys; sys.path.insert(0, sys.argv[1]); "
+                "from ml.nlu.inference import NLUPredictor; "
+                "result = NLUPredictor(sys.argv[2]).predict('который час'); "
+                "assert result.intent == 'get_current_time', result"
+            ),
+            str(tmp_path),
+            str(checkpoint),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_installed_launchers_isolate_user_state_and_use_private_python():

@@ -4,10 +4,12 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 import re
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
-from .data import Example
 from .schema import SLOT_LABELS
+
+if TYPE_CHECKING:
+    from .data import Example
 
 
 PAD = "<pad>"
