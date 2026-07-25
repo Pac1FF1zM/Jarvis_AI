@@ -65,6 +65,11 @@ memory:
   db_path: memory.db            # long-term SQLite store
   short_term_turns: 8           # rolling conversational window size
 
+reminders:
+  db_path: reminders.db
+  profile_id: default
+  poll_interval_seconds: 0.5
+
 logging:
   level: INFO
   log_file: logs/jarvis.log     # parsed by scripts/analyze_latency.py

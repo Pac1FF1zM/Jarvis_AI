@@ -19,7 +19,9 @@ def anyio_backend() -> str:
 
 
 @pytest.fixture(autouse=True)
-def isolate_optional_runtime_engines(monkeypatch: pytest.MonkeyPatch) -> None:
+def isolate_optional_runtime_engines(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Keep every pytest run offline and independent of installed engines.
 
     Optional packages are intentionally detected at module import/startup in
@@ -40,3 +42,4 @@ def isolate_optional_runtime_engines(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(wake_word_module, "_SOUNDDEVICE", None)
     monkeypatch.setattr(wake_word_module, "_PYNPUT_KEYBOARD", None)
     monkeypatch.setattr(wake_word_module, "_LOAD_SILERO_VAD", None)
+    monkeypatch.setenv("JARVIS_REMINDERS_DB", str(tmp_path / "reminders.db"))

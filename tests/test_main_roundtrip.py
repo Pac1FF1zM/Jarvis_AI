@@ -176,7 +176,7 @@ async def test_own_nlu_routes_reminder_parameters_end_to_end():
         "params": {"minutes": 18, "message": "проверить чайник"},
     }
     assert result.payload["result"]["scheduled"] is False
-    assert "ничего не запланировал" in response.payload["text"]
+    assert "не запущен" in response.payload["text"]
     assert orch.state == State.IDLE
 
 

@@ -40,6 +40,33 @@ _OPEN_REQUESTS = tuple(
     )
 )
 
+_LIST_REMINDERS = re.compile(
+    r"^\s*(?:покажи|перечисли|назови|какие|список)\s+"
+    r"(?:(?:у\s+меня|мои|активные)\s+)?напоминани(?:я|й)\s*$",
+    flags=re.IGNORECASE,
+)
+_CANCEL_REMINDER = re.compile(
+    r"^\s*(?:отмени|удали|сними)\s+напоминание"
+    r"(?:\s+(?:номер|№))?\s+(\d+)\s*$",
+    flags=re.IGNORECASE,
+)
+_RELATIVE_REMINDERS = tuple(
+    re.compile(pattern, flags=re.IGNORECASE)
+    for pattern in (
+        r"^\s*напомни(?:\s+мне)?\s+через\s+(\d+)\s+минут(?:у|ы)?\s+(.+?)\s*$",
+        r"^\s*через\s+(\d+)\s+минут(?:у|ы)?\s+напомни(?:\s+мне)?\s+(.+?)\s*$",
+    )
+)
+_ABSOLUTE_REMINDERS = tuple(
+    re.compile(pattern, flags=re.IGNORECASE)
+    for pattern in (
+        r"^\s*(?:напомни(?:\s+мне)?|поставь\s+напоминание)\s+"
+        r"(?:(сегодня|завтра)\s+)?(?:в|на)\s+(\d{1,2}[.:]\d{2})\s+(.+?)\s*$",
+        r"^\s*(?:(сегодня|завтра)\s+)?в\s+(\d{1,2}[.:]\d{2})\s+"
+        r"напомни(?:\s+мне)?\s+(.+?)\s*$",
+    )
+)
+
 
 def _normalise_transcription_for_nlu(text: str) -> str:
     """Repair a few observed Russian Whisper errors before neural routing."""
@@ -86,6 +113,53 @@ def _apply_runtime_command_guardrails(
         max(result.confidence, 0.99),
         {"application": application.name},
     )
+
+
+def _clean_reminder_text(value: str) -> str:
+    return re.sub(
+        r"^(?:о\s+том,?\s+чтобы|о\s+том\s+что|про|что|о)\s+",
+        "",
+        value,
+        flags=re.IGNORECASE,
+    ).strip(" ,.:;!?-")
+
+
+def _apply_reminder_guardrails(
+    normalised_text: str, result: NLUResult
+) -> NLUResult:
+    """Recognize exact persistent-reminder controls around the neural model."""
+    if _LIST_REMINDERS.match(normalised_text):
+        return NLUResult("list_reminders", 0.99, {})
+    cancel = _CANCEL_REMINDER.match(normalised_text)
+    if cancel:
+        return NLUResult(
+            "cancel_reminder", 0.99, {"reminder_id": cancel.group(1)}
+        )
+    for pattern in _RELATIVE_REMINDERS:
+        match = pattern.match(normalised_text)
+        if match:
+            message = _clean_reminder_text(match.group(2))
+            if message:
+                return NLUResult(
+                    "set_reminder",
+                    max(result.confidence, 0.99),
+                    {"minutes": match.group(1), "reminder_text": message},
+                )
+    for pattern in _ABSOLUTE_REMINDERS:
+        match = pattern.match(normalised_text)
+        if match:
+            message = _clean_reminder_text(match.group(3))
+            if message:
+                slots = {
+                    "clock_time": match.group(2).replace(".", ":"),
+                    "reminder_text": message,
+                }
+                if match.group(1):
+                    slots["day"] = match.group(1).casefold()
+                return NLUResult(
+                    "set_reminder", max(result.confidence, 0.99), slots
+                )
+    return result
 
 
 class NLUModule(BaseModule):
@@ -174,6 +248,7 @@ class NLUModule(BaseModule):
                         self._predictor.predict, normalised_text
                     )
                 result = _apply_runtime_command_guardrails(normalised_text, result)
+                result = _apply_reminder_guardrails(normalised_text, result)
             except Exception:  # noqa: BLE001 - keep voice pipeline responsive
                 logger.exception("NLU inference failed; rejecting turn as unknown")
                 result = NLUResult("unknown", 0.0, {})

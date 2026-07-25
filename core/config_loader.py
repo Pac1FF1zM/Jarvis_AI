@@ -53,6 +53,7 @@ class Config:
     memory: dict[str, Any] = field(default_factory=dict)
     logging: dict[str, Any] = field(default_factory=dict)
     tools: dict[str, Any] = field(default_factory=dict)
+    reminders: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict)
     # Fix #5: track names we've already warned about so we log once per name.
     _warned_unknown_modules: set[str] = field(default_factory=set)
@@ -117,5 +118,6 @@ def load_config(path: str) -> Config:
         memory=raw.get("memory") or {},
         logging=raw.get("logging") or {},
         tools=raw.get("tools") or {},
+        reminders=raw.get("reminders") or {},
         raw=raw,
     )

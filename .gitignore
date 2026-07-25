@@ -30,6 +30,8 @@ secrets*.json
 logs/
 *.log
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 recordings/

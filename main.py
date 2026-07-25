@@ -31,6 +31,7 @@ from memory.long_term import LongTermMemory
 from memory.short_term import ShortTermMemory
 from modules.llm import LLMModule
 from modules.nlu import NLUModule
+from modules.reminders import ReminderScheduler
 from modules.stt import STTModule
 from modules.text_output import TextOutputModule
 from modules.tts import TTSModule
@@ -153,7 +154,11 @@ async def run_pipeline(
     )
 
     # Shared subsystems.
-    tools = ToolRegistry()
+    reminder_scheduler = ReminderScheduler.from_config(cfg.reminders)
+    await reminder_scheduler.start(
+        bus, delivery_enabled=text_input is None and not demo
+    )
+    tools = ToolRegistry({"reminder_scheduler": reminder_scheduler})
     tools.discover("tools")
     short_term = ShortTermMemory.from_config(cfg.memory)
     long_term = LongTermMemory.from_config(cfg.memory)
@@ -256,6 +261,7 @@ async def run_pipeline(
             except Exception:  # noqa: BLE001
                 logger.exception("error stopping wake_word")
             modules_started.remove(wake_word)
+        await reminder_scheduler.stop()
         await bus.stop()
         await run_task
         for module in reversed(modules_started):

@@ -36,6 +36,7 @@ import asyncio
 import enum
 import logging
 import time
+from collections import deque
 from typing import Any
 
 from core.event_bus import EventBus, Event
@@ -61,7 +62,7 @@ class State(str, enum.Enum):
 # explicit no-op handled in _on_wake, so those states deliberately do NOT
 # list a wake-driven target here.
 VALID_TRANSITIONS: dict[State, set[State]] = {
-    State.IDLE: {State.WAKE_DETECTED, State.LISTENING},
+    State.IDLE: {State.WAKE_DETECTED, State.LISTENING, State.SPEAKING},
     State.WAKE_DETECTED: {State.LISTENING, State.IDLE},
     State.LISTENING: {State.TRANSCRIBING, State.IDLE},
     State.TRANSCRIBING: {State.THINKING, State.IDLE},
@@ -89,6 +90,8 @@ class Orchestrator:
             raise ValueError("orchestrator timeouts must be positive")
         self._listening_timeout_task: asyncio.Task[None] | None = None
         self._interaction_timeout_task: asyncio.Task[None] | None = None
+        self._pending_notifications: deque[Event] = deque()
+        self._queued_reminder_ids: set[int] = set()
 
     async def start(self) -> None:
         """Subscribe to every lifecycle event the state machine cares about."""
@@ -101,11 +104,15 @@ class Orchestrator:
         self.bus.subscribe("speech_started", self._on_speech_started)
         self.bus.subscribe("speech_finished", self._on_speech_finished)
         self.bus.subscribe("interaction_failed", self._on_interaction_failed)
+        self.bus.subscribe("notification_ready", self._on_notification_ready)
+        self.bus.subscribe("reminder_cancelled", self._on_reminder_cancelled)
         logger.info("Orchestrator started (initial=%s)", self.state.value)
 
     async def stop(self) -> None:
         self._cancel_listening_timeout()
         self._cancel_interaction_timeout()
+        self._pending_notifications.clear()
+        self._queued_reminder_ids.clear()
 
     # ------------------------------------------------------------------ #
     # Authoritative transition helper (fix #2)
@@ -283,6 +290,7 @@ class Orchestrator:
                 "interaction_completed", {"state": State.IDLE.value, "ok": True}
             )
         )
+        self._start_next_notification()
 
     async def _on_interaction_failed(self, event: Event) -> None:
         """Atomically close the current failed trace and make Jarvis reusable."""
@@ -313,6 +321,62 @@ class Orchestrator:
                 },
             )
         )
+        self._start_next_notification()
+
+    async def _on_notification_ready(self, event: Event) -> None:
+        """Authorize a reminder now or retain it until the user trace ends."""
+        reminder_id = event.payload.get("reminder_id")
+        if reminder_id is not None:
+            reminder_id = int(reminder_id)
+            if reminder_id in self._queued_reminder_ids:
+                return
+            self._queued_reminder_ids.add(reminder_id)
+        if self.state == State.IDLE and self._current_trace is None:
+            self._start_notification(event)
+        else:
+            self._pending_notifications.append(event)
+            logger.info(
+                "NOTIFICATION_QUEUED trace=%s reminder_id=%s state=%s",
+                event.trace_id,
+                reminder_id,
+                self.state.value,
+            )
+
+    async def _on_reminder_cancelled(self, event: Event) -> None:
+        reminder_id = int(event.payload.get("reminder_id", 0))
+        self._queued_reminder_ids.discard(reminder_id)
+        self._pending_notifications = deque(
+            notification
+            for notification in self._pending_notifications
+            if int(notification.payload.get("reminder_id", 0)) != reminder_id
+        )
+
+    def _start_notification(self, event: Event) -> None:
+        if not self._transition(State.SPEAKING, event.trace_id):
+            self._pending_notifications.appendleft(event)
+            return
+        reminder_id = event.payload.get("reminder_id")
+        if reminder_id is not None:
+            self._queued_reminder_ids.discard(int(reminder_id))
+        self._current_trace = event.trace_id
+        self._arm_interaction_timeout(event.trace_id)
+        self.bus.publish_event(event.child("notification_authorized", event.payload))
+        logger.info(
+            "NOTIFICATION_AUTHORIZED trace=%s reminder_id=%s",
+            event.trace_id,
+            reminder_id,
+        )
+
+    def _start_next_notification(self) -> None:
+        if self.state != State.IDLE or self._current_trace is not None:
+            return
+        while self._pending_notifications:
+            event = self._pending_notifications.popleft()
+            reminder_id = event.payload.get("reminder_id")
+            if reminder_id is not None and int(reminder_id) not in self._queued_reminder_ids:
+                continue
+            self._start_notification(event)
+            return
 
     # ------------------------------------------------------------------ #
     # Listening timeout

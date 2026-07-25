@@ -25,9 +25,10 @@ ToolExecutor = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 class ToolRegistry:
     """Holds discovered tools and exposes schemas + executors by name."""
 
-    def __init__(self) -> None:
+    def __init__(self, services: dict[str, Any] | None = None) -> None:
         self._schemas: dict[str, dict[str, Any]] = {}
         self._executors: dict[str, ToolExecutor] = {}
+        self._services = services or {}
 
     # ------------------------------------------------------------------ #
     # Discovery
@@ -48,7 +49,10 @@ class ToolRegistry:
             logger.exception("Failed to import tool %s", dotted)
             return
         schema = getattr(module, "TOOL_SCHEMA", None)
-        execute = getattr(module, "execute", None)
+        factory = getattr(module, "build_executor", None)
+        execute = factory(self._services) if callable(factory) else getattr(
+            module, "execute", None
+        )
         if schema is None or execute is None:
             logger.warning(
                 "Skipping %s: missing TOOL_SCHEMA or execute()", dotted

@@ -229,6 +229,7 @@ class TTSModule(BaseModule):
         bus.subscribe("response_ready", self._on_response)
         bus.subscribe("wake_word_detected", self._on_wake)
         bus.subscribe("interaction_failed", self._on_interaction_failed)
+        bus.subscribe("notification_deliver", self._on_response)
 
         silero_tts, sounddevice = _resolve_optional_dependencies()
         if silero_tts is None:

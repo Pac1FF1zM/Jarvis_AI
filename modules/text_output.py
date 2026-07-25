@@ -22,6 +22,7 @@ class TextOutputModule(BaseModule):
     async def start(self, bus: EventBus) -> None:
         self.bus = bus
         bus.subscribe("response_ready", self._on_response)
+        bus.subscribe("notification_deliver", self._on_response)
         logger.info("TextOutputModule started")
 
     async def stop(self) -> None:
@@ -33,4 +34,3 @@ class TextOutputModule(BaseModule):
         self.bus.publish_event(event.child("speech_started", {"text": text}))
         print(f"Jarvis: {text}", flush=True)
         self.bus.publish_event(event.child("speech_finished", {"text": text}))
-

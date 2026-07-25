@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import pytest
 
+from core.event_bus import EventBus
+from modules.reminders import ReminderScheduler
 from tools.get_current_time import execute as execute_time
 from tools.get_current_time import TOOL_SCHEMA as TIME_SCHEMA
 from tools.set_reminder import execute as execute_reminder
@@ -20,6 +22,8 @@ def test_registry_auto_discovers_all_tools():
     names = reg.names()
     assert "get_current_time" in names
     assert "set_reminder" in names
+    assert "list_reminders" in names
+    assert "cancel_reminder" in names
     assert "open_application" in names
     assert "list_applications" in names
 
@@ -43,10 +47,31 @@ async def test_set_reminder_does_not_claim_unscheduled_work():
     result = await execute_reminder({"minutes": 10, "message": "stand up"})
     assert result["ok"] is False
     assert result["scheduled"] is False
-    assert result["error"] == "scheduler_not_implemented"
-    assert result["minutes"] == 10
-    assert result["message"] == "stand up"
-    assert "ничего не запланировал" in result["response_text"]
+    assert result["error"] == "scheduler_not_configured"
+    assert "не запущен" in result["response_text"]
+
+
+async def test_registry_uses_configured_persistent_reminder_service(tmp_path):
+    scheduler = ReminderScheduler(tmp_path / "tools-reminders.db")
+    await scheduler.start(EventBus(), delivery_enabled=False)
+    registry = ToolRegistry({"reminder_scheduler": scheduler})
+    registry.discover("tools")
+
+    created = await registry.execute(
+        "set_reminder", {"minutes": 10, "message": "проверить духовку"}
+    )
+    reminder_id = created["reminder"]["id"]
+    listed = await registry.execute("list_reminders", {})
+    cancelled = await registry.execute(
+        "cancel_reminder", {"reminder_id": reminder_id}
+    )
+
+    assert created["ok"] is True
+    assert [item["id"] for item in listed["reminders"]] == [reminder_id]
+    assert cancelled["ok"] is True
+    assert cancelled["reminder"]["status"] == "cancelled"
+    assert await scheduler.list_pending() == []
+    await scheduler.stop()
 
 
 async def test_registry_execute_runs_tool():

@@ -13,6 +13,7 @@ from ml.nlu.data import build_examples
 from ml.nlu.inference import NLUPredictor
 from ml.nlu.schema import NLUResult
 from modules.nlu import (
+    _apply_reminder_guardrails,
     NLUModule,
     _apply_runtime_command_guardrails,
     _normalise_transcription_for_nlu,
@@ -130,6 +131,45 @@ def test_guardrail_never_rescues_non_imperative_or_unknown_application():
             _apply_runtime_command_guardrails(normalised, prediction)
             == prediction
         )
+
+
+def test_reminder_guardrails_cover_create_list_cancel_and_absolute_time():
+    fallback = NLUResult("general_chat", 0.7, {})
+    cases = (
+        (
+            "через 12 минут напомни проверить духовку",
+            "set_reminder",
+            {"minutes": "12", "reminder_text": "проверить духовку"},
+        ),
+        (
+            "напомни завтра в 18:30 позвонить маме",
+            "set_reminder",
+            {
+                "clock_time": "18:30",
+                "day": "завтра",
+                "reminder_text": "позвонить маме",
+            },
+        ),
+        ("покажи мои напоминания", "list_reminders", {}),
+        ("отмени напоминание номер 7", "cancel_reminder", {"reminder_id": "7"}),
+    )
+
+    for text, intent, slots in cases:
+        result = _apply_reminder_guardrails(text, fallback)
+        assert result.intent == intent
+        assert result.slots == slots
+        assert result.confidence >= 0.99
+
+
+def test_reminder_guardrail_does_not_treat_discussion_as_action():
+    fallback = NLUResult("general_chat", 0.91, {})
+    for text in (
+        "расскажи как работают напоминания",
+        "я не хочу ставить напоминание",
+        "напоминание без времени",
+        "удали все данные",
+    ):
+        assert _apply_reminder_guardrails(text, fallback) == fallback
 
 
 async def test_module_publishes_nlu_result_with_same_trace():

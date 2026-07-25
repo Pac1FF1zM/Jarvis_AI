@@ -154,15 +154,41 @@ class LLMModule(BaseModule):
             return
         if intent == "set_reminder":
             slots = dict(event.payload.get("slots") or {})
-            if "minutes" not in slots or "reminder_text" not in slots:
+            if "reminder_text" not in slots or not (
+                "minutes" in slots or "clock_time" in slots or "due_at" in slots
+            ):
                 await self._publish_text(
                     event, "Не удалось уверенно разобрать параметры напоминания."
                 )
                 return
+            params: dict[str, Any] = {"message": slots["reminder_text"]}
+            if "minutes" in slots:
+                params["minutes"] = int(slots["minutes"])
+            elif "due_at" in slots:
+                params["due_at"] = slots["due_at"]
+            else:
+                params["clock_time"] = slots["clock_time"]
+                if "day" in slots:
+                    params["day"] = slots["day"]
             await self._request_tool(
                 event,
                 "set_reminder",
-                {"minutes": int(slots["minutes"]), "message": slots["reminder_text"]},
+                params,
+                direct_response=True,
+            )
+            return
+        if intent == "list_reminders":
+            await self._request_tool(event, "list_reminders", {}, direct_response=True)
+            return
+        if intent == "cancel_reminder":
+            slots = dict(event.payload.get("slots") or {})
+            if "reminder_id" not in slots:
+                await self._publish_text(event, "Назовите номер напоминания для отмены.")
+                return
+            await self._request_tool(
+                event,
+                "cancel_reminder",
+                {"reminder_id": int(slots["reminder_id"])},
                 direct_response=True,
             )
             return

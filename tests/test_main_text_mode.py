@@ -81,3 +81,30 @@ async def test_text_mode_waiter_surfaces_recovered_interaction_failure():
 
     with pytest.raises(RuntimeError, match="failed and recovered to IDLE"):
         await completion.wait("failed-text", IdleOrchestrator(), timeout=0.1)
+
+
+async def test_text_mode_creates_lists_and_cancels_persistent_reminder(capsys):
+    await main_module.run_pipeline(
+        "config.yaml", text_input="через 10 минут напомни проверить духовку"
+    )
+    created_output = capsys.readouterr().out
+    assert "Напоминание номер 1 установлено" in created_output
+    assert "проверить духовку" in created_output
+
+    await main_module.run_pipeline(
+        "config.yaml", text_input="покажи мои напоминания"
+    )
+    listed_output = capsys.readouterr().out
+    assert "Активные напоминания: номер 1" in listed_output
+    assert "проверить духовку" in listed_output
+
+    await main_module.run_pipeline(
+        "config.yaml", text_input="отмени напоминание номер 1"
+    )
+    cancelled_output = capsys.readouterr().out
+    assert "Напоминание номер 1 отменено" in cancelled_output
+
+    await main_module.run_pipeline(
+        "config.yaml", text_input="покажи мои напоминания"
+    )
+    assert "У вас нет активных напоминаний" in capsys.readouterr().out
