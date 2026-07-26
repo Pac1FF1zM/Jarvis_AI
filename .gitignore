@@ -35,6 +35,7 @@ logs/
 *.sqlite
 *.sqlite3
 recordings/
+profiles/
 *.wav
 *.flac
 

@@ -28,6 +28,7 @@ from core.event_bus import EventBus
 from core.gpu_lock import GPULock
 from core.orchestrator import Orchestrator, State
 from core.runtime_diagnostics import run_doctor
+from core.profile_manager import ProfileManager, apply_profile_to_config
 
 CONFIG_PATH = os.environ.get("JARVIS_CONFIG", "config.yaml")
 
@@ -144,8 +145,15 @@ async def run_pipeline(
     from tools.registry import ToolRegistry
 
     cfg = load_config(config_path)
+    profile_root = str(cfg.profiles.get("root", "")).strip() or None
+    profile_manager = ProfileManager(profile_root)
+    active_profile = apply_profile_to_config(cfg, profile_manager)
     setup_logging(cfg)
-    logger.info("=== Jarvis starting (config=%s) ===", config_path)
+    logger.info(
+        "=== Jarvis starting (config=%s profile=%s) ===",
+        config_path,
+        active_profile,
+    )
 
     bus = EventBus()
     gpu_lock = GPULock(concurrency=1)  # serialized GPU access for 3GB VRAM
@@ -313,6 +321,11 @@ def main() -> None:
         action="store_true",
         help="Check runtime, CUDA, engines and audio devices without starting Jarvis",
     )
+    mode.add_argument(
+        "--calibrate-voice",
+        action="store_true",
+        help="Calibrate microphone and voice levels for a user profile",
+    )
     parser.add_argument(
         "--config", default=CONFIG_PATH, help="Path to config.yaml"
     )
@@ -321,11 +334,38 @@ def main() -> None:
         action="store_true",
         help="Emit machine-readable JSON (valid only with --doctor)",
     )
+    parser.add_argument(
+        "--profile",
+        default="default",
+        help="Profile id used with --calibrate-voice (default: default)",
+    )
+    parser.add_argument(
+        "--profile-name",
+        help="Display name used when creating a profile",
+    )
     args = parser.parse_args()
     if args.json and not args.doctor:
         parser.error("--json is valid only together with --doctor")
     if args.doctor:
         raise SystemExit(run_doctor(args.config, json_output=args.json))
+    if args.calibrate_voice:
+        from core.voice_calibration import (
+            CalibrationQualityError,
+            run_interactive_calibration,
+        )
+
+        try:
+            cfg = load_config(args.config)
+            profile_root = str(cfg.profiles.get("root", "")).strip() or None
+            run_interactive_calibration(
+                ProfileManager(profile_root),
+                args.profile,
+                profile_name=args.profile_name,
+                input_device=cfg.module("wake_word").params.get("input_device"),
+            )
+        except (CalibrationQualityError, ImportError, OSError, ValueError) as exc:
+            parser.exit(2, f"Калибровка не сохранена: {exc}\n")
+        return
     try:
         asyncio.run(
             run_pipeline(args.config, text_input=args.text, demo=args.demo)

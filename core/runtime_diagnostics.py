@@ -21,6 +21,12 @@ from pathlib import Path
 from typing import Any, Callable, IO
 
 from core.config_loader import Config, load_config
+from core.profile_manager import (
+    ProfileError,
+    ProfileManager,
+    default_profiles_root,
+    device_fingerprint,
+)
 
 
 class DiagnosticStatus(str, Enum):
@@ -131,6 +137,7 @@ class RuntimeDiagnosticRunner:
         self._memory = _mapping(config.memory)
         self._logging = _mapping(config.logging)
         self._reminders = _mapping(config.reminders)
+        self._profiles = _mapping(config.profiles)
         self._checks: list[DiagnosticCheck] = []
         self._imports: dict[str, tuple[Any | None, Exception | None]] = {}
 
@@ -144,6 +151,7 @@ class RuntimeDiagnosticRunner:
         torch_module = self._check_torch_and_cuda()
         self._check_nlu(torch_module)
         sounddevice = self._check_voice_input()
+        self._check_voice_profile(sounddevice)
         self._check_stt()
         self._check_tts(sounddevice)
         self._check_ollama()
@@ -185,6 +193,7 @@ class RuntimeDiagnosticRunner:
             ("memory", self.config.memory),
             ("logging", self.config.logging),
             ("reminders", self.config.reminders),
+            ("profiles", self.config.profiles),
         ):
             if not isinstance(value, dict):
                 errors.append(f"секция {section_name} должна быть объектом YAML")
@@ -367,6 +376,7 @@ class RuntimeDiagnosticRunner:
             "paths.memory": self._memory.get("db_path", "memory.db"),
             "paths.reminders": os.environ.get("JARVIS_REMINDERS_DB")
             or self._reminders.get("db_path", "reminders.db"),
+            "paths.profiles": self._profiles.get("root") or default_profiles_root(),
         }
         for check_id, configured in paths.items():
             target = self._resolve(configured)
@@ -386,6 +396,70 @@ class RuntimeDiagnosticRunner:
                     else ""
                 ),
             )
+
+    def _check_voice_profile(self, sounddevice: Any | None) -> None:
+        root = self._profiles.get("root") or default_profiles_root()
+        manager = ProfileManager(self._resolve(root))
+        try:
+            profile_id = manager.active_profile_id()
+            calibrations = manager.calibrations(profile_id)
+        except (ProfileError, OSError) as exc:
+            self._add(
+                "profile.voice",
+                "profile",
+                DiagnosticStatus.WARN,
+                "Профиль голоса повреждён и не будет применён",
+                detail=_error_detail(exc),
+                action="Повторите `python main.py --calibrate-voice`.",
+            )
+            return
+        if not calibrations:
+            self._add(
+                "profile.voice",
+                "profile",
+                DiagnosticStatus.WARN,
+                f"Профиль {profile_id!r} ещё не откалиброван",
+                detail=str(manager.profile_dir(profile_id)),
+                action="Выполните `python main.py --calibrate-voice`.",
+            )
+            return
+        if sounddevice is None:
+            self._skip(
+                "profile.voice", "profile", "Калибровка не сверена без sounddevice"
+            )
+            return
+        try:
+            device = sounddevice.query_devices(kind="input")
+            current = device_fingerprint(dict(device))
+        except Exception as exc:  # noqa: BLE001
+            self._add(
+                "profile.voice",
+                "profile",
+                DiagnosticStatus.WARN,
+                "Не удалось сверить микрофон с калибровкой",
+                detail=_error_detail(exc),
+            )
+            return
+        calibration = calibrations.get(current)
+        if not isinstance(calibration, dict):
+            self._add(
+                "profile.voice",
+                "profile",
+                DiagnosticStatus.WARN,
+                "Активная калибровка создана для другого микрофона",
+                detail=(
+                    f"текущий={current}; сохранены={','.join(sorted(calibrations))}"
+                ),
+                action="Повторите `python main.py --calibrate-voice` для текущего устройства.",
+            )
+            return
+        self._add(
+            "profile.voice",
+            "profile",
+            DiagnosticStatus.PASS,
+            f"Калибровка голоса профиля {profile_id!r} подходит микрофону",
+            detail=str(calibration.get("device", {}).get("name", "unknown")),
+        )
 
     def _check_torch_and_cuda(self) -> Any | None:
         torch_module = self._package(

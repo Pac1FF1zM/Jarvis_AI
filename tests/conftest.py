@@ -43,3 +43,4 @@ def isolate_optional_runtime_engines(
     monkeypatch.setattr(wake_word_module, "_PYNPUT_KEYBOARD", None)
     monkeypatch.setattr(wake_word_module, "_LOAD_SILERO_VAD", None)
     monkeypatch.setenv("JARVIS_REMINDERS_DB", str(tmp_path / "reminders.db"))
+    monkeypatch.setenv("JARVIS_DATA_DIR", str(tmp_path / "jarvis-data"))

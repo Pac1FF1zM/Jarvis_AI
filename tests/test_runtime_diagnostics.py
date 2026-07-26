@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.config_loader import Config, ModuleConfig
+from core.profile_manager import ProfileManager, device_fingerprint
 from core.runtime_diagnostics import (
     DiagnosticStatus,
     RuntimeDiagnosticRunner,
@@ -71,6 +72,14 @@ def _config(tmp_path: Path) -> Config:
     whisper_root = tmp_path / "models" / "whisper"
     whisper_root.mkdir()
     (whisper_root / "small.pt").write_bytes(b"controlled whisper cache")
+    profile_root = tmp_path / "profiles"
+    manager = ProfileManager(profile_root)
+    device = {"name": "USB Microphone", "max_input_channels": 1}
+    manager.save_calibration("default", {
+        "schema_version": 1,
+        "device_fingerprint": device_fingerprint(device),
+        "device": device,
+    })
     return Config(
         modules={
             "wake_word": ModuleConfig(enabled=True, device="cpu"),
@@ -91,6 +100,7 @@ def _config(tmp_path: Path) -> Config:
         logging={"log_file": str(tmp_path / "logs" / "jarvis.log")},
         memory={"db_path": str(tmp_path / "state" / "memory.db")},
         reminders={"db_path": str(tmp_path / "state" / "reminders.db")},
+        profiles={"root": str(profile_root)},
     )
 
 

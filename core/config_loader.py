@@ -56,6 +56,7 @@ class Config:
     logging: dict[str, Any] = field(default_factory=dict)
     tools: dict[str, Any] = field(default_factory=dict)
     reminders: dict[str, Any] = field(default_factory=dict)
+    profiles: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict)
     # Fix #5: track names we've already warned about so we log once per name.
     _warned_unknown_modules: set[str] = field(default_factory=set)
@@ -121,6 +122,7 @@ def load_config(path: str) -> Config:
         logging=raw.get("logging") or {},
         tools=raw.get("tools") or {},
         reminders=raw.get("reminders") or {},
+        profiles=raw.get("profiles") or {},
         raw=raw,
     )
     data_dir = os.environ.get("JARVIS_DATA_DIR", "").strip()
@@ -130,4 +132,5 @@ def load_config(path: str) -> Config:
         config.logging["session_log_dir"] = str(root / "logs" / "sessions")
         config.memory["db_path"] = str(root / "memory.db")
         config.reminders["db_path"] = str(root / "reminders.db")
+        config.profiles["root"] = str(root / "profiles")
     return config

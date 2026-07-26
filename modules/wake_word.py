@@ -21,6 +21,8 @@ from typing import Any
 
 from core.base_module import BaseModule
 from core.event_bus import EventBus, Event
+from core.profile_manager import device_fingerprint
+from core.voice_calibration import apply_pcm_gain
 
 logger = logging.getLogger("jarvis.module.wake_word")
 
@@ -78,6 +80,7 @@ class WakeWordModule(BaseModule):
         self._sample_rate = _SAMPLE_RATE
         self._block_size = _BLOCK_SIZE
         self._speech_threshold = float(params.get("vad_threshold", 0.5))
+        self._silence_threshold = self._speech_threshold
         self._end_silence_ms = int(params.get("end_silence_ms", 800))
         self._speech_start_timeout_ms = int(
             params.get("speech_start_timeout_ms", 5000)
@@ -86,6 +89,21 @@ class WakeWordModule(BaseModule):
         self._pre_roll_ms = int(params.get("pre_roll_ms", 320))
         self._max_duration_ms = int(params.get("max_duration_ms", 15000))
         self._input_device = params.get("input_device")
+        self._calibrations = params.get("voice_calibrations") or {}
+        legacy_calibration = params.get("voice_calibration") or {}
+        if legacy_calibration and not self._calibrations:
+            fingerprint = str(legacy_calibration.get("device_fingerprint", ""))
+            self._calibrations = {fingerprint: legacy_calibration}
+        self._calibration_applied = False
+        self._device_fingerprint: str | None = None
+        self._pcm_gain_db = 0.0
+        self._default_capture_settings = {
+            "speech_threshold": self._speech_threshold,
+            "silence_threshold": self._silence_threshold,
+            "end_silence_ms": self._end_silence_ms,
+            "min_speech_ms": self._min_speech_ms,
+            "pre_roll_ms": self._pre_roll_ms,
+        }
         self._force_simulated = force_simulated
         self._validate_settings()
 
@@ -155,10 +173,55 @@ class WakeWordModule(BaseModule):
             return
         self.real_activation_enabled = True
         logger.info(
-            "WakeWordModule started mode=push-to-talk hotkey=%s sample_rate=%d",
+            "WakeWordModule started mode=push-to-talk hotkey=%s sample_rate=%d calibration=%s",
             self._hotkey,
             self._sample_rate,
+            "pending-device-check" if self._calibrations else "defaults",
         )
+
+    def _apply_device_calibration(self, device_info: Any) -> None:
+        """Apply a profile only when it was measured on this microphone."""
+        info = dict(device_info)
+        fingerprint = device_fingerprint(info)
+        self._device_fingerprint = fingerprint
+        defaults = self._default_capture_settings
+        self._speech_threshold = float(defaults["speech_threshold"])
+        self._silence_threshold = float(defaults["silence_threshold"])
+        self._end_silence_ms = int(defaults["end_silence_ms"])
+        self._min_speech_ms = int(defaults["min_speech_ms"])
+        self._pre_roll_ms = int(defaults["pre_roll_ms"])
+        self._pcm_gain_db = 0.0
+        self._calibration_applied = False
+        calibrations = self._calibrations
+        if not isinstance(calibrations, dict) or not calibrations:
+            return
+        calibration = calibrations.get(fingerprint)
+        if not isinstance(calibration, dict):
+            logger.warning(
+                "VOICE_CALIBRATION_SKIPPED microphone changed current=%s known=%s; "
+                "run `python main.py --calibrate-voice`",
+                fingerprint,
+                ",".join(sorted(str(key) for key in calibrations)) or "none",
+            )
+            return
+        self._speech_threshold = float(
+            calibration.get("vad_start_threshold", self._speech_threshold)
+        )
+        self._silence_threshold = float(
+            calibration.get("vad_end_threshold", self._speech_threshold)
+        )
+        self._end_silence_ms = int(
+            calibration.get("end_silence_ms", self._end_silence_ms)
+        )
+        self._min_speech_ms = int(
+            calibration.get("min_speech_ms", self._min_speech_ms)
+        )
+        self._pre_roll_ms = int(calibration.get("pre_roll_ms", self._pre_roll_ms))
+        self._pcm_gain_db = float(calibration.get("pcm_gain_db", 0.0))
+        if not 0.0 < self._silence_threshold <= self._speech_threshold < 1.0:
+            raise ValueError("calibrated VAD thresholds are invalid")
+        self._validate_settings()
+        self._calibration_applied = True
 
     async def stop(self) -> None:
         self.real_activation_enabled = False
@@ -241,13 +304,15 @@ class WakeWordModule(BaseModule):
             audio_event = wake_event.child(
                 "audio_captured",
                 {
-                    "audio": result.pcm,
+                    "audio": apply_pcm_gain(result.pcm, self._pcm_gain_db),
                     "sample_rate": self._sample_rate,
                     "channels": 1,
                     "sample_width": _PCM_WIDTH_BYTES,
                     "duration_ms": result.duration_ms,
                     "source": "microphone",
                     "capture_end": result.end_reason,
+                    "voice_calibrated": self._calibration_applied,
+                    "input_device_fingerprint": self._device_fingerprint,
                 },
             )
             self.bus.publish_event(audio_event)
@@ -273,6 +338,7 @@ class WakeWordModule(BaseModule):
         device_info = sd.query_devices(self._input_device, kind="input")
         if not device_info or int(device_info.get("max_input_channels", 0)) < 1:
             raise RuntimeError("no usable default input device found")
+        self._apply_device_calibration(device_info)
         reset = getattr(model, "reset_states", None)
         if callable(reset):
             reset()
@@ -321,7 +387,7 @@ class WakeWordModule(BaseModule):
                     continue
 
                 recorded.append(pcm)
-                if probability >= self._speech_threshold:
+                if probability >= self._silence_threshold:
                     voiced_samples += samples
                     silent_samples = 0
                 else:

@@ -10,6 +10,7 @@ import pytest
 
 from core.config_loader import ModuleConfig
 from core.event_bus import EventBus, Event
+from core.profile_manager import device_fingerprint
 import modules.wake_word as wake_mod
 from modules.wake_word import WakeWordModule
 
@@ -184,6 +185,75 @@ async def test_max_duration_caps_recording(bus: EventBus, monkeypatch):
     assert sounddevice.read_count == 3
     assert audio.payload["duration_ms"] == 96
     assert audio.payload["capture_end"] == "max_duration"
+
+
+async def test_matching_microphone_applies_profile_vad_and_gain(
+    bus: EventBus, monkeypatch
+):
+    device = {"name": "Fake microphone", "max_input_channels": 1}
+    calibration = {
+        "device_fingerprint": device_fingerprint(device),
+        "vad_start_threshold": 0.7,
+        "vad_end_threshold": 0.3,
+        "end_silence_ms": 64,
+        "min_speech_ms": 32,
+        "pre_roll_ms": 32,
+        "pcm_gain_db": 6.0,
+    }
+    _vad, sounddevice = _install_real_fakes(monkeypatch, [0.8, 0.4, 0.2, 0.2])
+    other = dict(calibration, device_fingerprint="0000000000000000", pcm_gain_db=-6)
+    mod = WakeWordModule(
+        _config(
+            voice_calibrations={
+                other["device_fingerprint"]: other,
+                calibration["device_fingerprint"]: calibration,
+            }
+        )
+    )
+    events, audio_ready, run_task = await _start_bus_with_recorders(bus)
+    await mod.start(bus)
+
+    await mod.activate()
+    await asyncio.wait_for(audio_ready.wait(), timeout=1.0)
+    await bus.stop()
+    await run_task
+    await mod.stop()
+
+    audio = next(event for event in events if event.event_type == "audio_captured")
+    samples = np.frombuffer(audio.payload["audio"], dtype=np.int16)
+    assert audio.payload["voice_calibrated"] is True
+    assert audio.payload["input_device_fingerprint"] == device_fingerprint(device)
+    assert samples[0] == 1995
+    # 0.4 keeps speech alive through the lower calibrated exit threshold.
+    assert sounddevice.read_count == 4
+
+
+async def test_calibration_for_another_microphone_is_ignored(
+    bus: EventBus, monkeypatch, caplog
+):
+    calibration = {
+        "device_fingerprint": device_fingerprint(
+            {"name": "Another microphone", "max_input_channels": 1}
+        ),
+        "vad_start_threshold": 0.9,
+        "vad_end_threshold": 0.8,
+        "pcm_gain_db": 12,
+    }
+    _vad, _sounddevice = _install_real_fakes(monkeypatch, [0.9])
+    mod = WakeWordModule(
+        _config(
+            voice_calibrations={calibration["device_fingerprint"]: calibration}
+        )
+    )
+
+    with caplog.at_level(logging.WARNING, logger="jarvis.module.wake_word"):
+        await mod.start(bus)
+        await mod.activate()
+    await mod.stop()
+
+    assert mod._calibration_applied is False
+    assert mod._speech_threshold == 0.5
+    assert "VOICE_CALIBRATION_SKIPPED" in caplog.text
 
 
 async def test_silent_recording_publishes_no_audio_and_does_not_crash(

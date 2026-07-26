@@ -70,6 +70,10 @@ reminders:
   profile_id: default
   poll_interval_seconds: 0.5
 
+profiles:
+  # Empty means %APPDATA%\Jarvis\profiles. JARVIS_DATA_DIR overrides it.
+  root: ""
+
 logging:
   level: INFO
   log_file: logs/jarvis.log     # parsed by scripts/analyze_latency.py
