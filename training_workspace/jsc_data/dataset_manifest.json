@@ -1,0 +1,101 @@
+{
+  "data_schema_version": 1,
+  "external_sources": false,
+  "family_id_scheme": "sha256(category+roles+slot-masked-dialogue)[:16]",
+  "generator": "training_workspace.build_jsc_dataset",
+  "seeded": true,
+  "split_policy": "no structural-family or exact-model-input overlap",
+  "splits": {
+    "evaluation_holdout": {
+      "acts": {
+        "ask": 1,
+        "cancel": 1,
+        "dialogue": 25,
+        "execute": 136,
+        "reject": 17
+      },
+      "categories": {
+        "asr_noise": 20,
+        "compound": 18,
+        "correction": 15,
+        "hard_negative": 20,
+        "multi_turn": 25,
+        "ood": 17,
+        "single": 65
+      },
+      "examples": 180,
+      "families": 67,
+      "file": "evaluation_holdout.jsonl",
+      "sha256": "f5d69fff118a224c92c3ec3a3e19eb6312678b607800351b7eaee1dff1056e7c"
+    },
+    "test": {
+      "acts": {
+        "ask": 2,
+        "cancel": 2,
+        "dialogue": 30,
+        "execute": 191,
+        "reject": 25
+      },
+      "categories": {
+        "asr_noise": 30,
+        "compound": 25,
+        "correction": 20,
+        "hard_negative": 25,
+        "multi_turn": 35,
+        "ood": 25,
+        "single": 90
+      },
+      "examples": 250,
+      "families": 80,
+      "file": "test.jsonl",
+      "sha256": "92be72fde1449db1ae985aa064931643bed2f53d2ba2f8b57401a4359b6d4dd7"
+    },
+    "train": {
+      "acts": {
+        "ask": 6,
+        "cancel": 3,
+        "dialogue": 132,
+        "execute": 959,
+        "reject": 100
+      },
+      "categories": {
+        "asr_noise": 130,
+        "compound": 120,
+        "correction": 100,
+        "hard_negative": 120,
+        "multi_turn": 180,
+        "ood": 100,
+        "single": 450
+      },
+      "examples": 1200,
+      "families": 204,
+      "file": "train.jsonl",
+      "sha256": "73153e9aa6e78b62fcbe4733e9afc6a8ecc29a980d945c8728b2b38ab27c04f3"
+    },
+    "validation": {
+      "acts": {
+        "ask": 1,
+        "cancel": 1,
+        "dialogue": 30,
+        "execute": 193,
+        "reject": 25
+      },
+      "categories": {
+        "asr_noise": 30,
+        "compound": 25,
+        "correction": 20,
+        "hard_negative": 25,
+        "multi_turn": 35,
+        "ood": 25,
+        "single": 90
+      },
+      "examples": 250,
+      "families": 78,
+      "file": "validation.jsonl",
+      "sha256": "1fe5cbfe5960e3e4b88a430151f558e513ca9a01027041752796e39619cb0ab6"
+    }
+  },
+  "synthetic_holdout": true,
+  "tool_schema_sha256": "362f8225d71847b106bc37590ca74e74f38c158d89c0393e52d35db4f5aeef42",
+  "version": 3
+}

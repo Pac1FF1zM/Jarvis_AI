@@ -11,6 +11,7 @@ from .jal import (
     dumps,
     loads,
 )
+from .data import JSCExample, load_jsc_jsonl, validate_jsc_splits
 
 __all__ = [
     "DialogueAct",
@@ -22,4 +23,7 @@ __all__ = [
     "ToolSchemaRegistry",
     "dumps",
     "loads",
+    "JSCExample",
+    "load_jsc_jsonl",
+    "validate_jsc_splits",
 ]
