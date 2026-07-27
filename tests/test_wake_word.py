@@ -13,6 +13,7 @@ from core.event_bus import EventBus, Event
 from core.orchestrator import Orchestrator, State
 from core.profile_manager import device_fingerprint
 import modules.wake_word as wake_mod
+from modules.tts import TTSModule
 from modules.wake_word import WakeWordModule
 
 
@@ -403,7 +404,7 @@ async def test_successful_voice_turn_opens_bounded_active_session(
     assert events[1].trace_id == events[0].trace_id
 
 
-async def test_active_session_silence_returns_to_sleep_without_audio(
+async def test_active_session_silence_requests_audible_sleep_signifier(
     bus: EventBus, monkeypatch
 ):
     mod = WakeWordModule(
@@ -415,16 +416,16 @@ async def test_active_session_silence_returns_to_sleep_without_audio(
     mod._trace_sources["first-turn"] = "wake_phrase"
     monkeypatch.setattr(mod, "_record_microphone_sync", lambda timeout_ms=None: None)
     events: list[Event] = []
-    cancelled = asyncio.Event()
+    sleep_requested = asyncio.Event()
 
     async def record(event: Event) -> None:
         events.append(event)
-        if event.event_type == "cancel_requested":
-            cancelled.set()
+        if event.event_type == "session_sleep_requested":
+            sleep_requested.set()
 
     bus.subscribe("wake_word_detected", record)
     bus.subscribe("audio_captured", record)
-    bus.subscribe("cancel_requested", record)
+    bus.subscribe("session_sleep_requested", record)
     runner = asyncio.create_task(bus.run())
     bus.publish(
         "interaction_completed",
@@ -432,16 +433,17 @@ async def test_active_session_silence_returns_to_sleep_without_audio(
         trace_id="first-turn",
     )
 
-    await asyncio.wait_for(cancelled.wait(), timeout=1.0)
+    await asyncio.wait_for(sleep_requested.wait(), timeout=1.0)
     await mod.stop()
     await bus.stop()
     await runner
 
     assert [event.event_type for event in events] == [
         "wake_word_detected",
-        "cancel_requested",
+        "session_sleep_requested",
     ]
     assert events[-1].payload["reason"] == "active_session_timeout"
+    assert events[-1].payload["text"] == "Отключаюсь."
 
 
 async def test_active_session_timeout_completes_cleanly_back_in_idle(
@@ -456,13 +458,24 @@ async def test_active_session_timeout_completes_cleanly_back_in_idle(
         bus,
         {"listening_timeout_seconds": 1, "interaction_timeout_seconds": 2},
     )
+    tts = TTSModule(ModuleConfig())
     await mod.start(bus)
+    await tts.start(bus)
     await orchestrator.start()
     mod.real_activation_enabled = True
     mod._trace_sources["spoken-turn"] = "push_to_talk"
-    monkeypatch.setattr(mod, "_record_microphone_sync", lambda timeout_ms=None: None)
+    capture_calls = 0
+
+    def capture_silence(timeout_ms=None):
+        nonlocal capture_calls
+        capture_calls += 1
+        return None
+
+    monkeypatch.setattr(mod, "_record_microphone_sync", capture_silence)
     completed: asyncio.Queue[Event] = asyncio.Queue()
+    sleep_requests: asyncio.Queue[Event] = asyncio.Queue()
     bus.subscribe("interaction_completed", completed.put)
+    bus.subscribe("session_sleep_requested", sleep_requests.put)
     runner = asyncio.create_task(bus.run())
 
     orchestrator.state = State.SPEAKING
@@ -470,8 +483,10 @@ async def test_active_session_timeout_completes_cleanly_back_in_idle(
     bus.publish("speech_finished", {"text": "Готово."}, trace_id="spoken-turn")
 
     first = await asyncio.wait_for(completed.get(), timeout=1.0)
+    sleep_request = await asyncio.wait_for(sleep_requests.get(), timeout=1.0)
     second = await asyncio.wait_for(completed.get(), timeout=1.0)
     await mod.stop()
+    await tts.stop()
     await bus.stop()
     await runner
     await orchestrator.stop()
@@ -479,8 +494,11 @@ async def test_active_session_timeout_completes_cleanly_back_in_idle(
     assert first.trace_id == "spoken-turn"
     assert first.payload["ok"] is True
     assert second.trace_id != first.trace_id
-    assert second.payload["cancelled"] is True
-    assert second.payload["reason"] == "active_session_timeout"
+    assert sleep_request.payload["text"] == "Отключаюсь."
+    assert second.payload["ok"] is True
+    assert second.payload["sleep_mode"] is True
+    assert "cancelled" not in second.payload
+    assert capture_calls == 1, "sleep signifier must not start another follow-up"
     assert orchestrator.state == State.IDLE
     assert orchestrator._current_trace is None
 

@@ -9,6 +9,9 @@ from ctypes import wintypes
 from dataclasses import dataclass
 
 
+_NON_USER_WINDOW_TITLES = frozenset({"Default IME", "MSCTFIME UI"})
+
+
 @dataclass(frozen=True)
 class WindowInfo:
     handle: int
@@ -55,6 +58,8 @@ def list_windows() -> list[WindowInfo]:
             return True
         title_buffer = ctypes.create_unicode_buffer(length + 1)
         user32.GetWindowTextW(hwnd, title_buffer, length + 1)
+        if title_buffer.value in _NON_USER_WINDOW_TITLES:
+            return True
         pid = wintypes.DWORD()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
         executable = ""
@@ -80,15 +85,41 @@ def find_window(query: str) -> WindowInfo | None:
     needle = query.casefold().strip()
     if not needle:
         return None
-    windows = list_windows()
-    exact = [row for row in windows if row.title.casefold() == needle]
+    needles = {needle}
+    # Window titles and executable names are often English even when Whisper
+    # and the NLU correctly produce a Russian application alias (for example
+    # ``дискорд`` -> ``Discord.exe``). Reuse the launcher's safe
+    # allow-list to add only its canonical application name; arbitrary speech
+    # still cannot become a process name or command line.
+    try:
+        from ._applications import resolve_application
+
+        application = resolve_application(query)
+    except (ImportError, OSError):
+        application = None
+    if application is not None:
+        needles.add(application.name.casefold())
+    windows = [
+        row for row in list_windows() if row.title not in _NON_USER_WINDOW_TITLES
+    ]
+    exact = [
+        row for row in windows if row.title.casefold() in needles
+    ]
     if exact:
         return exact[0]
-    matches = [
+    title_matches = [
         row for row in windows
-        if needle in row.title.casefold() or needle in row.executable.casefold()
+        if any(candidate in row.title.casefold() for candidate in needles)
     ]
-    return matches[0] if len(matches) == 1 else None
+    if len(title_matches) == 1:
+        return title_matches[0]
+    if title_matches:
+        return None
+    executable_matches = [
+        row for row in windows
+        if any(candidate in row.executable.casefold() for candidate in needles)
+    ]
+    return executable_matches[0] if len(executable_matches) == 1 else None
 
 
 def control_window(action: str, query: str) -> WindowInfo:

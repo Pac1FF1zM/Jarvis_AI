@@ -415,16 +415,24 @@ class WakeWordModule(BaseModule):
                     source,
                     (speech_start_timeout_ms or self._speech_start_timeout_ms) / 1000,
                 )
-                self.bus.publish(
-                    "cancel_requested",
-                    {
-                        "reason": "active_session_timeout"
-                        if source == "active_session"
-                        else "no_speech",
-                        "target_trace_id": wake_event.trace_id,
-                    },
-                    trace_id=wake_event.trace_id,
-                )
+                if source == "active_session":
+                    # A bounded follow-up session ends with an audible state
+                    # change. This remains a normal successful interaction so
+                    # TTS can finish before wake-word listening resumes.
+                    self.bus.publish(
+                        "session_sleep_requested",
+                        {"text": "Отключаюсь.", "reason": "active_session_timeout"},
+                        trace_id=wake_event.trace_id,
+                    )
+                else:
+                    self.bus.publish(
+                        "cancel_requested",
+                        {
+                            "reason": "no_speech",
+                            "target_trace_id": wake_event.trace_id,
+                        },
+                        trace_id=wake_event.trace_id,
+                    )
                 return wake_event
             audio_event = wake_event.child(
                 "audio_captured",
@@ -462,6 +470,10 @@ class WakeWordModule(BaseModule):
         if source is None:
             # Reminder notifications have no microphone activation source but
             # still pause wake detection while their TTS is playing.
+            self._resume_wake_listener_if_idle()
+            return
+        if event.payload.get("sleep_mode"):
+            logger.info("ACTIVE_SESSION_CLOSED reason=active_session_timeout")
             self._resume_wake_listener_if_idle()
             return
         if event.payload.get("ok", True) is False or event.payload.get("cancelled"):

@@ -77,6 +77,7 @@ APPLICATIONS = (
 
 _START_MENU_RELATIVE = Path("Microsoft/Windows/Start Menu/Programs")
 _DISCORD_COLD_START_SETTLE_SECONDS = 5.0
+_NON_USER_WINDOW_TITLES = frozenset({"Default IME", "MSCTFIME UI"})
 _UNSAFE_SHORTCUT_WORDS = frozenset(
     {
         "uninstall", "remove", "update", "updater", "repair", "setup",
@@ -354,6 +355,8 @@ def _activate_windows_process_window(executable_name: str) -> bool:
     user32.GetWindowThreadProcessId.restype = wintypes.DWORD
     user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
     user32.GetWindowTextLengthW.restype = ctypes.c_int
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowTextW.restype = ctypes.c_int
     user32.IsWindowVisible.argtypes = [wintypes.HWND]
     user32.IsWindowVisible.restype = wintypes.BOOL
     user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
@@ -380,7 +383,12 @@ def _activate_windows_process_window(executable_name: str) -> bool:
     def collect(hwnd: int, _lparam: int) -> bool:
         # Renderer/helper windows have no title. The user-facing Discord frame
         # has one even while minimized or hidden in the tray.
-        if user32.GetWindowTextLengthW(hwnd) <= 0:
+        title_length = user32.GetWindowTextLengthW(hwnd)
+        if title_length <= 0:
+            return True
+        title_buffer = ctypes.create_unicode_buffer(title_length + 1)
+        user32.GetWindowTextW(hwnd, title_buffer, title_length + 1)
+        if title_buffer.value in _NON_USER_WINDOW_TITLES:
             return True
         process_id = wintypes.DWORD()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))

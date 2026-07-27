@@ -59,7 +59,7 @@ class State(str, enum.Enum):
 VALID_TRANSITIONS: dict[State, set[State]] = {
     State.IDLE: {State.WAKE_DETECTED, State.LISTENING, State.SPEAKING},
     State.WAKE_DETECTED: {State.LISTENING, State.IDLE},
-    State.LISTENING: {State.TRANSCRIBING, State.IDLE},
+    State.LISTENING: {State.TRANSCRIBING, State.SPEAKING, State.IDLE},
     State.TRANSCRIBING: {State.THINKING, State.IDLE},
     State.THINKING: {State.TOOL_CALL, State.SPEAKING, State.IDLE},
     State.TOOL_CALL: {State.THINKING, State.IDLE},
@@ -87,12 +87,14 @@ class Orchestrator:
         self._interaction_timeout_task: asyncio.Task[None] | None = None
         self._pending_notifications: deque[Event] = deque()
         self._queued_reminder_ids: set[int] = set()
+        self._sleep_after_traces: set[str] = set()
 
     async def start(self) -> None:
         """Subscribe to every lifecycle event the state machine cares about."""
         self.bus.subscribe("wake_word_detected", self._on_wake)
         self.bus.subscribe("speech_capture_started", self._on_speech_capture_started)
         self.bus.subscribe("audio_captured", self._on_audio_captured)
+        self.bus.subscribe("session_sleep_requested", self._on_session_sleep_requested)
         self.bus.subscribe("transcription_ready", self._on_transcription)
         self.bus.subscribe("response_ready", self._on_response)
         self.bus.subscribe("tool_call_requested", self._on_tool_call)
@@ -110,6 +112,7 @@ class Orchestrator:
         self._cancel_interaction_timeout()
         self._pending_notifications.clear()
         self._queued_reminder_ids.clear()
+        self._sleep_after_traces.clear()
 
     # ------------------------------------------------------------------ #
     # Authoritative transition helper (fix #2)
@@ -230,6 +233,7 @@ class Orchestrator:
             if superseded_by is not None:
                 details["superseded_by"] = superseded_by
             self.bus.cancel_trace(trace_id, reason=reason, details=details)
+            self._sleep_after_traces.discard(trace_id)
 
         if self.state != State.IDLE and not self._transition(State.IDLE, trace_id):
             return
@@ -301,6 +305,23 @@ class Orchestrator:
         self._cancel_listening_timeout()
         self._transition(State.TRANSCRIBING, event.trace_id)
 
+    async def _on_session_sleep_requested(self, event: Event) -> None:
+        """Authorize the audible transition from active session to sleep."""
+        if not self._is_current_trace(event, "SESSION_SLEEP"):
+            return
+        if self.state not in {State.LISTENING, State.SPEAKING}:
+            logger.info(
+                "SESSION_SLEEP_IGNORED state=%s trace=%s",
+                self.state.value,
+                event.trace_id,
+            )
+            return
+        self._cancel_listening_timeout()
+        self._sleep_after_traces.add(event.trace_id)
+        if self.state != State.SPEAKING:
+            self._transition(State.SPEAKING, event.trace_id)
+        logger.info("SESSION_SLEEP_SIGNIFIER trace=%s", event.trace_id)
+
     async def _on_transcription(self, event: Event) -> None:
         if not self._is_current_trace(event, "TRANSCRIPTION"):
             return
@@ -361,6 +382,8 @@ class Orchestrator:
         self._cancel_listening_timeout()
         self._cancel_interaction_timeout()
         self._current_trace = None
+        sleep_mode = event.trace_id in self._sleep_after_traces
+        self._sleep_after_traces.discard(event.trace_id)
         if not self.bus.complete_trace(event.trace_id):
             logger.info(
                 "SPEECH_COMPLETION_SUPPRESSED closed_trace=%s", event.trace_id
@@ -368,10 +391,14 @@ class Orchestrator:
             return
         # Authoritative end-of-interaction signal: published only after the
         # state machine has actually reached IDLE for this trace.
+        completion_payload: dict[str, Any] = {
+            "state": State.IDLE.value,
+            "ok": True,
+        }
+        if sleep_mode:
+            completion_payload["sleep_mode"] = True
         self.bus.publish_event(
-            event.child(
-                "interaction_completed", {"state": State.IDLE.value, "ok": True}
-            )
+            event.child("interaction_completed", completion_payload)
         )
         self._start_next_notification()
 
@@ -387,6 +414,7 @@ class Orchestrator:
         ):
             return
         self._current_trace = None
+        self._sleep_after_traces.discard(event.trace_id)
         logger.error(
             "INTERACTION_RECOVERED trace=%s failed_state=%s reason=%s",
             event.trace_id,

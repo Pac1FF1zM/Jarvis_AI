@@ -13,8 +13,10 @@ from tools.list_applications import execute as execute_list_applications
 import tools.open_application as open_application_module
 import tools._applications as applications_module
 import tools.browser_control as browser_control_module
+import tools._windows as windows_module
 from tools.browser_control import execute as execute_browser_control
 from tools._applications import resolve_application
+from tools._windows import WindowInfo
 from tools.registry import ToolRegistry
 
 
@@ -232,6 +234,30 @@ def test_discord_uri_launch_does_not_inherit_jarvis_console(monkeypatch):
     assert kwargs["stdin"] is applications_module.subprocess.DEVNULL
     assert kwargs["stdout"] is applications_module.subprocess.DEVNULL
     assert kwargs["stderr"] is applications_module.subprocess.DEVNULL
+
+
+def test_russian_discord_alias_resolves_english_window(monkeypatch):
+    discord = WindowInfo(
+        handle=42,
+        title="Discord",
+        process_id=9001,
+        executable="Discord.exe",
+    )
+    electron_utility = WindowInfo(
+        handle=43,
+        title="Default IME",
+        process_id=9001,
+        executable="Discord.exe",
+    )
+    monkeypatch.setattr(
+        windows_module, "list_windows", lambda: [electron_utility, discord]
+    )
+
+    assert windows_module.find_window("дискорд") == discord
+    assert windows_module.find_window("дисорд") == discord
+
+    monkeypatch.setattr(windows_module, "list_windows", lambda: [electron_utility])
+    assert windows_module.find_window("дискорд") is None
 
 
 def test_browser_uses_windows_default_https_handler(monkeypatch):
