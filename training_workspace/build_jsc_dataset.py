@@ -64,6 +64,13 @@ TARGETS = {
     },
 }
 
+CATEGORY_ACT_MINIMUMS = {
+    "train": {"single": {"cancel": 20}, "multi_turn": {"ask": 30}},
+    "validation": {"single": {"cancel": 5}, "multi_turn": {"ask": 8}},
+    "test": {"single": {"cancel": 5}, "multi_turn": {"ask": 8}},
+    "evaluation_holdout": {"single": {"cancel": 4}, "multi_turn": {"ask": 6}},
+}
+
 APPLICATION_WORDS = {
     "train": {
         "calculator": ("калькулятор", "calc"),
@@ -118,7 +125,28 @@ LEXICON = {
         ),
         "absolute": ("напомни завтра в {clock} {message}", "сегодня в {clock} напомни {message}"),
         "cancel_reminder": ("отмени напоминание номер {number}", "удали напоминание {number}"),
-        "cancel": ("стоп джарвис", "отмени текущую команду", "я передумал", "ничего не делай"),
+        "cancel": (
+            "стоп джарвис",
+            "отмени текущую команду",
+            "я передумал",
+            "ничего не делай",
+            "прекрати выполнение",
+            "хватит работать над этим",
+            "сбрось текущее действие",
+            "останови операцию",
+            "не выполняй эту просьбу",
+            "прерви активную задачу",
+            "отставить команду",
+            "забудь последний запрос",
+            "вернись в режим ожидания",
+            "сними текущую задачу",
+            "остановись пожалуйста",
+            "аннулируй моё действие",
+            "не продолжай эту операцию",
+            "закрой текущий запрос",
+            "прервись и жди",
+            "полная отмена действия",
+        ),
         "dialogue": ("расскажи про {topic}", "объясни простыми словами {topic}", "давай обсудим {topic}"),
     },
     "validation": {
@@ -129,7 +157,7 @@ LEXICON = {
         "reminder": ("отсчитай {minutes} минут и напомни {message}", "мне нужно через {minutes} минут вспомнить {message}"),
         "absolute": ("поставь напоминание завтра на {clock} {message}",),
         "cancel_reminder": ("сними напоминание №{number}",),
-        "cancel": ("прерви всё что делаешь", "сбрось мою команду"),
+        "cancel": ("прерви всё что делаешь", "сбрось мою команду", "аннулируй запрос", "останови начатую операцию", "не продолжай выполнение"),
         "dialogue": ("проведи небольшой ликбез про {topic}", "что полезно знать о {topic}"),
     },
     "test": {
@@ -140,7 +168,7 @@ LEXICON = {
         "reminder": ("когда пройдёт {minutes} минут напомни {message}", "через {minutes} минут не забудь сказать {message}"),
         "absolute": ("завтра к {clock} напомни {message}",),
         "cancel_reminder": ("убери напоминание под номером {number}",),
-        "cancel": ("вернись в ожидание", "не выполняй прошлый запрос"),
+        "cancel": ("вернись в ожидание", "не выполняй прошлый запрос", "прекрати активность", "отмени последнее поручение", "сразу останови задачу"),
         "dialogue": ("как устроено {topic}", "можем поговорить про {topic}"),
     },
     "evaluation_holdout": {
@@ -151,7 +179,7 @@ LEXICON = {
         "reminder": ("спустя {minutes} минут скажи что пора {message}", "проконтролируй чтобы через {minutes} минут я вспомнил {message}"),
         "absolute": ("на завтра в {clock} создай напоминание {message}",),
         "cancel_reminder": ("отключи напоминание с номером {number}",),
-        "cancel": ("сейчас же прекрати операцию", "отставить прошлое действие"),
+        "cancel": ("сейчас же прекрати операцию", "отставить прошлое действие", "сверни выполнение команды", "больше ничего не предпринимай"),
         "dialogue": ("объясни принцип работы {topic}", "поделись знаниями о {topic}"),
     },
 }
@@ -271,33 +299,45 @@ TIME_AND_APP_FRAMES = {
 
 MULTI_TURN_FRAMES = {
     "train": {
-        "request": "напомни мне {message}",
+        "requests": (
+            "напомни мне {message}",
+            "создай напоминание {message}",
+            "мне нужно не забыть {message}",
+            "поставь напоминание про {message}",
+        ),
         "question": "Когда напомнить?",
         "answers": ("через {minutes} минут", "спустя {minutes} минут", "минут через {minutes}"),
         "app_request": "открой приложение",
         "app_question": "Какое приложение открыть?",
     },
     "validation": {
-        "request": "создай напоминание {message}",
+        "requests": ("сохрани напоминание {message}", "нужно напомнить {message}", "добавь в напоминания {message}"),
         "question": "На какое время поставить напоминание?",
         "answers": ("ровно через {minutes} минут", "подожди {minutes} минут", "отсчитай {minutes} минут"),
         "app_request": "запусти какую-нибудь программу",
         "app_question": "Назовите нужную программу.",
     },
     "test": {
-        "request": "мне надо не забыть {message}",
+        "requests": ("помоги не забыть {message}", "запиши напоминание {message}", "уведоми меня про {message}"),
         "question": "Через сколько минут сообщить об этом?",
         "answers": ("через {minutes}", "{minutes} минут от сейчас", "пусть будет через {minutes} минут"),
         "app_request": "мне нужно открыть программу",
         "app_question": "Уточните название приложения.",
     },
     "evaluation_holdout": {
-        "request": "поставь напоминание о том чтобы {message}",
+        "requests": ("оставь напоминание о том чтобы {message}", "зафиксируй что надо {message}", "мне потребуется напомнить {message}"),
         "question": "Когда это напомнить?",
         "answers": ("спустя ровно {minutes} минут", "срок {minutes} минут", "по истечении {minutes} минут"),
         "app_request": "включи одно приложение",
         "app_question": "Какое именно приложение вам нужно?",
     },
+}
+
+CANCEL_MULTI_TURN_FRAMES = {
+    "train": ("отмени напоминание", "Назовите номер напоминания."),
+    "validation": ("убери одно напоминание", "Какой у него номер?"),
+    "test": ("нужно удалить напоминание", "Уточните идентификатор напоминания."),
+    "evaluation_holdout": ("сними запланированное напоминание", "Сообщите его номер."),
 }
 
 CORRECTION_FRAMES = {
@@ -375,7 +415,22 @@ def generate() -> tuple[dict[str, list[dict[str, Any]]], str]:
                 raise RuntimeError(
                     f"{split}/{category}: need {count} unique candidates, have {len(accepted)}"
                 )
-            chosen = accepted[:count]
+            chosen: list[Candidate] = []
+            for act, minimum in CATEGORY_ACT_MINIMUMS[split].get(category, {}).items():
+                matching = [candidate for candidate in accepted if candidate.target.act.value == act]
+                if len(matching) < minimum:
+                    raise RuntimeError(
+                        f"{split}/{category}: need {minimum} examples for act={act}, "
+                        f"have {len(matching)}"
+                    )
+                chosen.extend(matching[:minimum])
+            chosen_signatures = {candidate.signature for candidate in chosen}
+            chosen.extend(
+                candidate
+                for candidate in accepted
+                if candidate.signature not in chosen_signatures
+            )
+            chosen = chosen[:count]
             selected.extend(chosen)
             used.update(candidate.signature for candidate in chosen)
         random.Random(SEEDS[split]).shuffle(selected)
@@ -587,15 +642,16 @@ def _multi_turn_candidates(split: str) -> list[Candidate]:
             missing=(MissingSlot(0, "minutes"),),
             reason="missing_time",
         )
-        candidates.append(
-            Candidate(
-                "multi_turn",
-                f"{split}.multi.reminder_ask",
-                frames["request"].format(message=message),
-                pending,
-                metadata={"turn": "request"},
+        for request_index, request_template in enumerate(frames["requests"]):
+            candidates.append(
+                Candidate(
+                    "multi_turn",
+                    f"{split}.multi.reminder_ask_{request_index}",
+                    request_template.format(message=message),
+                    pending,
+                    metadata={"turn": "request"},
+                )
             )
-        )
         for minutes in values["minutes"]:
             for answer_index, answer_template in enumerate(frames["answers"]):
                 answer = answer_template.format(minutes=minutes)
@@ -606,7 +662,7 @@ def _multi_turn_candidates(split: str) -> list[Candidate]:
                         answer,
                         _execute("set_reminder", minutes=minutes, message=message),
                         history=(
-                            ("user", frames["request"].format(message=message)),
+                            ("user", frames["requests"][0].format(message=message)),
                             ("jarvis", frames["question"]),
                         ),
                         state=pending,
@@ -620,6 +676,16 @@ def _multi_turn_candidates(split: str) -> list[Candidate]:
             missing=(MissingSlot(0, "application"),),
             reason="missing_application",
         )
+        if app_name == next(iter(APPLICATION_WORDS[split])):
+            candidates.append(
+                Candidate(
+                    "multi_turn",
+                    f"{split}.multi.application_ask",
+                    frames["app_request"],
+                    pending,
+                    metadata={"turn": "request"},
+                )
+            )
         candidates.append(
             Candidate(
                 "multi_turn",
@@ -641,13 +707,24 @@ def _multi_turn_candidates(split: str) -> list[Candidate]:
             missing=(MissingSlot(0, "reminder_id"),),
             reason="missing_reminder_id",
         )
+        request, question = CANCEL_MULTI_TURN_FRAMES[split]
+        if number == 1:
+            candidates.append(
+                Candidate(
+                    "multi_turn",
+                    f"{split}.multi.cancel_reminder_ask",
+                    request,
+                    pending,
+                    metadata={"turn": "request"},
+                )
+            )
         candidates.append(
             Candidate(
                 "multi_turn",
                 f"{split}.multi.cancel_reminder_fill",
                 CANCEL_ID_ANSWERS[split].format(number=number),
                 _execute("cancel_reminder", reminder_id=number),
-                history=(("user", "отмени напоминание"), ("jarvis", "Назовите номер напоминания.")),
+                history=(("user", request), ("jarvis", question)),
                 state=pending,
                 metadata={"turn": "slot_fill"},
             )

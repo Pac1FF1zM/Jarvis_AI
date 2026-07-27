@@ -8,10 +8,10 @@
   "splits": {
     "evaluation_holdout": {
       "acts": {
-        "ask": 1,
-        "cancel": 1,
-        "dialogue": 25,
-        "execute": 136,
+        "ask": 6,
+        "cancel": 4,
+        "dialogue": 26,
+        "execute": 127,
         "reject": 17
       },
       "categories": {
@@ -24,16 +24,16 @@
         "single": 65
       },
       "examples": 180,
-      "families": 67,
+      "families": 74,
       "file": "evaluation_holdout.jsonl",
-      "sha256": "f5d69fff118a224c92c3ec3a3e19eb6312678b607800351b7eaee1dff1056e7c"
+      "sha256": "bb40a212e833d55de035e6d8107f56214e202d1f5a718955cb9a97a580e948bc"
     },
     "test": {
       "acts": {
-        "ask": 2,
-        "cancel": 2,
+        "ask": 8,
+        "cancel": 5,
         "dialogue": 30,
-        "execute": 191,
+        "execute": 182,
         "reject": 25
       },
       "categories": {
@@ -46,16 +46,16 @@
         "single": 90
       },
       "examples": 250,
-      "families": 80,
+      "families": 85,
       "file": "test.jsonl",
-      "sha256": "92be72fde1449db1ae985aa064931643bed2f53d2ba2f8b57401a4359b6d4dd7"
+      "sha256": "a8d96ad8da2e2b43a947d60e867058d54a9723ca7498d6954e0e9f0f603c9bab"
     },
     "train": {
       "acts": {
-        "ask": 6,
-        "cancel": 3,
-        "dialogue": 132,
-        "execute": 959,
+        "ask": 30,
+        "cancel": 20,
+        "dialogue": 136,
+        "execute": 914,
         "reject": 100
       },
       "categories": {
@@ -68,16 +68,16 @@
         "single": 450
       },
       "examples": 1200,
-      "families": 204,
+      "families": 223,
       "file": "train.jsonl",
-      "sha256": "73153e9aa6e78b62fcbe4733e9afc6a8ecc29a980d945c8728b2b38ab27c04f3"
+      "sha256": "9e2635bf21897f3c9350e3e1d0424fa7100350ef7e44600e5398615b69d2877d"
     },
     "validation": {
       "acts": {
-        "ask": 1,
-        "cancel": 1,
+        "ask": 8,
+        "cancel": 5,
         "dialogue": 30,
-        "execute": 193,
+        "execute": 182,
         "reject": 25
       },
       "categories": {
@@ -90,9 +90,9 @@
         "single": 90
       },
       "examples": 250,
-      "families": 78,
+      "families": 84,
       "file": "validation.jsonl",
-      "sha256": "1fe5cbfe5960e3e4b88a430151f558e513ca9a01027041752796e39619cb0ab6"
+      "sha256": "74954202f46c42e407617b0a030ad3a029670676338c22ee3a3756b5df15fa2f"
     }
   },
   "synthetic_holdout": true,

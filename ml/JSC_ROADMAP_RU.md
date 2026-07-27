@@ -12,8 +12,9 @@ weights/embeddings и внешние AI API не используются.
    codec, типизированная проверка по реальным tool schemas и тесты.
 2. **[готово] Фабрика данных v3** — воспроизводимые одиночные, составные и многотуровые
    сценарии; ASR-искажения, hard negatives, OOD; независимые family splits.
-3. **Честные baselines** — текущий CharCNN, BiGRU-CRF и DIET-подобный encoder;
-   одинаковые данные, seeds и evaluation protocol.
+3. **[код готов, ожидаются RTX-прогоны] Честные baselines** — CharCNN, BiGRU и
+   tiny Transformer encoder с общим JAL decoder; одинаковые данные, три seed,
+   checkpoint/resume и единый safety-oriented evaluation protocol.
 4. **JSC semantic parser** — собственный Transformer encoder-decoder,
    grammar-constrained генерация JAL и schema-conditioned tool selection.
 5. **Диалог и исправления** — neural dialogue-state tracker, пропущенные slots,
@@ -36,6 +37,7 @@ weights/embeddings и внешние AI API не используются.
 - holdout не участвует в подборе параметров или эпохи.
 
 Текущий этап отмечается в git и меняется только после тестов и измеримого
-выходного гейта. Следующий этап — честное сравнение baseline-архитектур на
-одинаковых split’ах и seeds. Подробности форматов: `ml/jsc/JAL_SPEC_RU.md` и
-`training_workspace/jsc_data/README_RU.md`.
+выходного гейта. Сейчас нужно выполнить девять baseline-runs на RTX 3090 Ti;
+без их mean/std этап 3 не считается закрытым. Подробности: `ml/jsc/JAL_SPEC_RU.md`,
+`training_workspace/jsc_data/README_RU.md` и
+`training_workspace/JSC_BASELINES_RU.md`.

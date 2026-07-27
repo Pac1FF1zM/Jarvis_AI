@@ -45,6 +45,7 @@ models/openai-whisper/
 latest_silero_models.yml
 training_workspace/runs/
 training_workspace/export/
+training_workspace/jsc_runs/
 training_workspace/data/private_holdout.jsonl
 installer/cache/
 installer/output/

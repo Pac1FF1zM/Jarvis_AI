@@ -68,6 +68,10 @@ def test_all_splits_pass_jal_schema_and_leakage_audit(schemas):
         split: sum(TARGETS[split].values()) for split in SPLITS
     }
     assert all(set(report[split]["categories"]) == set(TARGETS[split]) for split in SPLITS)
+    assert report["train"]["acts"]["ask"] >= 30
+    assert report["train"]["acts"]["cancel"] >= 20
+    assert report["validation"]["acts"]["ask"] >= 8
+    assert report["test"]["acts"]["ask"] >= 8
 
 
 def test_structural_scenarios_represent_the_intended_learning_problems(schemas):
