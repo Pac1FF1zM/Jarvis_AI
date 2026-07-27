@@ -4,6 +4,7 @@ from __future__ import annotations
 import ctypes
 import os
 import re
+import time
 from ctypes import wintypes
 from dataclasses import dataclass
 
@@ -103,6 +104,10 @@ def control_window(action: str, query: str) -> WindowInfo:
     user32.SetForegroundWindow.restype = wintypes.BOOL
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
     user32.PostMessageW.restype = wintypes.BOOL
+    user32.IsWindow.argtypes = [wintypes.HWND]
+    user32.IsWindow.restype = wintypes.BOOL
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.IsWindowVisible.restype = wintypes.BOOL
     commands = {"minimize": 6, "maximize": 3, "restore": 9}
     if action in commands:
         user32.ShowWindow(window.handle, commands[action])
@@ -115,7 +120,19 @@ def control_window(action: str, query: str) -> WindowInfo:
         if not user32.SetForegroundWindow(window.handle):
             raise OSError("Windows не разрешила перевести окно на передний план")
     elif action == "close":
-        user32.PostMessageW(window.handle, 0x0010, 0, 0)  # WM_CLOSE
+        if not user32.PostMessageW(window.handle, 0x0010, 0, 0):  # WM_CLOSE
+            raise OSError("Windows не приняла команду закрытия окна")
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            if not user32.IsWindow(window.handle) or not user32.IsWindowVisible(
+                window.handle
+            ):
+                break
+            time.sleep(0.05)
+        else:
+            raise OSError(
+                "окно получило команду закрытия, но осталось открытым"
+            )
     else:
         raise ValueError(f"неизвестное действие окна: {action}")
     return window

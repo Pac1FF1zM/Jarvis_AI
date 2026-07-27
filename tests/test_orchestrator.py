@@ -263,6 +263,29 @@ async def test_audio_captured_cancels_listening_timeout_during_slow_stt(bus: Eve
     assert orch.state == State.THINKING
 
 
+async def test_vad_start_cancels_timeout_before_long_recording_finishes(bus: EventBus):
+    orch = Orchestrator(bus, {"listening_timeout_seconds": 0.05})
+    await orch.start()
+    run_task = asyncio.create_task(bus.run())
+    bus.publish("wake_word_detected", {}, trace_id="long-utterance")
+    await asyncio.sleep(0.01)
+    bus.publish("speech_capture_started", {}, trace_id="long-utterance")
+
+    # Recording lasts beyond the no-speech deadline, but VAD already proved
+    # that the user is speaking, so the trace must remain alive.
+    await asyncio.sleep(0.08)
+    assert orch.state == State.LISTENING
+    assert not bus.is_trace_closed("long-utterance")
+
+    bus.publish("audio_captured", {"audio": b"pcm"}, trace_id="long-utterance")
+    await asyncio.sleep(0.02)
+    await bus.stop()
+    await run_task
+    await orch.stop()
+
+    assert orch.state == State.TRANSCRIBING
+
+
 async def test_handler_failure_recovers_to_idle_and_allows_next_trace(bus: EventBus):
     orch = Orchestrator(
         bus,

@@ -55,7 +55,7 @@ APPLICATIONS = (
         "Дискорд",
         uri="discord://",
         aliases=(
-            "discord", "дискорд", "дисорд", "дискод", "дискор", "дискорд",
+            "discord", "дискорд", "дисорд", "дискод", "дискор", "дискорти",
         ),
     ),
     ApplicationSpec(
@@ -76,6 +76,7 @@ APPLICATIONS = (
 )
 
 _START_MENU_RELATIVE = Path("Microsoft/Windows/Start Menu/Programs")
+_DISCORD_COLD_START_SETTLE_SECONDS = 5.0
 _UNSAFE_SHORTCUT_WORDS = frozenset(
     {
         "uninstall", "remove", "update", "updater", "repair", "setup",
@@ -295,14 +296,37 @@ def _launch_or_activate_discord(spec: ApplicationSpec) -> None:
         return
     if spec.uri is None:
         raise RuntimeError("Discord has no configured launch URI")
-    os.startfile(spec.uri)  # type: ignore[attr-defined]  # Windows-only runtime
+    _open_windows_uri_detached(spec.uri)
     deadline = time.monotonic() + 8.0
     while time.monotonic() < deadline:
         if _activate_windows_process_window("Discord.exe"):
+            # The first Discord window is its splash screen. Do not report the
+            # action complete while Electron is still creating the real main
+            # window; otherwise the follow-up microphone records startup noise.
+            time.sleep(_DISCORD_COLD_START_SETTLE_SECONDS)
+            if not _activate_windows_process_window("Discord.exe"):
+                raise RuntimeError(
+                    "Discord показал экран запуска, но основное окно не стало доступно"
+                )
             return
         time.sleep(0.1)
     raise RuntimeError(
         "Discord accepted the launch request, but no visible window appeared"
+    )
+
+
+def _open_windows_uri_detached(uri: str) -> None:
+    """Open one fixed URI without inheriting Jarvis' console handles."""
+    creation_flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(
+        subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+    )
+    subprocess.Popen(  # noqa: S603 - executable and URI are fixed by allow-list
+        ["explorer.exe", uri],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+        creationflags=creation_flags,
     )
 
 

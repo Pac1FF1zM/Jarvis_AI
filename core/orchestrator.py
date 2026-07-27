@@ -91,6 +91,7 @@ class Orchestrator:
     async def start(self) -> None:
         """Subscribe to every lifecycle event the state machine cares about."""
         self.bus.subscribe("wake_word_detected", self._on_wake)
+        self.bus.subscribe("speech_capture_started", self._on_speech_capture_started)
         self.bus.subscribe("audio_captured", self._on_audio_captured)
         self.bus.subscribe("transcription_ready", self._on_transcription)
         self.bus.subscribe("response_ready", self._on_response)
@@ -267,6 +268,24 @@ class Orchestrator:
             self.state.value,
         )
         return False
+
+    async def _on_speech_capture_started(self, event: Event) -> None:
+        """Stop the no-speech timer as soon as VAD hears the user.
+
+        Audio remains in LISTENING until the bounded recording is complete,
+        but a valid utterance can no longer lose a race against the watchdog.
+        """
+        if not self._is_current_trace(event, "CAPTURE_START"):
+            return
+        if self.state != State.LISTENING:
+            logger.info(
+                "CAPTURE_START_IGNORED state=%s trace=%s",
+                self.state.value,
+                event.trace_id,
+            )
+            return
+        self._cancel_listening_timeout()
+        logger.info("SPEECH_CAPTURE_ACTIVE trace=%s", event.trace_id)
 
     async def _on_audio_captured(self, event: Event) -> None:
         """End LISTENING as soon as bounded audio exists, before slow STT."""

@@ -137,6 +137,12 @@ async def test_hotkey_captures_real_pcm_until_vad_silence(
     )
     mod = WakeWordModule(_config())
     events, audio_ready, run_task = await _start_bus_with_recorders(bus)
+    capture_starts: list[Event] = []
+
+    async def record_capture_start(event: Event) -> None:
+        capture_starts.append(event)
+
+    bus.subscribe("speech_capture_started", record_capture_start)
     await mod.start(bus)
     listener = _FakeHotkeys.instances[-1]
     assert listener.started
@@ -152,6 +158,8 @@ async def test_hotkey_captures_real_pcm_until_vad_silence(
         "wake_word_detected", "audio_captured"
     ]
     assert events[0].trace_id == events[1].trace_id
+    assert len(capture_starts) == 1
+    assert capture_starts[0].trace_id == events[0].trace_id
     payload = events[1].payload
     assert payload["source"] == "microphone"
     assert payload["sample_rate"] == 16_000

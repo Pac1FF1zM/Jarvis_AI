@@ -342,6 +342,29 @@ class WakeWordModule(BaseModule):
         ):
             self._wake_listener_pause.clear()
 
+    def _notify_speech_capture_started(self) -> None:
+        """Move the VAD start edge safely from the audio thread to asyncio."""
+        loop = self._loop
+        trace_id = self._active_trace_id
+        if loop is None or loop.is_closed() or trace_id is None:
+            return
+        try:
+            loop.call_soon_threadsafe(self._publish_speech_capture_started, trace_id)
+        except RuntimeError:
+            logger.debug("speech start arrived while event loop was closing")
+
+    def _publish_speech_capture_started(self, trace_id: str) -> None:
+        if (
+            self.bus is not None
+            and trace_id in self._trace_sources
+            and not self.bus.is_trace_closed(trace_id)
+        ):
+            self.bus.publish(
+                "speech_capture_started",
+                {"source": "microphone"},
+                trace_id=trace_id,
+            )
+
     async def activate(
         self,
         *,
@@ -538,6 +561,7 @@ class WakeWordModule(BaseModule):
                     pre_roll.append(pcm)
                     if probability >= self._speech_threshold:
                         speech_started = True
+                        self._notify_speech_capture_started()
                         voiced_samples = samples
                         recorded.extend(pre_roll)
                         pre_roll.clear()

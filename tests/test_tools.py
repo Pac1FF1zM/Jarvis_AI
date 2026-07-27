@@ -163,7 +163,7 @@ def test_running_discord_is_activated_without_secondary_instance(monkeypatch):
     monkeypatch.setattr(
         applications_module, "_activate_windows_process_window", lambda _name: True
     )
-    monkeypatch.setattr(applications_module.os, "startfile", opened.append)
+    monkeypatch.setattr(applications_module, "_open_windows_uri_detached", opened.append)
     discord = resolve_application("дискорд")
 
     assert discord is not None
@@ -174,20 +174,40 @@ def test_running_discord_is_activated_without_secondary_instance(monkeypatch):
 
 def test_cold_discord_launch_waits_for_visible_window(monkeypatch):
     opened: list[str] = []
-    activation_results = iter((False, False, True))
+    sleeps: list[float] = []
+    activation_results = iter((False, False, True, True))
     monkeypatch.setattr(
         applications_module,
         "_activate_windows_process_window",
         lambda _name: next(activation_results),
     )
-    monkeypatch.setattr(applications_module.os, "startfile", opened.append)
-    monkeypatch.setattr(applications_module.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(applications_module, "_open_windows_uri_detached", opened.append)
+    monkeypatch.setattr(applications_module.time, "sleep", sleeps.append)
     discord = resolve_application("discord")
 
     assert discord is not None
     applications_module.launch_application(discord)
 
     assert opened == ["discord://"]
+    assert applications_module._DISCORD_COLD_START_SETTLE_SECONDS in sleeps
+
+
+def test_discord_uri_launch_does_not_inherit_jarvis_console(monkeypatch):
+    calls: list[tuple[list[str], dict]] = []
+
+    def fake_popen(command, **kwargs):
+        calls.append((command, kwargs))
+        return object()
+
+    monkeypatch.setattr(applications_module.subprocess, "Popen", fake_popen)
+
+    applications_module._open_windows_uri_detached("discord://")
+
+    command, kwargs = calls[0]
+    assert command == ["explorer.exe", "discord://"]
+    assert kwargs["stdin"] is applications_module.subprocess.DEVNULL
+    assert kwargs["stdout"] is applications_module.subprocess.DEVNULL
+    assert kwargs["stderr"] is applications_module.subprocess.DEVNULL
 
 
 def test_browser_uses_windows_default_https_handler(monkeypatch):
@@ -214,6 +234,7 @@ def test_browser_uses_windows_default_https_handler(monkeypatch):
         ("пейнт", "paint"),
         ("дисорд", "discord"),
         ("дискод", "discord"),
+        ("дискорти", "discord"),
     ],
 )
 def test_allowlist_resolves_common_russian_whisper_variants(heard, expected):
