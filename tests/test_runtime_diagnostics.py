@@ -216,6 +216,12 @@ def test_invalid_runtime_config_is_reported_before_module_start(tmp_path):
     runner.config.modules["tts"].params.update(
         {"language": "ru", "speaker": "unknown", "sample_rate": 44100}
     )
+    runner.config.modules["wake_word"].params.update(
+        {
+            "active_session_timeout_seconds": 0,
+            "wake_phrase_vad_threshold": 2,
+        }
+    )
 
     report = runner.run()
     check = next(item for item in report.checks if item.check_id == "config.values")
@@ -225,6 +231,8 @@ def test_invalid_runtime_config_is_reported_before_module_start(tmp_path):
     assert "device='cdua'" in check.detail
     assert "speaker='unknown'" in check.detail
     assert "sample_rate=44100" in check.detail
+    assert "active_session_timeout_seconds" in check.detail
+    assert "wake_phrase_vad_threshold" in check.detail
 
 
 def test_wrong_yaml_value_types_do_not_crash_doctor(tmp_path):

@@ -10,6 +10,7 @@ import pytest
 
 from core.config_loader import ModuleConfig
 from core.event_bus import EventBus, Event
+from core.orchestrator import Orchestrator, State
 from core.profile_manager import device_fingerprint
 import modules.wake_word as wake_mod
 from modules.wake_word import WakeWordModule
@@ -337,8 +338,194 @@ async def test_wake_word_subscribes_to_all_trace_termination_cleanup(bus: EventB
 
     assert set(bus._subscribers) == {
         "interaction_cancelled",
+        "interaction_completed",
         "interaction_failed",
         "speech_started",
         "speech_finished",
     }
     assert bus._subscribers["interaction_failed"] == [mod._on_interaction_failed]
+
+
+async def test_successful_voice_turn_opens_bounded_active_session(
+    bus: EventBus, monkeypatch
+):
+    mod = WakeWordModule(
+        _config(active_session_enabled=True, active_session_timeout_seconds=0.1),
+        force_simulated=True,
+    )
+    await mod.start(bus)
+    mod.real_activation_enabled = True
+    mod._trace_sources["first-turn"] = "push_to_talk"
+    monkeypatch.setattr(
+        mod,
+        "_record_microphone_sync",
+        lambda timeout_ms=None: wake_mod._CaptureResult(
+            pcm=b"\x01\x00" * 512,
+            duration_ms=32,
+            end_reason="vad_silence",
+        ),
+    )
+    events: list[Event] = []
+    audio_ready = asyncio.Event()
+
+    async def record(event: Event) -> None:
+        events.append(event)
+        if event.event_type == "audio_captured":
+            audio_ready.set()
+
+    bus.subscribe("wake_word_detected", record)
+    bus.subscribe("audio_captured", record)
+    runner = asyncio.create_task(bus.run())
+    bus.publish(
+        "interaction_completed",
+        {"state": "IDLE", "ok": True},
+        trace_id="first-turn",
+    )
+
+    await asyncio.wait_for(audio_ready.wait(), timeout=1.0)
+    await mod.stop()
+    await bus.stop()
+    await runner
+
+    assert [event.event_type for event in events] == [
+        "wake_word_detected",
+        "audio_captured",
+    ]
+    assert events[0].payload["source"] == "active_session"
+    assert events[1].trace_id == events[0].trace_id
+
+
+async def test_active_session_silence_returns_to_sleep_without_audio(
+    bus: EventBus, monkeypatch
+):
+    mod = WakeWordModule(
+        _config(active_session_enabled=True, active_session_timeout_seconds=0.1),
+        force_simulated=True,
+    )
+    await mod.start(bus)
+    mod.real_activation_enabled = True
+    mod._trace_sources["first-turn"] = "wake_phrase"
+    monkeypatch.setattr(mod, "_record_microphone_sync", lambda timeout_ms=None: None)
+    events: list[Event] = []
+    cancelled = asyncio.Event()
+
+    async def record(event: Event) -> None:
+        events.append(event)
+        if event.event_type == "cancel_requested":
+            cancelled.set()
+
+    bus.subscribe("wake_word_detected", record)
+    bus.subscribe("audio_captured", record)
+    bus.subscribe("cancel_requested", record)
+    runner = asyncio.create_task(bus.run())
+    bus.publish(
+        "interaction_completed",
+        {"state": "IDLE", "ok": True},
+        trace_id="first-turn",
+    )
+
+    await asyncio.wait_for(cancelled.wait(), timeout=1.0)
+    await mod.stop()
+    await bus.stop()
+    await runner
+
+    assert [event.event_type for event in events] == [
+        "wake_word_detected",
+        "cancel_requested",
+    ]
+    assert events[-1].payload["reason"] == "active_session_timeout"
+
+
+async def test_active_session_timeout_completes_cleanly_back_in_idle(
+    bus: EventBus, monkeypatch
+):
+    """The seven-second polling window is a clean session boundary, not a failure."""
+    mod = WakeWordModule(
+        _config(active_session_enabled=True, active_session_timeout_seconds=0.1),
+        force_simulated=True,
+    )
+    orchestrator = Orchestrator(
+        bus,
+        {"listening_timeout_seconds": 1, "interaction_timeout_seconds": 2},
+    )
+    await mod.start(bus)
+    await orchestrator.start()
+    mod.real_activation_enabled = True
+    mod._trace_sources["spoken-turn"] = "push_to_talk"
+    monkeypatch.setattr(mod, "_record_microphone_sync", lambda timeout_ms=None: None)
+    completed: asyncio.Queue[Event] = asyncio.Queue()
+    bus.subscribe("interaction_completed", completed.put)
+    runner = asyncio.create_task(bus.run())
+
+    orchestrator.state = State.SPEAKING
+    orchestrator._current_trace = "spoken-turn"
+    bus.publish("speech_finished", {"text": "Готово."}, trace_id="spoken-turn")
+
+    first = await asyncio.wait_for(completed.get(), timeout=1.0)
+    second = await asyncio.wait_for(completed.get(), timeout=1.0)
+    await mod.stop()
+    await bus.stop()
+    await runner
+    await orchestrator.stop()
+
+    assert first.trace_id == "spoken-turn"
+    assert first.payload["ok"] is True
+    assert second.trace_id != first.trace_id
+    assert second.payload["cancelled"] is True
+    assert second.payload["reason"] == "active_session_timeout"
+    assert orchestrator.state == State.IDLE
+    assert orchestrator._current_trace is None
+
+
+async def test_detected_wake_phrase_enters_real_microphone_capture(
+    bus: EventBus, monkeypatch
+):
+    mod = WakeWordModule(_config(), force_simulated=True)
+    await mod.start(bus)
+    mod.real_activation_enabled = True
+    detection_calls = 0
+
+    def detect_once() -> bool:
+        nonlocal detection_calls
+        detection_calls += 1
+        if detection_calls == 1:
+            return True
+        mod._shutdown_requested.set()
+        return False
+
+    monkeypatch.setattr(mod, "_listen_for_wake_sync", detect_once)
+    monkeypatch.setattr(
+        mod,
+        "_record_microphone_sync",
+        lambda timeout_ms=None: wake_mod._CaptureResult(
+            pcm=b"\x01\x00" * 512,
+            duration_ms=32,
+            end_reason="vad_silence",
+        ),
+    )
+    audio_ready = asyncio.Event()
+    events: list[Event] = []
+
+    async def record(event: Event) -> None:
+        events.append(event)
+        if event.event_type == "audio_captured":
+            mod._shutdown_requested.set()
+            audio_ready.set()
+
+    bus.subscribe("wake_word_detected", record)
+    bus.subscribe("audio_captured", record)
+    runner = asyncio.create_task(bus.run())
+    listener = asyncio.create_task(mod._wake_listener_loop())
+
+    await asyncio.wait_for(audio_ready.wait(), timeout=1.0)
+    await listener
+    await mod.stop()
+    await bus.stop()
+    await runner
+
+    assert [event.event_type for event in events] == [
+        "wake_word_detected",
+        "audio_captured",
+    ]
+    assert events[0].payload["source"] == "wake_phrase"
+    assert events[1].trace_id == events[0].trace_id

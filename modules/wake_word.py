@@ -15,6 +15,7 @@ import asyncio
 import importlib
 import logging
 import threading
+import time
 from collections import deque
 from dataclasses import dataclass
 from typing import Any
@@ -92,9 +93,16 @@ class WakeWordModule(BaseModule):
         self._input_device = params.get("input_device")
         self._wake_phrase_enabled = bool(params.get("wake_phrase_enabled", False))
         self._wake_phrase_model = str(params.get("wake_phrase_model", "hey_jarvis"))
-        self._wake_phrase_threshold = float(params.get("wake_phrase_threshold", 0.55))
-        self._wake_phrase_frames = int(params.get("wake_phrase_frames", 2))
+        self._wake_phrase_threshold = float(params.get("wake_phrase_threshold", 0.35))
+        self._wake_phrase_frames = int(params.get("wake_phrase_frames", 1))
+        self._wake_phrase_vad_threshold = float(
+            params.get("wake_phrase_vad_threshold", 0.3)
+        )
         self._wake_phrase_auto_download = bool(params.get("wake_phrase_auto_download", True))
+        self._active_session_enabled = bool(params.get("active_session_enabled", True))
+        self._active_session_timeout_ms = round(
+            float(params.get("active_session_timeout_seconds", 7.0)) * 1000
+        )
         self._calibrations = params.get("voice_calibrations") or {}
         legacy_calibration = params.get("voice_calibration") or {}
         if legacy_calibration and not self._calibrations:
@@ -126,7 +134,9 @@ class WakeWordModule(BaseModule):
         self._wake_listener_pause = threading.Event()
         self._shutdown_requested = threading.Event()
         self._active_trace_id: str | None = None
+        self._trace_sources: dict[str, str] = {}
         self.real_activation_enabled = False
+        self.wake_phrase_activation_enabled = False
 
     def _validate_settings(self) -> None:
         if not 0.0 < self._speech_threshold < 1.0:
@@ -145,11 +155,16 @@ class WakeWordModule(BaseModule):
             raise ValueError("wake_phrase_threshold must be between 0 and 1")
         if self._wake_phrase_frames < 1:
             raise ValueError("wake_phrase_frames must be positive")
+        if not 0.0 <= self._wake_phrase_vad_threshold < 1.0:
+            raise ValueError("wake_phrase_vad_threshold must be between 0 and 1")
+        if self._active_session_timeout_ms <= 0:
+            raise ValueError("active_session_timeout_seconds must be positive")
 
     async def start(self, bus: EventBus) -> None:
         self.bus = bus
         bus.subscribe("interaction_cancelled", self._on_interaction_failed)
         bus.subscribe("interaction_failed", self._on_interaction_failed)
+        bus.subscribe("interaction_completed", self._on_interaction_completed)
         bus.subscribe("speech_started", self._on_speech_started)
         bus.subscribe("speech_finished", self._on_speech_finished)
         self._loop = asyncio.get_running_loop()
@@ -201,6 +216,7 @@ class WakeWordModule(BaseModule):
                 )
             if self._wake_model is not None:
                 self._wake_listener_task = asyncio.create_task(self._wake_listener_loop())
+                self.wake_phrase_activation_enabled = True
         logger.info(
             "WakeWordModule started mode=%s hotkey=%s sample_rate=%d calibration=%s",
             "wake-phrase+push-to-talk" if self._wake_model is not None else "push-to-talk",
@@ -255,6 +271,7 @@ class WakeWordModule(BaseModule):
 
     async def stop(self) -> None:
         self.real_activation_enabled = False
+        self.wake_phrase_activation_enabled = False
         self._shutdown_requested.set()
         self._wake_listener_pause.set()
         self._stop_capture.set()
@@ -274,6 +291,7 @@ class WakeWordModule(BaseModule):
             await asyncio.gather(listener_task, return_exceptions=True)
         self._wake_listener_task = None
         self._wake_model = None
+        self._trace_sources.clear()
         self._vad_model = None
         self._sounddevice = None
         logger.info("WakeWordModule stopped")
@@ -291,7 +309,11 @@ class WakeWordModule(BaseModule):
     def _schedule_activation(self) -> None:
         if not self.real_activation_enabled:
             return
-        if self._activation_task is not None and not self._activation_task.done():
+        if (
+            self._capture_lock.locked()
+            or self._activation_task is not None
+            and not self._activation_task.done()
+        ):
             logger.info("HOTKEY_IGNORED capture already active")
             return
         self._wake_listener_pause.set()
@@ -306,10 +328,26 @@ class WakeWordModule(BaseModule):
         except Exception:  # noqa: BLE001 - callback must consume task failure
             logger.exception("push-to-talk activation task failed")
         finally:
-            if not self._shutdown_requested.is_set():
-                self._wake_listener_pause.clear()
+            # Keep the always-on listener paused through STT, tool execution
+            # and TTS. The trace completion handler either opens the bounded
+            # follow-up window or returns to wake-only sleep mode.
+            self._resume_wake_listener_if_idle()
 
-    async def activate(self, *, source: str = "push_to_talk") -> Event | None:
+    def _resume_wake_listener_if_idle(self) -> None:
+        """Resume wake-only listening when no voice trace or capture owns input."""
+        if (
+            not self._shutdown_requested.is_set()
+            and not self._capture_lock.locked()
+            and not self._trace_sources
+        ):
+            self._wake_listener_pause.clear()
+
+    async def activate(
+        self,
+        *,
+        source: str = "push_to_talk",
+        speech_start_timeout_ms: int | None = None,
+    ) -> Event | None:
         """Handle one real hotkey activation and publish captured PCM."""
         if self.bus is None:
             raise RuntimeError("WakeWordModule.start() must be called first")
@@ -323,9 +361,12 @@ class WakeWordModule(BaseModule):
             wake_event = self.bus.publish(
                 "wake_word_detected", {"source": source}
             )
+            self._trace_sources[wake_event.trace_id] = source
             self._active_trace_id = wake_event.trace_id
             try:
-                result = await asyncio.to_thread(self._record_microphone_sync)
+                result = await asyncio.to_thread(
+                    self._record_microphone_sync, speech_start_timeout_ms
+                )
             except Exception as exc:  # noqa: BLE001 - PortAudio errors vary
                 logger.error(
                     "MICROPHONE_CAPTURE_FAILED: %s. Check the default input "
@@ -333,13 +374,33 @@ class WakeWordModule(BaseModule):
                     exc,
                     exc_info=True,
                 )
+                self.bus.publish(
+                    "cancel_requested",
+                    {
+                        "reason": "microphone_capture_failed",
+                        "target_trace_id": wake_event.trace_id,
+                    },
+                    trace_id=wake_event.trace_id,
+                )
                 return wake_event
             finally:
                 self._active_trace_id = None
             if result is None:
                 logger.warning(
-                    "MICROPHONE_EMPTY no speech detected within %.1fs; returning to waiting",
-                    self._speech_start_timeout_ms / 1000,
+                    "MICROPHONE_EMPTY source=%s no speech detected within %.1fs; "
+                    "returning to sleep mode",
+                    source,
+                    (speech_start_timeout_ms or self._speech_start_timeout_ms) / 1000,
+                )
+                self.bus.publish(
+                    "cancel_requested",
+                    {
+                        "reason": "active_session_timeout"
+                        if source == "active_session"
+                        else "no_speech",
+                        "target_trace_id": wake_event.trace_id,
+                    },
+                    trace_id=wake_event.trace_id,
                 )
                 return wake_event
             audio_event = wake_event.child(
@@ -369,8 +430,42 @@ class WakeWordModule(BaseModule):
     async def _on_interaction_failed(self, event: Event) -> None:
         if self._active_trace_id == event.trace_id:
             self._stop_capture.set()
-        if not self._shutdown_requested.is_set() and self._active_trace_id is None:
-            self._wake_listener_pause.clear()
+
+    async def _on_interaction_completed(self, event: Event) -> None:
+        """Keep a successful voice conversation open for one bounded next turn."""
+        source = self._trace_sources.pop(event.trace_id, None)
+        if self._shutdown_requested.is_set():
+            return
+        if source is None:
+            # Reminder notifications have no microphone activation source but
+            # still pause wake detection while their TTS is playing.
+            self._resume_wake_listener_if_idle()
+            return
+        if event.payload.get("ok", True) is False or event.payload.get("cancelled"):
+            logger.info(
+                "ACTIVE_SESSION_CLOSED reason=%s",
+                event.payload.get("reason", "interaction_failed"),
+            )
+            self._resume_wake_listener_if_idle()
+            return
+        if not self._active_session_enabled or not self.real_activation_enabled:
+            self._resume_wake_listener_if_idle()
+            return
+        if self._activation_task is not None and not self._activation_task.done():
+            logger.info("ACTIVE_SESSION_SKIPPED capture already active")
+            return
+        self._wake_listener_pause.set()
+        logger.info(
+            "ACTIVE_SESSION_LISTENING timeout=%.1fs",
+            self._active_session_timeout_ms / 1000,
+        )
+        self._activation_task = asyncio.create_task(
+            self.activate(
+                source="active_session",
+                speech_start_timeout_ms=self._active_session_timeout_ms,
+            )
+        )
+        self._activation_task.add_done_callback(self._activation_finished)
 
     async def _on_speech_started(self, event: Event) -> None:
         # Without acoustic echo cancellation the assistant's own speaker can
@@ -378,15 +473,21 @@ class WakeWordModule(BaseModule):
         self._wake_listener_pause.set()
 
     async def _on_speech_finished(self, event: Event) -> None:
-        if not self._shutdown_requested.is_set():
-            self._wake_listener_pause.clear()
+        # Orchestrator publishes interaction_completed immediately after this
+        # event. Keeping the listener paused closes the race where the wake
+        # model could reopen the microphone between playback and follow-up.
+        return
 
-    def _record_microphone_sync(self) -> _CaptureResult | None:
+    def _record_microphone_sync(
+        self, speech_start_timeout_ms: int | None = None
+    ) -> _CaptureResult | None:
         """Record and run streaming VAD; called only in a worker thread."""
         with self._microphone_lock:
-            return self._record_microphone_unlocked()
+            return self._record_microphone_unlocked(speech_start_timeout_ms)
 
-    def _record_microphone_unlocked(self) -> _CaptureResult | None:
+    def _record_microphone_unlocked(
+        self, speech_start_timeout_ms: int | None = None
+    ) -> _CaptureResult | None:
         sd = self._sounddevice
         model = self._vad_model
         if sd is None or model is None:
@@ -407,7 +508,9 @@ class WakeWordModule(BaseModule):
         silent_samples = 0
         total_samples = 0
         max_samples = self._max_duration_ms * self._sample_rate // 1000
-        start_timeout_samples = self._speech_start_timeout_ms * self._sample_rate // 1000
+        start_timeout_samples = (
+            speech_start_timeout_ms or self._speech_start_timeout_ms
+        ) * self._sample_rate // 1000
         min_speech_samples = self._min_speech_ms * self._sample_rate // 1000
         end_silence_samples = self._end_silence_ms * self._sample_rate // 1000
         end_reason = "max_duration"
@@ -486,6 +589,7 @@ class WakeWordModule(BaseModule):
         return model_class(
             wakeword_models=[self._wake_phrase_model],
             inference_framework="onnx",
+            vad_threshold=self._wake_phrase_vad_threshold,
         )
 
     async def _wake_listener_loop(self) -> None:
@@ -528,6 +632,7 @@ class WakeWordModule(BaseModule):
         if self._input_device is not None:
             stream_kwargs["device"] = self._input_device
         consecutive = 0
+        last_candidate_log = 0.0
         reset = getattr(model, "reset", None)
         if callable(reset):
             reset()
@@ -537,8 +642,19 @@ class WakeWordModule(BaseModule):
                     block, overflowed = stream.read(1280)
                     if overflowed:
                         logger.debug("wake phrase input overflow")
-                    scores = model.predict(np.asarray(block).reshape(-1).astype(np.int16, copy=False))
+                    samples = np.asarray(block).reshape(-1).astype(np.int16, copy=False)
+                    scores = model.predict(samples)
                     score = max((float(value) for value in scores.values()), default=0.0)
+                    now = time.monotonic()
+                    rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
+                    if rms >= 250.0 and now - last_candidate_log >= 5.0:
+                        logger.info(
+                            "WAKE_PHRASE_CANDIDATE score=%.3f threshold=%.3f rms=%.0f",
+                            score,
+                            self._wake_phrase_threshold,
+                            rms,
+                        )
+                        last_candidate_log = now
                     consecutive = consecutive + 1 if score >= self._wake_phrase_threshold else 0
                     if consecutive >= self._wake_phrase_frames:
                         return True

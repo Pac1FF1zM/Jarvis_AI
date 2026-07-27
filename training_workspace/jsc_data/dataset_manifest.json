@@ -27,17 +27,17 @@
       "examples": 210,
       "families": 113,
       "file": "evaluation_holdout.jsonl",
-      "sha256": "8969c1bc2fde0296b3ac63580cfc91d993967e5ca6bac80380e150e3534bf2e8",
+      "sha256": "d7c82a83e4a215906c6bfbd98c2eb72cac55e1f208ad42186bef70ced2d7e0c1",
       "tools": {
         "browser_control": 20,
-        "cancel_reminder": 16,
-        "file_control": 9,
-        "get_current_time": 2,
-        "list_applications": 1,
+        "cancel_reminder": 12,
+        "file_control": 13,
+        "get_current_time": 4,
+        "list_applications": 2,
         "open_application": 41,
-        "set_reminder": 65,
-        "system_control": 14,
-        "window_control": 16
+        "set_reminder": 66,
+        "system_control": 11,
+        "window_control": 15
       }
     },
     "test": {
@@ -45,8 +45,8 @@
         "ask": 8,
         "cancel": 5,
         "confirm": 3,
-        "dialogue": 28,
-        "execute": 221,
+        "dialogue": 29,
+        "execute": 220,
         "reject": 25
       },
       "categories": {
@@ -59,20 +59,20 @@
         "single": 130
       },
       "examples": 290,
-      "families": 140,
+      "families": 141,
       "file": "test.jsonl",
-      "sha256": "0e857bb570d422a27c56715c44baa420cda33df1dd3c0b7ff9eec8a6c4d93419",
+      "sha256": "a2040ccb1dd17c6e8cd682b8380c7b2892c8303d179e2a591b4b1cb7e723c6ff",
       "tools": {
-        "browser_control": 21,
-        "cancel_reminder": 24,
-        "file_control": 20,
-        "get_current_time": 1,
+        "browser_control": 25,
+        "cancel_reminder": 27,
+        "file_control": 19,
+        "get_current_time": 2,
         "list_applications": 2,
         "list_reminders": 2,
-        "open_application": 58,
-        "set_reminder": 87,
-        "system_control": 20,
-        "window_control": 22
+        "open_application": 51,
+        "set_reminder": 83,
+        "system_control": 17,
+        "window_control": 28
       }
     },
     "train": {
@@ -94,20 +94,20 @@
         "single": 650
       },
       "examples": 1400,
-      "families": 294,
+      "families": 301,
       "file": "train.jsonl",
-      "sha256": "b7cf3f2cac5f155bbb1f266fc29631744b0984edd3c1d0dcd39a4bbd44f5e3e1",
+      "sha256": "5cf1c764a2fbaf0dc405fe4069651198827f1bed34316ffc3d170c5be6a91582",
       "tools": {
-        "browser_control": 40,
-        "cancel_reminder": 62,
-        "file_control": 34,
+        "browser_control": 42,
+        "cancel_reminder": 63,
+        "file_control": 42,
         "get_current_time": 4,
-        "list_applications": 3,
-        "list_reminders": 3,
-        "open_application": 198,
-        "set_reminder": 844,
-        "system_control": 28,
-        "window_control": 46
+        "list_applications": 4,
+        "list_reminders": 4,
+        "open_application": 199,
+        "set_reminder": 828,
+        "system_control": 26,
+        "window_control": 50
       }
     },
     "validation": {
@@ -129,23 +129,24 @@
         "single": 130
       },
       "examples": 290,
-      "families": 132,
+      "families": 142,
       "file": "validation.jsonl",
-      "sha256": "dd8bcc2940a112d9efc7f384521ba731ebb3ac7d3f33b56c028ce4a4654ca016",
+      "sha256": "de31d9013ac53f9ecb6ecae8c4311516da49e6da630351f8f96bbcfa150bd080",
       "tools": {
-        "browser_control": 21,
-        "cancel_reminder": 23,
-        "file_control": 17,
-        "get_current_time": 2,
+        "browser_control": 23,
+        "cancel_reminder": 26,
+        "file_control": 15,
+        "get_current_time": 3,
         "list_applications": 2,
-        "open_application": 55,
-        "set_reminder": 92,
-        "system_control": 18,
-        "window_control": 25
+        "list_reminders": 2,
+        "open_application": 53,
+        "set_reminder": 87,
+        "system_control": 17,
+        "window_control": 27
       }
     }
   },
   "synthetic_holdout": true,
-  "tool_schema_sha256": "7d78d6662b3df226393557b1ef485d66a1db2ed4baddae36df2d53011c548840",
+  "tool_schema_sha256": "2d63859f182aa7ae3847c09520b1926d2ade206d641cc129397cd9362e2f22a6",
   "version": 3
 }

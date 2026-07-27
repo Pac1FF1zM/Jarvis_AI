@@ -4,7 +4,7 @@
 # (fields: enabled, device, compute_type, model, params).
 
 orchestrator:
-  listening_timeout_seconds: 8   # revert LISTENING -> IDLE if nothing happens
+  listening_timeout_seconds: 10  # bounds initial and active-session listening
   interaction_timeout_seconds: 60 # hard failure guard; completion is event-driven
 
 modules:
@@ -15,9 +15,16 @@ modules:
     params:
       wake_phrase_enabled: true
       wake_phrase_model: hey_jarvis
-      wake_phrase_threshold: 0.55
-      wake_phrase_frames: 2
+      # Balanced for laptop microphone arrays. Candidate scores are logged so
+      # this can be tuned per microphone without guessing.
+      wake_phrase_threshold: 0.35
+      wake_phrase_frames: 1
+      wake_phrase_vad_threshold: 0.3
       wake_phrase_auto_download: true
+      # After every successful voice turn, listen for another command without
+      # requiring the wake phrase again. Silence returns Jarvis to sleep mode.
+      active_session_enabled: true
+      active_session_timeout_seconds: 7
       hotkey: "<ctrl>+<alt>+<space>"
 
   # Official OpenAI Whisper (no Hugging Face dependency or endpoint).

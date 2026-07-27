@@ -14,7 +14,6 @@ TOOL_SCHEMA: dict[str, Any] = {
         "properties": {
             "action": {"type": "string", "enum": ["list", "switch", "minimize", "maximize", "restore", "close"]},
             "window": {"type": "string"},
-            "confirmed": {"type": "boolean"},
         },
         "required": ["action"],
     },
@@ -33,17 +32,9 @@ async def execute(params: dict[str, Any]) -> dict[str, Any]:
     query = str(params.get("window", "")).strip()
     if not query:
         return {"ok": False, "error": "missing_window", "response_text": "Назовите окно."}
-    if action == "close" and not params.get("confirmed"):
-        return {
-            "ok": False,
-            "confirmation_required": True,
-            "confirmation": {"tool": "window_control", "params": {"action": action, "window": query, "confirmed": True}},
-            "response_text": f"Закрыть окно «{query}»? Скажите «подтверждаю» или «отмена».",
-        }
     try:
         window = await asyncio.to_thread(control_window, action, query)
     except (OSError, ValueError) as exc:
         return {"ok": False, "error": "window_error", "response_text": str(exc)}
     verbs = {"switch": "Переключаюсь на", "minimize": "Сворачиваю", "maximize": "Разворачиваю", "restore": "Восстанавливаю", "close": "Закрываю"}
     return {"ok": True, "window": window.title, "response_text": f"{verbs[action]} {window.title}."}
-

@@ -133,7 +133,7 @@ async def test_compound_plan_stops_after_failure_without_later_side_effects():
     assert calls == ["failure"]
 
 
-async def test_dangerous_action_requires_a_separate_confirmation_turn():
+async def test_dangerous_system_action_requires_a_separate_confirmation_turn():
     bus = EventBus()
     registry = ToolRegistry()
     confirmed_values: list[bool] = []
@@ -142,11 +142,11 @@ async def test_dangerous_action_requires_a_separate_confirmation_turn():
         confirmed = bool(params.get("confirmed"))
         confirmed_values.append(confirmed)
         if not confirmed:
-            return {"ok": False, "confirmation_required": True, "confirmation": {"tool": "window_control", "params": {"action": "close", "window": "Документ", "confirmed": True}}, "response_text": "Подтвердите закрытие."}
-        return {"ok": True, "response_text": "Окно закрыто."}
+            return {"ok": False, "confirmation_required": True, "confirmation": {"tool": "system_control", "params": {"action": "lock", "confirmed": True}}, "response_text": "Подтвердите блокировку."}
+        return {"ok": True, "response_text": "Компьютер заблокирован."}
 
-    registry._schemas["window_control"] = {"name": "window_control"}
-    registry._executors["window_control"] = guarded
+    registry._schemas["system_control"] = {"name": "system_control"}
+    registry._executors["system_control"] = guarded
     module = LLMModule(ModuleConfig(params={"input_event": "nlu_result"}), GPULock(), registry, ShortTermMemory(4))
     responses: list[Event] = []
 
@@ -156,7 +156,7 @@ async def test_dangerous_action_requires_a_separate_confirmation_turn():
     bus.subscribe("response_ready", record)
     await module.start(bus)
     runner = asyncio.create_task(bus.run())
-    bus.publish("nlu_result", {"text": "закрой документ", "intent": "window_control", "slots": {"action": "close", "window": "Документ"}}, trace_id="ask")
+    bus.publish("nlu_result", {"text": "заблокируй компьютер", "intent": "system_control", "slots": {"action": "lock"}}, trace_id="ask")
     await asyncio.sleep(0.05)
     assert confirmed_values == [False]
     assert module._pending_confirmation is not None
@@ -167,7 +167,31 @@ async def test_dangerous_action_requires_a_separate_confirmation_turn():
     await module.stop()
 
     assert confirmed_values == [False, True]
-    assert [event.payload["text"] for event in responses] == ["Подтвердите закрытие.", "Окно закрыто."]
+    assert [event.payload["text"] for event in responses] == ["Подтвердите блокировку.", "Компьютер заблокирован."]
+
+
+async def test_closing_regular_window_needs_no_jarvis_confirmation(monkeypatch):
+    from tools import window_control
+    from tools._windows import WindowInfo
+
+    closed: list[tuple[str, str]] = []
+
+    def fake_control(action: str, query: str) -> WindowInfo:
+        closed.append((action, query))
+        return WindowInfo(
+            handle=123,
+            title="Telegram",
+            process_id=456,
+            executable="Telegram.exe",
+        )
+
+    monkeypatch.setattr(window_control, "control_window", fake_control)
+
+    result = await window_control.execute({"action": "close", "window": "Telegram"})
+
+    assert result["ok"] is True
+    assert "confirmation_required" not in result
+    assert closed == [("close", "Telegram")]
 
 
 class _WakeStream:

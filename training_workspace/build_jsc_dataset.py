@@ -691,10 +691,10 @@ def _desktop_single_candidates(split: str) -> list[Candidate]:
         candidates.append(Candidate("single", f"{split}.single.setting_{setting}_polite", f"пожалуйста {setting_text}", _execute("system_control", action="open_settings", setting=setting)))
 
     window_frames = {
-        "train": (("переключись на {value}", "switch"), ("сверни {value}", "minimize"), ("разверни {value}", "maximize"), ("восстанови окно {value}", "restore")),
-        "validation": (("покажи окно {value}", "switch"), ("убери с экрана {value}", "minimize"), ("раскрой на весь экран {value}", "maximize"), ("верни окно {value}", "restore")),
-        "test": (("перейди в окно {value}", "switch"), ("минимизируй {value}", "minimize"), ("максимизируй {value}", "maximize"), ("подними окно {value}", "restore")),
-        "evaluation_holdout": (("выведи вперёд {value}", "switch"), ("спрячь окно {value}", "minimize"), ("растяни окно {value}", "maximize"), ("возврати видимость {value}", "restore")),
+        "train": (("переключись на {value}", "switch"), ("сверни {value}", "minimize"), ("разверни {value}", "maximize"), ("восстанови окно {value}", "restore"), ("закрой окно {value}", "close")),
+        "validation": (("покажи окно {value}", "switch"), ("убери с экрана {value}", "minimize"), ("раскрой на весь экран {value}", "maximize"), ("верни окно {value}", "restore"), ("заверши окно {value}", "close")),
+        "test": (("перейди в окно {value}", "switch"), ("минимизируй {value}", "minimize"), ("максимизируй {value}", "maximize"), ("подними окно {value}", "restore"), ("закрой приложение с окном {value}", "close")),
+        "evaluation_holdout": (("выведи вперёд {value}", "switch"), ("спрячь окно {value}", "minimize"), ("растяни окно {value}", "maximize"), ("возврати видимость {value}", "restore"), ("заверши работу окна {value}", "close")),
     }[split]
     for template, action in window_frames:
         for window in values["windows"]:
@@ -864,34 +864,34 @@ def _multi_turn_candidates(split: str) -> list[Candidate]:
         )
     confirmation_frames = {
         "train": {
-            "close": "закрой окно {value}", "close_question": "Закрыть окно {value}?",
-            "close_answer": "да подтверждаю закрытие", "delete": "удали файл {value}",
+            "window_request": "закрой окно", "window_question": "Какое окно закрыть?",
+            "delete": "удали файл {value}", "delete_alt": "перемести файл {value} в корзину",
             "delete_question": "Переместить {value} в корзину?", "delete_answer": "подтверждаю удаление",
         },
         "validation": {
-            "close": "заверши окно {value}", "close_question": "Вы уверены, что нужно закрыть {value}?",
-            "close_answer": "да закрывай", "delete": "убери документ {value}",
+            "window_request": "заверши одно окно", "window_question": "Назовите нужное окно.",
+            "delete": "убери документ {value}", "delete_alt": "отправь документ {value} в корзину",
             "delete_question": "Подтвердите отправку {value} в корзину.", "delete_answer": "согласен отправляй в корзину",
         },
         "test": {
-            "close": "закрой приложение с окном {value}", "close_question": "Подтвердить закрытие окна {value}?",
-            "close_answer": "подтверждаю это действие", "delete": "перемести в корзину файл {value}",
+            "window_request": "закрой приложение", "window_question": "Какое приложение нужно закрыть?",
+            "delete": "перемести в корзину файл {value}", "delete_alt": "удали с компьютера файл {value}",
             "delete_question": "Действительно удалить {value}?", "delete_answer": "да перемещай",
         },
         "evaluation_holdout": {
-            "close": "заверши работу окна {value}", "close_question": "Разрешаете закрыть {value}?",
-            "close_answer": "разрешаю закрытие", "delete": "отправь в корзину документ {value}",
+            "window_request": "закрой активную программу", "window_question": "Уточните название окна.",
+            "delete": "отправь в корзину документ {value}", "delete_alt": "сотри документ {value}",
             "delete_question": "Разрешаете убрать {value}?", "delete_answer": "разрешаю удалить",
         },
     }[split]
+    window_pending = JALPlan(
+        DialogueAct.ASK,
+        steps=(ToolCall("window_control", {"action": "close"}),),
+        missing=(MissingSlot(0, "window"),),
+        reason="missing_window",
+    )
     for window in DESKTOP_VALUES[split]["windows"]:
-        pending = JALPlan(
-            DialogueAct.CONFIRM,
-            steps=(ToolCall("window_control", {"action": "close", "window": window}),),
-            reason="user_confirmation",
-        )
-        candidates.append(Candidate("multi_turn", f"{split}.multi.window_close_confirm", confirmation_frames["close"].format(value=window), pending, metadata={"turn": "confirmation_request"}))
-        candidates.append(Candidate("multi_turn", f"{split}.multi.window_close_execute", confirmation_frames["close_answer"], _execute("window_control", action="close", window=window, confirmed=True), history=(("user", confirmation_frames["close"].format(value=window)), ("jarvis", confirmation_frames["close_question"].format(value=window))), state=pending, metadata={"turn": "confirmation_answer"}))
+        candidates.append(Candidate("multi_turn", f"{split}.multi.window_close_fill", window, _execute("window_control", action="close", window=window), history=(("user", confirmation_frames["window_request"]), ("jarvis", confirmation_frames["window_question"])), state=window_pending, metadata={"turn": "slot_fill"}))
     for file_name in DESKTOP_VALUES[split]["files"]:
         path = f"документы/{file_name}.txt"
         pending = JALPlan(
@@ -899,8 +899,10 @@ def _multi_turn_candidates(split: str) -> list[Candidate]:
             steps=(ToolCall("file_control", {"action": "delete", "path": path}),),
             reason="user_confirmation",
         )
-        candidates.append(Candidate("multi_turn", f"{split}.multi.file_delete_confirm", confirmation_frames["delete"].format(value=path), pending, metadata={"turn": "confirmation_request"}))
-        candidates.append(Candidate("multi_turn", f"{split}.multi.file_delete_execute", confirmation_frames["delete_answer"], _execute("file_control", action="delete", path=path, confirmed=True), history=(("user", confirmation_frames["delete"].format(value=path)), ("jarvis", confirmation_frames["delete_question"].format(value=path))), state=pending, metadata={"turn": "confirmation_answer"}))
+        for request_key in ("delete", "delete_alt"):
+            request = confirmation_frames[request_key].format(value=path)
+            candidates.append(Candidate("multi_turn", f"{split}.multi.file_delete_confirm_{request_key}", request, pending, metadata={"turn": "confirmation_request"}))
+            candidates.append(Candidate("multi_turn", f"{split}.multi.file_delete_execute_{request_key}", confirmation_frames["delete_answer"], _execute("file_control", action="delete", path=path, confirmed=True), history=(("user", request), ("jarvis", confirmation_frames["delete_question"].format(value=path))), state=pending, metadata={"turn": "confirmation_answer"}))
     return candidates
 
 

@@ -242,10 +242,17 @@ async def run_pipeline(
         elif wake_word is not None:
             stop_requested = shutdown_event or asyncio.Event()
             if wake_word.real_activation_enabled:
-                logger.info(
-                    "=== persistent push-to-talk ready; press configured hotkey, "
-                    "Ctrl+C to stop ==="
-                )
+                if wake_word.wake_phrase_activation_enabled:
+                    logger.info(
+                        "=== sleep mode ready; say 'Hey Jarvis' or press the "
+                        "configured hotkey; active session listens for follow-up "
+                        "commands; Ctrl+C to stop ==="
+                    )
+                else:
+                    logger.info(
+                        "=== sleep mode ready; wake phrase unavailable, press "
+                        "the configured hotkey; Ctrl+C to stop ==="
+                    )
             else:
                 logger.warning(
                     "persistent mode has no real activation source; install "

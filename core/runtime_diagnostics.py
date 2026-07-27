@@ -243,17 +243,35 @@ class RuntimeDiagnosticRunner:
         if wake_word is not None and wake_word.enabled:
             wake_params = _mapping(wake_word.params)
             try:
-                wake_threshold = float(wake_params.get("wake_phrase_threshold", 0.55))
+                wake_threshold = float(wake_params.get("wake_phrase_threshold", 0.35))
                 if not 0.0 < wake_threshold < 1.0:
                     errors.append("wake_phrase_threshold должен быть между 0 и 1")
             except (TypeError, ValueError):
                 errors.append("wake_phrase_threshold должен быть числом")
             try:
-                wake_frames = int(wake_params.get("wake_phrase_frames", 2))
+                wake_frames = int(wake_params.get("wake_phrase_frames", 1))
                 if wake_frames < 1:
                     errors.append("wake_phrase_frames должен быть >= 1")
             except (TypeError, ValueError):
                 errors.append("wake_phrase_frames должен быть целым числом")
+            try:
+                wake_vad = float(
+                    wake_params.get("wake_phrase_vad_threshold", 0.3)
+                )
+                if not 0.0 <= wake_vad < 1.0:
+                    errors.append(
+                        "wake_phrase_vad_threshold должен быть между 0 и 1"
+                    )
+            except (TypeError, ValueError):
+                errors.append("wake_phrase_vad_threshold должен быть числом")
+            try:
+                active_timeout = float(
+                    wake_params.get("active_session_timeout_seconds", 7.0)
+                )
+                if active_timeout <= 0:
+                    errors.append("active_session_timeout_seconds должен быть > 0")
+            except (TypeError, ValueError):
+                errors.append("active_session_timeout_seconds должен быть числом")
 
         if errors:
             self._add(
