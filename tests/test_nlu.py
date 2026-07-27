@@ -116,7 +116,10 @@ def test_explicit_phonetic_allowlisted_app_rescues_bad_neural_intent():
         assert rescued.slots == {"application": expected}
 
 
-def test_guardrail_never_rescues_non_imperative_or_unknown_application():
+def test_guardrail_never_rescues_non_imperative_or_unknown_application(monkeypatch):
+    import tools._applications as applications
+
+    monkeypatch.setattr(applications, "discover_installed_applications", lambda: ())
     prediction = NLUResult("general_chat", 0.9, {})
     for text in (
         "расскажи про калькулятор",
@@ -124,7 +127,6 @@ def test_guardrail_never_rescues_non_imperative_or_unknown_application():
         "мне нравится дискорд",
         "не открывай браузер",
         "открой powershell",
-        "запусти steam",
     ):
         normalised = _normalise_transcription_for_nlu(text)
         assert (

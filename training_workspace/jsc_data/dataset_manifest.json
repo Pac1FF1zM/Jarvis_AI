@@ -10,8 +10,9 @@
       "acts": {
         "ask": 6,
         "cancel": 4,
-        "dialogue": 26,
-        "execute": 127,
+        "confirm": 2,
+        "dialogue": 23,
+        "execute": 158,
         "reject": 17
       },
       "categories": {
@@ -21,19 +22,31 @@
         "hard_negative": 20,
         "multi_turn": 25,
         "ood": 17,
-        "single": 65
+        "single": 95
       },
-      "examples": 180,
-      "families": 74,
+      "examples": 210,
+      "families": 113,
       "file": "evaluation_holdout.jsonl",
-      "sha256": "bb40a212e833d55de035e6d8107f56214e202d1f5a718955cb9a97a580e948bc"
+      "sha256": "8969c1bc2fde0296b3ac63580cfc91d993967e5ca6bac80380e150e3534bf2e8",
+      "tools": {
+        "browser_control": 20,
+        "cancel_reminder": 16,
+        "file_control": 9,
+        "get_current_time": 2,
+        "list_applications": 1,
+        "open_application": 41,
+        "set_reminder": 65,
+        "system_control": 14,
+        "window_control": 16
+      }
     },
     "test": {
       "acts": {
         "ask": 8,
         "cancel": 5,
-        "dialogue": 30,
-        "execute": 182,
+        "confirm": 3,
+        "dialogue": 28,
+        "execute": 221,
         "reject": 25
       },
       "categories": {
@@ -43,19 +56,32 @@
         "hard_negative": 25,
         "multi_turn": 35,
         "ood": 25,
-        "single": 90
+        "single": 130
       },
-      "examples": 250,
-      "families": 85,
+      "examples": 290,
+      "families": 140,
       "file": "test.jsonl",
-      "sha256": "a8d96ad8da2e2b43a947d60e867058d54a9723ca7498d6954e0e9f0f603c9bab"
+      "sha256": "0e857bb570d422a27c56715c44baa420cda33df1dd3c0b7ff9eec8a6c4d93419",
+      "tools": {
+        "browser_control": 21,
+        "cancel_reminder": 24,
+        "file_control": 20,
+        "get_current_time": 1,
+        "list_applications": 2,
+        "list_reminders": 2,
+        "open_application": 58,
+        "set_reminder": 87,
+        "system_control": 20,
+        "window_control": 22
+      }
     },
     "train": {
       "acts": {
         "ask": 30,
         "cancel": 20,
-        "dialogue": 136,
-        "execute": 914,
+        "confirm": 8,
+        "dialogue": 138,
+        "execute": 1104,
         "reject": 100
       },
       "categories": {
@@ -65,19 +91,32 @@
         "hard_negative": 120,
         "multi_turn": 180,
         "ood": 100,
-        "single": 450
+        "single": 650
       },
-      "examples": 1200,
-      "families": 223,
+      "examples": 1400,
+      "families": 294,
       "file": "train.jsonl",
-      "sha256": "9e2635bf21897f3c9350e3e1d0424fa7100350ef7e44600e5398615b69d2877d"
+      "sha256": "b7cf3f2cac5f155bbb1f266fc29631744b0984edd3c1d0dcd39a4bbd44f5e3e1",
+      "tools": {
+        "browser_control": 40,
+        "cancel_reminder": 62,
+        "file_control": 34,
+        "get_current_time": 4,
+        "list_applications": 3,
+        "list_reminders": 3,
+        "open_application": 198,
+        "set_reminder": 844,
+        "system_control": 28,
+        "window_control": 46
+      }
     },
     "validation": {
       "acts": {
         "ask": 8,
         "cancel": 5,
+        "confirm": 3,
         "dialogue": 30,
-        "execute": 182,
+        "execute": 219,
         "reject": 25
       },
       "categories": {
@@ -87,15 +126,26 @@
         "hard_negative": 25,
         "multi_turn": 35,
         "ood": 25,
-        "single": 90
+        "single": 130
       },
-      "examples": 250,
-      "families": 84,
+      "examples": 290,
+      "families": 132,
       "file": "validation.jsonl",
-      "sha256": "74954202f46c42e407617b0a030ad3a029670676338c22ee3a3756b5df15fa2f"
+      "sha256": "dd8bcc2940a112d9efc7f384521ba731ebb3ac7d3f33b56c028ce4a4654ca016",
+      "tools": {
+        "browser_control": 21,
+        "cancel_reminder": 23,
+        "file_control": 17,
+        "get_current_time": 2,
+        "list_applications": 2,
+        "open_application": 55,
+        "set_reminder": 92,
+        "system_control": 18,
+        "window_control": 25
+      }
     }
   },
   "synthetic_holdout": true,
-  "tool_schema_sha256": "362f8225d71847b106bc37590ca74e74f38c158d89c0393e52d35db4f5aeef42",
+  "tool_schema_sha256": "7d78d6662b3df226393557b1ef485d66a1db2ed4baddae36df2d53011c548840",
   "version": 3
 }

@@ -18,6 +18,7 @@ from core.event_bus import Event, EventBus
 from core.gpu_lock import GPULock
 from ml.nlu.inference import NLUPredictor
 from ml.nlu.schema import NLUResult
+from modules.command_router import RoutedAction, route_explicit_command, split_compound_command
 from tools._applications import resolve_application
 
 logger = logging.getLogger("jarvis.module.nlu")
@@ -180,6 +181,7 @@ class NLUModule(BaseModule):
         self._pending_transcriptions: dict[str, Event] = {}
         self._thinking_ready: set[str] = set()
         self._pending_lock = asyncio.Lock()
+        self._last_action: RoutedAction | None = None
 
     async def start(self, bus: EventBus) -> None:
         self.bus = bus
@@ -250,19 +252,19 @@ class NLUModule(BaseModule):
         assert self.bus is not None
         text = str(event.payload.get("text", "")).strip()
         normalised_text = _normalise_transcription_for_nlu(text)
-        if self._predictor is None or not text:
-            result = NLUResult("unknown", 0.0, {})
-        else:
-            try:
-                async with self.gpu_lock.section("nlu"):
-                    result = await asyncio.to_thread(
-                        self._predictor.predict, normalised_text
-                    )
-                result = _apply_runtime_command_guardrails(normalised_text, result)
-                result = _apply_reminder_guardrails(normalised_text, result)
-            except Exception:  # noqa: BLE001 - keep voice pipeline responsive
-                logger.exception("NLU inference failed; rejecting turn as unknown")
-                result = NLUResult("unknown", 0.0, {})
+        parts = split_compound_command(normalised_text)
+        actions: list[RoutedAction] = []
+        try:
+            for part in parts:
+                routed = route_explicit_command(part, previous_action=self._last_action)
+                if routed is None:
+                    routed = await self._predict_action(part)
+                actions.append(routed)
+        except Exception:  # noqa: BLE001 - keep voice pipeline responsive
+            logger.exception("NLU inference failed; rejecting turn as unknown")
+            actions = [RoutedAction("unknown", {}, 0.0)]
+        result_action = actions[0]
+        result = NLUResult(result_action.intent, result_action.confidence, result_action.slots)
 
         if normalised_text != text.casefold():
             logger.info("NLU_NORMALIZED original=%r normalized=%r", text, normalised_text)
@@ -298,8 +300,27 @@ class NLUModule(BaseModule):
                 "raw_intent": raw_intent,
                 "intent_confidence": result.confidence,
                 "slots": result.slots if accepted_intent != "unknown" else {},
+                "actions": [
+                    {
+                        **action.payload(),
+                        "raw_intent": action.intent,
+                        "intent": action.intent if action.confidence >= self._threshold else "unknown",
+                        "slots": dict(action.slots) if action.confidence >= self._threshold else {},
+                    }
+                    for action in actions
+                ] if len(actions) > 1 else [],
             },
         )
+        remembered = next(
+            (
+                action for action in reversed(actions)
+                if action.confidence >= self._threshold
+                and action.intent not in {"unknown", "general_chat", "confirm", "decline", "cancel"}
+            ),
+            None,
+        )
+        if remembered is not None:
+            self._last_action = remembered
         self.bus.publish_event(output)
         logger.info(
             "NLU_RESULT trace=%s intent=%s raw=%s conf=%.3f slots=%s",
@@ -309,3 +330,12 @@ class NLUModule(BaseModule):
             result.confidence,
             output.payload["slots"],
         )
+
+    async def _predict_action(self, text: str) -> RoutedAction:
+        if self._predictor is None or not text:
+            return RoutedAction("unknown", {}, 0.0)
+        async with self.gpu_lock.section("nlu"):
+            result = await asyncio.to_thread(self._predictor.predict, text)
+        result = _apply_runtime_command_guardrails(text, result)
+        result = _apply_reminder_guardrails(text, result)
+        return RoutedAction(result.intent, dict(result.slots), result.confidence)

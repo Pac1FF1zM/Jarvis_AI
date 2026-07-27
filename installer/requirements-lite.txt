@@ -7,3 +7,4 @@ sounddevice==0.5.5
 pynput==1.8.2
 silero-vad[onnx-cpu]==6.2.1
 onnxruntime==1.23.2
+openwakeword==0.6.0

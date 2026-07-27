@@ -109,15 +109,14 @@ def test_mutually_exclusive_time_sources_are_rejected(schemas):
         schemas.validate(plan)
 
 
-@pytest.mark.parametrize("application", ["powershell", "cmd", "steam"])
-def test_application_enum_preserves_the_real_runtime_allowlist(schemas, application):
+@pytest.mark.parametrize("application", ["steam", "obs studio", "visual studio code"])
+def test_application_schema_allows_windows_discovered_names(schemas, application):
     plan = JALPlan(
         DialogueAct.EXECUTE,
         steps=(ToolCall("open_application", {"application": application}),),
     )
 
-    with pytest.raises(JALValidationError, match="allowed enum"):
-        schemas.validate(plan)
+    schemas.validate(plan)
 
 
 def test_unknown_tool_argument_and_missing_reference_are_rejected(schemas):

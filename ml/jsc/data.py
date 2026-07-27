@@ -156,6 +156,15 @@ def validate_jsc_splits(
             "examples": len(examples),
             "categories": dict(sorted(Counter(e.category for e in examples).items())),
             "acts": dict(sorted(Counter(e.target.act.value for e in examples).items())),
+            "tools": dict(
+                sorted(
+                    Counter(
+                        step.tool
+                        for example in examples
+                        for step in example.target.steps
+                    ).items()
+                )
+            ),
             "families": len(family_sets[split]),
         }
     names = list(report)
@@ -202,7 +211,7 @@ def _validate_category_contract(example: JSCExample, location: str) -> None:
     ):
         raise ValueError(f"{location}: compound example must execute at least two steps")
     if example.category == "multi_turn" and not (
-        example.target.act == DialogueAct.ASK
+        example.target.act in {DialogueAct.ASK, DialogueAct.CONFIRM}
         or (example.history and example.state is not None)
     ):
         raise ValueError(f"{location}: multi_turn example lacks pending dialogue context")

@@ -6,6 +6,8 @@ import re
 import subprocess
 import time
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -15,7 +17,9 @@ class ApplicationSpec:
     command: tuple[str, ...] | None = None
     url: str | None = None
     uri: str | None = None
+    path: str | None = None
     aliases: tuple[str, ...] = ()
+    discovered: bool = False
 
 
 APPLICATIONS = (
@@ -71,6 +75,16 @@ APPLICATIONS = (
     ),
 )
 
+_START_MENU_RELATIVE = Path("Microsoft/Windows/Start Menu/Programs")
+_UNSAFE_SHORTCUT_WORDS = frozenset(
+    {
+        "uninstall", "remove", "update", "updater", "repair", "setup",
+        "help", "documentation", "readme", "license", "about", "offers",
+        "updates", "website", "деинсталляция", "удалить", "обновление",
+        "обновления", "справка",
+    }
+)
+
 
 def normalise_name(value: str) -> str:
     value = value.lower().replace("ё", "е")
@@ -99,6 +113,119 @@ def _edit_distance(left: str, right: str) -> int:
     return previous[-1]
 
 
+def _safe_shortcut_name(path: Path) -> str | None:
+    """Return a user-facing Start-menu name, excluding maintenance entries."""
+    name = re.sub(r"\s+", " ", path.stem).strip()
+    if not name or name.startswith("{"):
+        return None
+    words = set(re.findall(r"[a-zа-я]+", normalise_name(name)))
+    if words & _UNSAFE_SHORTCUT_WORDS:
+        return None
+    return name
+
+
+@lru_cache(maxsize=1)
+def discover_installed_applications() -> tuple[ApplicationSpec, ...]:
+    """Discover launchable Windows applications without evaluating shell text.
+
+    Only Windows-managed registration points are trusted: Start-menu shortcut
+    files and ``App Paths`` registry entries whose executable exists.  The
+    resulting target is opened directly with ``os.startfile``; user speech is
+    never interpolated into a command line.
+    """
+    if os.name != "nt":
+        return ()
+    found: dict[str, ApplicationSpec] = {}
+    roots = []
+    for variable in ("APPDATA", "PROGRAMDATA"):
+        base = os.environ.get(variable)
+        if base:
+            roots.append(Path(base) / _START_MENU_RELATIVE)
+    for root in roots:
+        if not root.is_dir():
+            continue
+        try:
+            shortcuts = root.rglob("*")
+            for path in shortcuts:
+                if path.suffix.casefold() not in {".lnk", ".appref-ms"}:
+                    continue
+                name = _safe_shortcut_name(path)
+                if not name:
+                    continue
+                key = normalise_name(name)
+                found.setdefault(
+                    key,
+                    ApplicationSpec(
+                        name=name,
+                        display_name=name,
+                        path=str(path),
+                        aliases=(name,),
+                        discovered=True,
+                    ),
+                )
+        except OSError:
+            continue
+
+    try:
+        import winreg
+
+        registry_roots = (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE)
+        registry_views = (0, winreg.KEY_WOW64_32KEY, winreg.KEY_WOW64_64KEY)
+        base_key = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
+        for registry_root in registry_roots:
+            for view in registry_views:
+                try:
+                    with winreg.OpenKey(
+                        registry_root, base_key, 0, winreg.KEY_READ | view
+                    ) as app_paths:
+                        index = 0
+                        while True:
+                            try:
+                                subkey_name = winreg.EnumKey(app_paths, index)
+                            except OSError:
+                                break
+                            index += 1
+                            try:
+                                with winreg.OpenKey(app_paths, subkey_name) as entry:
+                                    target = os.path.expandvars(
+                                        str(winreg.QueryValue(entry, None))
+                                    ).strip(' "')
+                            except OSError:
+                                continue
+                            target_path = Path(target)
+                            if not target_path.is_file() or target_path.suffix.casefold() != ".exe":
+                                continue
+                            name = target_path.stem
+                            key = normalise_name(name)
+                            found.setdefault(
+                                key,
+                                ApplicationSpec(
+                                    name=name,
+                                    display_name=name,
+                                    path=str(target_path),
+                                    aliases=(subkey_name.removesuffix(".exe"),),
+                                    discovered=True,
+                                ),
+                            )
+                except OSError:
+                    continue
+    except (ImportError, OSError):
+        pass
+    return tuple(sorted(found.values(), key=lambda spec: spec.display_name.casefold()))
+
+
+def available_applications(*, include_discovered: bool = True) -> tuple[ApplicationSpec, ...]:
+    if not include_discovered:
+        return APPLICATIONS
+    static_names = {normalise_name(item.display_name) for item in APPLICATIONS}
+    dynamic = tuple(
+        item
+        for item in discover_installed_applications()
+        if normalise_name(item.display_name) not in static_names
+    )
+    return (*APPLICATIONS, *dynamic)
+
+
 def resolve_application(value: str) -> ApplicationSpec | None:
     requested = normalise_name(value)
     requested_compact = _compact_name(requested)
@@ -106,7 +233,7 @@ def resolve_application(value: str) -> ApplicationSpec | None:
         return None
 
     ranked: list[tuple[int, ApplicationSpec]] = []
-    for spec in APPLICATIONS:
+    for spec in available_applications():
         candidates = (spec.name, spec.display_name, *spec.aliases)
         normalised = {normalise_name(candidate) for candidate in candidates}
         compact = {_compact_name(candidate) for candidate in candidates}
@@ -149,6 +276,9 @@ def launch_application(spec: ApplicationSpec) -> int | None:
         return None
     if spec.uri is not None:
         os.startfile(spec.uri)  # type: ignore[attr-defined]  # Windows-only runtime
+        return None
+    if spec.path is not None:
+        os.startfile(spec.path)  # type: ignore[attr-defined]  # Windows-only runtime
         return None
     raise RuntimeError(f"application {spec.name!r} has no launch target")
 

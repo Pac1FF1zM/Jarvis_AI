@@ -10,8 +10,15 @@ orchestrator:
 modules:
   wake_word:
     enabled: true
-    # wake word detection itself isn't GPU-heavy in the stub; keep on CPU.
+    # Local openWakeWord listens for "Hey Jarvis"; Ctrl+Alt+Space remains a fallback.
     device: cpu
+    params:
+      wake_phrase_enabled: true
+      wake_phrase_model: hey_jarvis
+      wake_phrase_threshold: 0.55
+      wake_phrase_frames: 2
+      wake_phrase_auto_download: true
+      hotkey: "<ctrl>+<alt>+<space>"
 
   # Official OpenAI Whisper (no Hugging Face dependency or endpoint).
   stt:

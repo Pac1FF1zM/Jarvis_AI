@@ -1,13 +1,13 @@
-"""Push-to-talk activation and bounded real microphone capture.
+"""Local wake-phrase/push-to-talk activation and bounded microphone capture.
 
 A global hotkey press publishes ``wake_word_detected`` immediately, then a
 16 kHz mono ``sounddevice.InputStream`` is captured in a worker thread until
 streaming Silero VAD observes end-of-speech. The resulting signed 16-bit PCM
 bytes are published as ``audio_captured`` on the same trace.
 
-The optional hardware dependencies are guarded. ``trigger()`` deliberately
-remains a deterministic simulated path for CI and ``python main.py --demo``.
-Wake-word recognition itself is out of scope for this step.
+openWakeWord listens locally when configured; the global hotkey remains a
+fallback. Optional dependencies are guarded. ``trigger()`` deliberately stays
+a deterministic simulated path for CI and ``python main.py --demo``.
 """
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ _UNSET = object()
 _SOUNDDEVICE: Any = _UNSET
 _PYNPUT_KEYBOARD: Any = _UNSET
 _LOAD_SILERO_VAD: Any = _UNSET
+_OPENWAKEWORD: Any = _UNSET
 
 _SAMPLE_RATE = 16_000
 _BLOCK_SIZE = 512  # 32 ms; the native Silero VAD streaming window at 16 kHz.
@@ -89,6 +90,11 @@ class WakeWordModule(BaseModule):
         self._pre_roll_ms = int(params.get("pre_roll_ms", 320))
         self._max_duration_ms = int(params.get("max_duration_ms", 15000))
         self._input_device = params.get("input_device")
+        self._wake_phrase_enabled = bool(params.get("wake_phrase_enabled", False))
+        self._wake_phrase_model = str(params.get("wake_phrase_model", "hey_jarvis"))
+        self._wake_phrase_threshold = float(params.get("wake_phrase_threshold", 0.55))
+        self._wake_phrase_frames = int(params.get("wake_phrase_frames", 2))
+        self._wake_phrase_auto_download = bool(params.get("wake_phrase_auto_download", True))
         self._calibrations = params.get("voice_calibrations") or {}
         legacy_calibration = params.get("voice_calibration") or {}
         if legacy_calibration and not self._calibrations:
@@ -112,8 +118,13 @@ class WakeWordModule(BaseModule):
         self._hotkey_listener: Any = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._activation_task: asyncio.Task[Event | None] | None = None
+        self._wake_listener_task: asyncio.Task[None] | None = None
+        self._wake_model: Any = None
         self._capture_lock = asyncio.Lock()
         self._stop_capture = threading.Event()
+        self._microphone_lock = threading.Lock()
+        self._wake_listener_pause = threading.Event()
+        self._shutdown_requested = threading.Event()
         self._active_trace_id: str | None = None
         self.real_activation_enabled = False
 
@@ -130,12 +141,19 @@ class WakeWordModule(BaseModule):
                 raise ValueError(f"{name} must be positive")
         if self._max_duration_ms < self._min_speech_ms:
             raise ValueError("max_duration_ms must be >= min_speech_ms")
+        if not 0.0 < self._wake_phrase_threshold < 1.0:
+            raise ValueError("wake_phrase_threshold must be between 0 and 1")
+        if self._wake_phrase_frames < 1:
+            raise ValueError("wake_phrase_frames must be positive")
 
     async def start(self, bus: EventBus) -> None:
         self.bus = bus
         bus.subscribe("interaction_cancelled", self._on_interaction_failed)
         bus.subscribe("interaction_failed", self._on_interaction_failed)
+        bus.subscribe("speech_started", self._on_speech_started)
+        bus.subscribe("speech_finished", self._on_speech_finished)
         self._loop = asyncio.get_running_loop()
+        self._shutdown_requested.clear()
         if self._force_simulated:
             logger.info("WakeWordModule started mode=simulated")
             return
@@ -172,8 +190,20 @@ class WakeWordModule(BaseModule):
             )
             return
         self.real_activation_enabled = True
+        if self._wake_phrase_enabled:
+            try:
+                self._wake_model = await asyncio.to_thread(self._load_wake_model_sync)
+            except Exception:  # noqa: BLE001 - optional phrase path degrades to hotkey
+                self._wake_model = None
+                logger.exception(
+                    "wake phrase unavailable; Ctrl+Alt+Space remains active. "
+                    "Install openwakeword and check network access for the one-time model download"
+                )
+            if self._wake_model is not None:
+                self._wake_listener_task = asyncio.create_task(self._wake_listener_loop())
         logger.info(
-            "WakeWordModule started mode=push-to-talk hotkey=%s sample_rate=%d calibration=%s",
+            "WakeWordModule started mode=%s hotkey=%s sample_rate=%d calibration=%s",
+            "wake-phrase+push-to-talk" if self._wake_model is not None else "push-to-talk",
             self._hotkey,
             self._sample_rate,
             "pending-device-check" if self._calibrations else "defaults",
@@ -225,6 +255,8 @@ class WakeWordModule(BaseModule):
 
     async def stop(self) -> None:
         self.real_activation_enabled = False
+        self._shutdown_requested.set()
+        self._wake_listener_pause.set()
         self._stop_capture.set()
         listener = self._hotkey_listener
         self._hotkey_listener = None
@@ -237,6 +269,11 @@ class WakeWordModule(BaseModule):
         if task is not None and not task.done():
             await asyncio.gather(task, return_exceptions=True)
         self._activation_task = None
+        listener_task = self._wake_listener_task
+        if listener_task is not None and not listener_task.done():
+            await asyncio.gather(listener_task, return_exceptions=True)
+        self._wake_listener_task = None
+        self._wake_model = None
         self._vad_model = None
         self._sounddevice = None
         logger.info("WakeWordModule stopped")
@@ -257,19 +294,22 @@ class WakeWordModule(BaseModule):
         if self._activation_task is not None and not self._activation_task.done():
             logger.info("HOTKEY_IGNORED capture already active")
             return
+        self._wake_listener_pause.set()
         self._activation_task = asyncio.create_task(self.activate())
         self._activation_task.add_done_callback(self._activation_finished)
 
-    @staticmethod
-    def _activation_finished(task: asyncio.Task[Event | None]) -> None:
+    def _activation_finished(self, task: asyncio.Task[Event | None]) -> None:
         try:
             task.result()
         except asyncio.CancelledError:
             return
         except Exception:  # noqa: BLE001 - callback must consume task failure
             logger.exception("push-to-talk activation task failed")
+        finally:
+            if not self._shutdown_requested.is_set():
+                self._wake_listener_pause.clear()
 
-    async def activate(self) -> Event | None:
+    async def activate(self, *, source: str = "push_to_talk") -> Event | None:
         """Handle one real hotkey activation and publish captured PCM."""
         if self.bus is None:
             raise RuntimeError("WakeWordModule.start() must be called first")
@@ -278,9 +318,10 @@ class WakeWordModule(BaseModule):
             return await self.trigger()
         async with self._capture_lock:
             self._stop_capture.clear()
-            logger.info("PUSH_TO_TALK_ACTIVATED hotkey=%s", self._hotkey)
+            self._wake_listener_pause.set()
+            logger.info("VOICE_ACTIVATED source=%s hotkey=%s", source, self._hotkey)
             wake_event = self.bus.publish(
-                "wake_word_detected", {"source": "push_to_talk"}
+                "wake_word_detected", {"source": source}
             )
             self._active_trace_id = wake_event.trace_id
             try:
@@ -328,9 +369,24 @@ class WakeWordModule(BaseModule):
     async def _on_interaction_failed(self, event: Event) -> None:
         if self._active_trace_id == event.trace_id:
             self._stop_capture.set()
+        if not self._shutdown_requested.is_set() and self._active_trace_id is None:
+            self._wake_listener_pause.clear()
+
+    async def _on_speech_started(self, event: Event) -> None:
+        # Without acoustic echo cancellation the assistant's own speaker can
+        # produce false wakes. Hotkey barge-in remains available during TTS.
+        self._wake_listener_pause.set()
+
+    async def _on_speech_finished(self, event: Event) -> None:
+        if not self._shutdown_requested.is_set():
+            self._wake_listener_pause.clear()
 
     def _record_microphone_sync(self) -> _CaptureResult | None:
         """Record and run streaming VAD; called only in a worker thread."""
+        with self._microphone_lock:
+            return self._record_microphone_unlocked()
+
+    def _record_microphone_unlocked(self) -> _CaptureResult | None:
         sd = self._sounddevice
         model = self._vad_model
         if sd is None or model is None:
@@ -413,6 +469,80 @@ class WakeWordModule(BaseModule):
             duration_ms=round(captured_samples * 1000 / self._sample_rate),
             end_reason=end_reason,
         )
+
+    def _load_wake_model_sync(self) -> Any:
+        global _OPENWAKEWORD
+        if _OPENWAKEWORD is _UNSET:
+            try:
+                _OPENWAKEWORD = importlib.import_module("openwakeword")
+            except (ImportError, OSError):
+                _OPENWAKEWORD = None
+        if _OPENWAKEWORD is None:
+            raise ImportError("openwakeword is not installed")
+        if self._wake_phrase_auto_download:
+            utilities = importlib.import_module("openwakeword.utils")
+            utilities.download_models([self._wake_phrase_model])
+        model_class = importlib.import_module("openwakeword.model").Model
+        return model_class(
+            wakeword_models=[self._wake_phrase_model],
+            inference_framework="onnx",
+        )
+
+    async def _wake_listener_loop(self) -> None:
+        while not self._shutdown_requested.is_set():
+            if self._wake_listener_pause.is_set():
+                await asyncio.sleep(0.05)
+                continue
+            try:
+                detected = await asyncio.to_thread(self._listen_for_wake_sync)
+            except Exception:  # noqa: BLE001 - retain hotkey when listener fails
+                logger.exception("wake phrase listener failed; disabling it for this session")
+                return
+            if not detected or self._shutdown_requested.is_set():
+                continue
+            logger.info(
+                "WAKE_PHRASE_DETECTED model=%s threshold=%.2f",
+                self._wake_phrase_model,
+                self._wake_phrase_threshold,
+            )
+            try:
+                await self.activate(source="wake_phrase")
+            finally:
+                if not self._shutdown_requested.is_set():
+                    self._wake_listener_pause.clear()
+
+    def _listen_for_wake_sync(self) -> bool:
+        sd = self._sounddevice
+        model = self._wake_model
+        if sd is None or model is None:
+            return False
+        import numpy as np
+
+        stream_kwargs: dict[str, Any] = {
+            "samplerate": self._sample_rate,
+            "channels": 1,
+            "dtype": "int16",
+            "blocksize": 1280,
+            "latency": "low",
+        }
+        if self._input_device is not None:
+            stream_kwargs["device"] = self._input_device
+        consecutive = 0
+        reset = getattr(model, "reset", None)
+        if callable(reset):
+            reset()
+        with self._microphone_lock:
+            with sd.InputStream(**stream_kwargs) as stream:
+                while not self._shutdown_requested.is_set() and not self._wake_listener_pause.is_set():
+                    block, overflowed = stream.read(1280)
+                    if overflowed:
+                        logger.debug("wake phrase input overflow")
+                    scores = model.predict(np.asarray(block).reshape(-1).astype(np.int16, copy=False))
+                    score = max((float(value) for value in scores.values()), default=0.0)
+                    consecutive = consecutive + 1 if score >= self._wake_phrase_threshold else 0
+                    if consecutive >= self._wake_phrase_frames:
+                        return True
+        return False
 
     def _speech_probability(self, model: Any, block: Any) -> float:
         import torch

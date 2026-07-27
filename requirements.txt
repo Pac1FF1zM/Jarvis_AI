@@ -19,6 +19,7 @@ silero>=0.4
 sounddevice>=0.4     # interruptible local audio playback for Silero TTS
 pynput==1.8.2        # Windows global push-to-talk hotkey (no admin required normally)
 silero-vad[onnx-cpu]==6.2.1  # streaming 16 kHz end-of-speech detection
+openwakeword>=0.6,<0.7       # local "Hey Jarvis" wake phrase; ONNX on Windows
 
 # Tests only:
 pytest>=8.0

@@ -239,6 +239,22 @@ class RuntimeDiagnosticRunner:
                 if sample_rate not in {8000, 24000, 48000}:
                     errors.append(f"неподдерживаемый TTS sample_rate={sample_rate}")
 
+        wake_word = self.config.modules.get("wake_word")
+        if wake_word is not None and wake_word.enabled:
+            wake_params = _mapping(wake_word.params)
+            try:
+                wake_threshold = float(wake_params.get("wake_phrase_threshold", 0.55))
+                if not 0.0 < wake_threshold < 1.0:
+                    errors.append("wake_phrase_threshold должен быть между 0 и 1")
+            except (TypeError, ValueError):
+                errors.append("wake_phrase_threshold должен быть числом")
+            try:
+                wake_frames = int(wake_params.get("wake_phrase_frames", 2))
+                if wake_frames < 1:
+                    errors.append("wake_phrase_frames должен быть >= 1")
+            except (TypeError, ValueError):
+                errors.append("wake_phrase_frames должен быть целым числом")
+
         if errors:
             self._add(
                 "config.values",
@@ -622,6 +638,39 @@ class RuntimeDiagnosticRunner:
             DiagnosticStatus.FAIL,
             "Установите silero-vad[onnx-cpu]==6.2.1 вместе с ONNX Runtime.",
         )
+        wake_params = _mapping(module.params)
+        if bool(wake_params.get("wake_phrase_enabled", False)):
+            openwakeword = self._package(
+                "engine.wake_phrase",
+                "audio",
+                "openwakeword",
+                "openwakeword",
+                DiagnosticStatus.WARN,
+                "Установите openwakeword>=0.6 из requirements.txt; горячая клавиша останется доступна.",
+            )
+            if openwakeword is None:
+                self._skip("model.wake_phrase", "audio", "Wake-word модель не проверена без openwakeword")
+            else:
+                try:
+                    paths = openwakeword.get_pretrained_model_paths("onnx")
+                    model_name = str(wake_params.get("wake_phrase_model", "hey_jarvis")).replace(" ", "_")
+                    model_path = next(Path(path) for path in paths if model_name in Path(path).stem)
+                    present = model_path.is_file() and model_path.stat().st_size > 0
+                except (AttributeError, OSError, StopIteration, TypeError) as exc:
+                    present = False
+                    model_path = Path(model_name + ".onnx")
+                    model_error = exc
+                else:
+                    model_error = None
+                if present:
+                    self._add("model.wake_phrase", "audio", DiagnosticStatus.PASS, "Локальная wake-word модель найдена", detail=str(model_path))
+                else:
+                    self._add(
+                        "model.wake_phrase", "audio", DiagnosticStatus.WARN,
+                        "Wake-word модель будет загружена при первом голосовом запуске",
+                        detail=_error_detail(model_error) if model_error else str(model_path),
+                        action="Подключите интернет для первого запуска; Ctrl+Alt+Space работает без модели.",
+                    )
         if sounddevice is None:
             self._skip("audio.input", "audio", "Микрофон не проверен без sounddevice")
             return None

@@ -27,7 +27,7 @@ DATA_DIR = ROOT / "jsc_data"
 SEEDS = {"train": 3101, "validation": 4201, "test": 5301, "evaluation_holdout": 6401}
 TARGETS = {
     "train": {
-        "single": 450,
+        "single": 650,
         "compound": 120,
         "multi_turn": 180,
         "correction": 100,
@@ -36,7 +36,7 @@ TARGETS = {
         "asr_noise": 130,
     },
     "validation": {
-        "single": 90,
+        "single": 130,
         "compound": 25,
         "multi_turn": 35,
         "correction": 20,
@@ -45,7 +45,7 @@ TARGETS = {
         "asr_noise": 30,
     },
     "test": {
-        "single": 90,
+        "single": 130,
         "compound": 25,
         "multi_turn": 35,
         "correction": 20,
@@ -54,7 +54,7 @@ TARGETS = {
         "asr_noise": 30,
     },
     "evaluation_holdout": {
-        "single": 65,
+        "single": 95,
         "compound": 18,
         "multi_turn": 25,
         "correction": 15,
@@ -65,10 +65,48 @@ TARGETS = {
 }
 
 CATEGORY_ACT_MINIMUMS = {
-    "train": {"single": {"cancel": 20}, "multi_turn": {"ask": 30}},
-    "validation": {"single": {"cancel": 5}, "multi_turn": {"ask": 8}},
-    "test": {"single": {"cancel": 5}, "multi_turn": {"ask": 8}},
-    "evaluation_holdout": {"single": {"cancel": 4}, "multi_turn": {"ask": 6}},
+    "train": {"single": {"cancel": 20}, "multi_turn": {"ask": 30, "confirm": 8}},
+    "validation": {"single": {"cancel": 5}, "multi_turn": {"ask": 8, "confirm": 3}},
+    "test": {"single": {"cancel": 5}, "multi_turn": {"ask": 8, "confirm": 3}},
+    "evaluation_holdout": {"single": {"cancel": 4}, "multi_turn": {"ask": 6, "confirm": 2}},
+}
+
+CATEGORY_TOOL_MINIMUMS = {
+    "train": {"single": {"browser_control": 20, "file_control": 20, "system_control": 20, "window_control": 20}, "multi_turn": {"file_control": 4, "window_control": 4}},
+    "validation": {"single": {"browser_control": 5, "file_control": 5, "system_control": 5, "window_control": 5}, "multi_turn": {"file_control": 2, "window_control": 2}},
+    "test": {"single": {"browser_control": 5, "file_control": 5, "system_control": 5, "window_control": 5}, "multi_turn": {"file_control": 2, "window_control": 2}},
+    "evaluation_holdout": {"single": {"browser_control": 4, "file_control": 4, "system_control": 4, "window_control": 4}, "multi_turn": {"file_control": 1, "window_control": 1}},
+}
+
+DESKTOP_VALUES = {
+    "train": {
+        "queries": ("погода в ташкенте", "новости науки", "курс доллара", "рецепт плова"),
+        "sites": ("github.com", "wikipedia.org", "youtube.com"),
+        "windows": ("дискорд", "браузер", "блокнот", "проводник"),
+        "files": ("диплом", "отчёт", "фотография", "презентация"),
+        "folders": ("документы", "загрузки", "рабочий стол"),
+    },
+    "validation": {
+        "queries": ("прогноз на неделю", "расписание поездов", "новости технологий"),
+        "sites": ("python.org", "maps.google.com"),
+        "windows": ("калькулятор", "paint", "диспетчер задач"),
+        "files": ("курсовая", "смета", "скриншот"),
+        "folders": ("изображения", "музыка"),
+    },
+    "test": {
+        "queries": ("температура завтра", "афиша кино", "документация python"),
+        "sites": ("stackoverflow.com", "openai.com"),
+        "windows": ("текстовый редактор", "яндекс", "discord"),
+        "files": ("резюме", "чертёж", "таблица"),
+        "folders": ("видео", "documents"),
+    },
+    "evaluation_holdout": {
+        "queries": ("погода на выходные", "последние матчи", "учебник pytorch"),
+        "sites": ("pytorch.org", "github.io"),
+        "windows": ("окно браузера", "графический редактор", "файлы"),
+        "files": ("портфолио", "конспект", "архив"),
+        "folders": ("downloads", "pictures"),
+    },
 }
 
 APPLICATION_WORDS = {
@@ -219,7 +257,7 @@ HARD_NEGATIVES = {
 }
 
 OOD_PHRASES = {
-    "train": ("выключи компьютер", "удали системную папку", "отправь сообщение начальнику", "переведи деньги", "закажи такси", "включи музыку", "измени громкость", "покажи пароль от вайфая", "напиши код за меня", "найди билет на самолёт", "заблокируй экран", "скачай неизвестную программу"),
+    "train": ("выключи компьютер", "удали системную папку", "отправь сообщение начальнику", "переведи деньги", "закажи такси", "включи конкретный альбом", "измени яркость монитора", "покажи пароль от вайфая", "напиши код за меня", "найди билет на самолёт", "смени пароль учётной записи", "скачай неизвестную программу"),
     "validation": ("перезагрузи ноутбук", "очисти весь диск", "позвони в банк", "купи продукты онлайн", "включи любимую песню", "измени яркость экрана"),
     "test": ("отформатируй диск", "отправь письмо клиенту", "оплати счёт", "поставь фильм", "выключи интернет", "установи драйвер"),
     "evaluation_holdout": ("заверши все процессы", "удали мою учётную запись", "закажи еду", "сделай банковский перевод", "позвони маме", "подключись к чужой сети"),
@@ -424,6 +462,19 @@ def generate() -> tuple[dict[str, list[dict[str, Any]]], str]:
                         f"have {len(matching)}"
                     )
                 chosen.extend(matching[:minimum])
+            for tool, minimum in CATEGORY_TOOL_MINIMUMS[split].get(category, {}).items():
+                already = {candidate.signature for candidate in chosen}
+                matching = [
+                    candidate for candidate in accepted
+                    if candidate.signature not in already
+                    and any(step.tool == tool for step in candidate.target.steps)
+                ]
+                if len(matching) < minimum:
+                    raise RuntimeError(
+                        f"{split}/{category}: need {minimum} examples for tool={tool}, "
+                        f"have {len(matching)}"
+                    )
+                chosen.extend(matching[:minimum])
             chosen_signatures = {candidate.signature for candidate in chosen}
             chosen.extend(
                 candidate
@@ -585,6 +636,88 @@ def _single_candidates(split: str) -> list[Candidate]:
                     JALPlan(DialogueAct.DIALOGUE, reason="general_chat"),
                 )
             )
+    candidates.extend(_desktop_single_candidates(split))
+    return candidates
+
+
+def _desktop_single_candidates(split: str) -> list[Candidate]:
+    """Project-owned desktop scenarios; every split uses distinct phrasing."""
+    values = DESKTOP_VALUES[split]
+    candidates: list[Candidate] = []
+    search_templates = {
+        "train": ("найди в интернете {value}", "поищи в сети {value}"),
+        "validation": ("выполни веб поиск по теме {value}", "разыщи онлайн {value}"),
+        "test": ("проверь через браузер {value}", "отыщи в интернете сведения {value}"),
+        "evaluation_holdout": ("сделай сетевой поиск {value}", "посмотри онлайн информацию {value}"),
+    }[split]
+    for index, template in enumerate(search_templates):
+        for query in values["queries"]:
+            text = template.format(value=query)
+            for wrapper_index, wrapped in enumerate((text, f"джарвис {text}", f"пожалуйста {text}")):
+                candidates.append(Candidate("single", f"{split}.single.browser_search_{index}_{wrapper_index}", wrapped, _execute("browser_control", action="search", query=query)))
+    site_templates = {
+        "train": "открой сайт {value}",
+        "validation": "перейди на веб адрес {value}",
+        "test": "загрузи страницу {value}",
+        "evaluation_holdout": "покажи в браузере ресурс {value}",
+    }
+    for site in values["sites"]:
+        site_text = site_templates[split].format(value=site)
+        candidates.append(Candidate("single", f"{split}.single.browser_site", site_text, _execute("browser_control", action="open_site", url=site)))
+        candidates.append(Candidate("single", f"{split}.single.browser_site_polite", f"джарвис {site_text} пожалуйста", _execute("browser_control", action="open_site", url=site)))
+    tab_phrases = {
+        "train": (("открой новую вкладку", "new_tab"), ("закрой текущую вкладку", "close_tab"), ("верни закрытую вкладку", "reopen_tab"), ("следующая вкладка", "next_tab"), ("предыдущая вкладка", "previous_tab")),
+        "validation": (("создай ещё одну вкладку", "new_tab"), ("убери эту вкладку", "close_tab"), ("восстанови последнюю вкладку", "reopen_tab"), ("переключись на вкладку справа", "next_tab"), ("переключись на вкладку слева", "previous_tab")),
+        "test": (("добавь чистую вкладку", "new_tab"), ("заверши активную вкладку", "close_tab"), ("открой недавно закрытую вкладку", "reopen_tab"), ("листай вкладки вперёд", "next_tab"), ("листай вкладки назад", "previous_tab")),
+        "evaluation_holdout": (("нужна новая страница в браузере", "new_tab"), ("закрой страницу браузера", "close_tab"), ("возврати прошлую страницу", "reopen_tab"), ("покажи соседнюю вкладку далее", "next_tab"), ("покажи соседнюю вкладку ранее", "previous_tab")),
+    }[split]
+    for text, action in tab_phrases:
+        candidates.append(Candidate("single", f"{split}.single.browser_tab_{action}", text, _execute("browser_control", action=action)))
+
+    system_phrases = {
+        "train": (("прибавь громкость", "volume_up"), ("убавь громкость", "volume_down"), ("переключи звук", "volume_mute"), ("поставь музыку на паузу", "media_play_pause"), ("следующий трек", "media_next"), ("предыдущий трек", "media_previous")),
+        "validation": (("сделай звук громче", "volume_up"), ("сделай звук тише", "volume_down"), ("отключи динамики", "volume_mute"), ("продолжи воспроизведение", "media_play_pause"), ("перейди к следующей песне", "media_next"), ("верни прошлую песню", "media_previous")),
+        "test": (("подними уровень звука", "volume_up"), ("снизь уровень звука", "volume_down"), ("заглуши аудио", "volume_mute"), ("переключи воспроизведение", "media_play_pause"), ("листай музыку вперёд", "media_next"), ("листай музыку назад", "media_previous")),
+        "evaluation_holdout": (("добавь звука", "volume_up"), ("приглуши звук", "volume_down"), ("переключи беззвучный режим", "volume_mute"), ("останови или запусти музыку", "media_play_pause"), ("включи композицию далее", "media_next"), ("включи композицию ранее", "media_previous")),
+    }[split]
+    for text, action in system_phrases:
+        for wrapped in (text, f"джарвис {text}"):
+            candidates.append(Candidate("single", f"{split}.single.system_{action}", wrapped, _execute("system_control", action=action)))
+    settings = (("звук", "sound"), ("экран", "display"), ("сеть", "network"), ("микрофон", "microphone"), ("обновления", "update"))
+    setting_frames = {"train": "открой настройки {label}", "validation": "покажи параметры раздела {label}", "test": "перейди к системным параметрам {label}", "evaluation_holdout": "запусти страницу конфигурации {label}"}
+    for label, setting in settings:
+        setting_text = setting_frames[split].format(label=label)
+        candidates.append(Candidate("single", f"{split}.single.setting_{setting}", setting_text, _execute("system_control", action="open_settings", setting=setting)))
+        candidates.append(Candidate("single", f"{split}.single.setting_{setting}_polite", f"пожалуйста {setting_text}", _execute("system_control", action="open_settings", setting=setting)))
+
+    window_frames = {
+        "train": (("переключись на {value}", "switch"), ("сверни {value}", "minimize"), ("разверни {value}", "maximize"), ("восстанови окно {value}", "restore")),
+        "validation": (("покажи окно {value}", "switch"), ("убери с экрана {value}", "minimize"), ("раскрой на весь экран {value}", "maximize"), ("верни окно {value}", "restore")),
+        "test": (("перейди в окно {value}", "switch"), ("минимизируй {value}", "minimize"), ("максимизируй {value}", "maximize"), ("подними окно {value}", "restore")),
+        "evaluation_holdout": (("выведи вперёд {value}", "switch"), ("спрячь окно {value}", "minimize"), ("растяни окно {value}", "maximize"), ("возврати видимость {value}", "restore")),
+    }[split]
+    for template, action in window_frames:
+        for window in values["windows"]:
+            text = template.format(value=window)
+            candidates.append(Candidate("single", f"{split}.single.window_{action}", text, _execute("window_control", action=action, window=window)))
+            candidates.append(Candidate("single", f"{split}.single.window_{action}_polite", f"джарвис {text} пожалуйста", _execute("window_control", action=action, window=window)))
+
+    file_frames = {
+        "train": ("найди файл {value}", "поищи папку {value}"),
+        "validation": ("разыщи документ {value}", "отыщи каталог {value}"),
+        "test": ("проверь где лежит файл {value}", "покажи расположение папки {value}"),
+        "evaluation_holdout": ("выполни поиск файла {value}", "обнаружь директорию {value}"),
+    }[split]
+    for template in file_frames:
+        for query in values["files"]:
+            text = template.format(value=query)
+            candidates.append(Candidate("single", f"{split}.single.file_find", text, _execute("file_control", action="find", query=query)))
+            candidates.append(Candidate("single", f"{split}.single.file_find_polite", f"джарвис {text}", _execute("file_control", action="find", query=query)))
+    folder_frames = {"train": "покажи содержимое папки {value}", "validation": "перечисли файлы внутри {value}", "test": "что хранится в каталоге {value}", "evaluation_holdout": "прочитай список объектов из {value}"}
+    for folder in values["folders"]:
+        folder_text = folder_frames[split].format(value=folder)
+        candidates.append(Candidate("single", f"{split}.single.file_list", folder_text, _execute("file_control", action="list", path=folder)))
+        candidates.append(Candidate("single", f"{split}.single.file_list_polite", f"пожалуйста {folder_text}", _execute("file_control", action="list", path=folder)))
     return candidates
 
 
@@ -729,6 +862,45 @@ def _multi_turn_candidates(split: str) -> list[Candidate]:
                 metadata={"turn": "slot_fill"},
             )
         )
+    confirmation_frames = {
+        "train": {
+            "close": "закрой окно {value}", "close_question": "Закрыть окно {value}?",
+            "close_answer": "да подтверждаю закрытие", "delete": "удали файл {value}",
+            "delete_question": "Переместить {value} в корзину?", "delete_answer": "подтверждаю удаление",
+        },
+        "validation": {
+            "close": "заверши окно {value}", "close_question": "Вы уверены, что нужно закрыть {value}?",
+            "close_answer": "да закрывай", "delete": "убери документ {value}",
+            "delete_question": "Подтвердите отправку {value} в корзину.", "delete_answer": "согласен отправляй в корзину",
+        },
+        "test": {
+            "close": "закрой приложение с окном {value}", "close_question": "Подтвердить закрытие окна {value}?",
+            "close_answer": "подтверждаю это действие", "delete": "перемести в корзину файл {value}",
+            "delete_question": "Действительно удалить {value}?", "delete_answer": "да перемещай",
+        },
+        "evaluation_holdout": {
+            "close": "заверши работу окна {value}", "close_question": "Разрешаете закрыть {value}?",
+            "close_answer": "разрешаю закрытие", "delete": "отправь в корзину документ {value}",
+            "delete_question": "Разрешаете убрать {value}?", "delete_answer": "разрешаю удалить",
+        },
+    }[split]
+    for window in DESKTOP_VALUES[split]["windows"]:
+        pending = JALPlan(
+            DialogueAct.CONFIRM,
+            steps=(ToolCall("window_control", {"action": "close", "window": window}),),
+            reason="user_confirmation",
+        )
+        candidates.append(Candidate("multi_turn", f"{split}.multi.window_close_confirm", confirmation_frames["close"].format(value=window), pending, metadata={"turn": "confirmation_request"}))
+        candidates.append(Candidate("multi_turn", f"{split}.multi.window_close_execute", confirmation_frames["close_answer"], _execute("window_control", action="close", window=window, confirmed=True), history=(("user", confirmation_frames["close"].format(value=window)), ("jarvis", confirmation_frames["close_question"].format(value=window))), state=pending, metadata={"turn": "confirmation_answer"}))
+    for file_name in DESKTOP_VALUES[split]["files"]:
+        path = f"документы/{file_name}.txt"
+        pending = JALPlan(
+            DialogueAct.CONFIRM,
+            steps=(ToolCall("file_control", {"action": "delete", "path": path}),),
+            reason="user_confirmation",
+        )
+        candidates.append(Candidate("multi_turn", f"{split}.multi.file_delete_confirm", confirmation_frames["delete"].format(value=path), pending, metadata={"turn": "confirmation_request"}))
+        candidates.append(Candidate("multi_turn", f"{split}.multi.file_delete_execute", confirmation_frames["delete_answer"], _execute("file_control", action="delete", path=path, confirmed=True), history=(("user", confirmation_frames["delete"].format(value=path)), ("jarvis", confirmation_frames["delete_question"].format(value=path))), state=pending, metadata={"turn": "confirmation_answer"}))
     return candidates
 
 
@@ -967,6 +1139,8 @@ def _slot_terms() -> tuple[str, ...]:
     for split in SPLITS:
         terms.update(VALUES[split]["messages"])
         terms.update(VALUES[split]["topics"])
+        for values in DESKTOP_VALUES[split].values():
+            terms.update(values)
     return tuple(sorted(terms, key=len, reverse=True))
 
 

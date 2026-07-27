@@ -1,11 +1,11 @@
-"""Open a Windows application from a strict, shell-free allow-list."""
+"""Open a fixed or Windows-registered application without a command shell."""
 from __future__ import annotations
 
 import asyncio
 import logging
 from typing import Any
 
-from ._applications import APPLICATIONS, launch_application, resolve_application
+from ._applications import available_applications, launch_application, resolve_application
 
 logger = logging.getLogger("jarvis.tools.open_application")
 
@@ -18,7 +18,6 @@ TOOL_SCHEMA: dict[str, Any] = {
             "application": {
                 "type": "string",
                 "description": "Application name requested by the user.",
-                "enum": [item.name for item in APPLICATIONS],
             },
         },
         "required": ["application"],
@@ -30,15 +29,14 @@ async def execute(params: dict[str, Any]) -> dict[str, Any]:
     requested = str(params.get("application", "")).strip()
     spec = resolve_application(requested)
     if spec is None:
-        supported = [item.display_name for item in APPLICATIONS]
+        supported = [item.display_name for item in available_applications()]
         return {
             "ok": False,
             "error": "application_not_allowed",
             "application": requested,
             "supported": supported,
             "response_text": (
-                f"Приложение «{requested}» не разрешено. "
-                f"Доступны: {', '.join(supported)}."
+                f"Не удалось найти установленное приложение «{requested}»."
             ),
         }
 

@@ -69,9 +69,12 @@ def test_all_splits_pass_jal_schema_and_leakage_audit(schemas):
     }
     assert all(set(report[split]["categories"]) == set(TARGETS[split]) for split in SPLITS)
     assert report["train"]["acts"]["ask"] >= 30
+    assert report["train"]["acts"]["confirm"] >= 8
     assert report["train"]["acts"]["cancel"] >= 20
     assert report["validation"]["acts"]["ask"] >= 8
     assert report["test"]["acts"]["ask"] >= 8
+    for tool in ("browser_control", "file_control", "system_control", "window_control"):
+        assert report["train"]["tools"][tool] >= 20
 
 
 def test_structural_scenarios_represent_the_intended_learning_problems(schemas):
@@ -90,6 +93,7 @@ def test_structural_scenarios_represent_the_intended_learning_problems(schemas):
         for example in by_category["compound"]
     )
     assert any(example.target.act == DialogueAct.ASK for example in by_category["multi_turn"])
+    assert any(example.target.act == DialogueAct.CONFIRM for example in by_category["multi_turn"])
     assert any(example.history and example.state for example in by_category["multi_turn"])
     assert all(example.history and example.state for example in by_category["correction"])
     assert all(

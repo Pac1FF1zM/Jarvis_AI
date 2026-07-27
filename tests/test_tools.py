@@ -12,6 +12,8 @@ from tools.open_application import execute as execute_open_application
 from tools.list_applications import execute as execute_list_applications
 import tools.open_application as open_application_module
 import tools._applications as applications_module
+import tools.browser_control as browser_control_module
+from tools.browser_control import execute as execute_browser_control
 from tools._applications import resolve_application
 from tools.registry import ToolRegistry
 
@@ -26,6 +28,10 @@ def test_registry_auto_discovers_all_tools():
     assert "cancel_reminder" in names
     assert "open_application" in names
     assert "list_applications" in names
+    assert "browser_control" in names
+    assert "file_control" in names
+    assert "system_control" in names
+    assert "window_control" in names
 
 
 def test_registry_does_not_register_itself():
@@ -123,6 +129,7 @@ async def test_open_application_rejects_unknown_target(monkeypatch):
         raise AssertionError("unknown applications must never be launched")
 
     monkeypatch.setattr(open_application_module, "launch_application", must_not_launch)
+    monkeypatch.setattr(applications_module, "discover_installed_applications", lambda: ())
     result = await execute_open_application({"application": "powershell"})
     assert result["ok"] is False
     assert result["error"] == "application_not_allowed"
@@ -215,6 +222,35 @@ def test_allowlist_resolves_common_russian_whisper_variants(heard, expected):
     assert resolved.name == expected
 
 
-def test_fuzzy_resolver_still_rejects_unrelated_or_dangerous_names():
-    for name in ("powershell", "командная строка", "дисковод", "steam"):
+def test_fuzzy_resolver_still_rejects_unrelated_or_dangerous_names(monkeypatch):
+    monkeypatch.setattr(applications_module, "discover_installed_applications", lambda: ())
+    for name in ("powershell", "командная строка", "дисковод"):
         assert resolve_application(name) is None
+
+
+def test_resolver_accepts_exact_windows_discovered_application(monkeypatch):
+    discovered = applications_module.ApplicationSpec(
+        name="Example App",
+        display_name="Example App",
+        path=r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Example App.lnk",
+        aliases=("пример",),
+        discovered=True,
+    )
+    monkeypatch.setattr(
+        applications_module, "discover_installed_applications", lambda: (discovered,)
+    )
+
+    assert resolve_application("example app") == discovered
+    assert resolve_application("пример") == discovered
+
+
+async def test_browser_shortcut_is_not_sent_to_an_unrelated_foreground_window(monkeypatch):
+    sent: list[tuple[int, ...]] = []
+    monkeypatch.setattr(browser_control_module, "activate_default_browser", lambda: False)
+    monkeypatch.setattr(browser_control_module, "send_hotkey", lambda *keys: sent.append(keys))
+
+    result = await execute_browser_control({"action": "close_tab"})
+
+    assert result["ok"] is False
+    assert result["error"] == "browser_not_open"
+    assert sent == []

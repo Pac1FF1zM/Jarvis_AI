@@ -114,6 +114,7 @@ class LLMModule(BaseModule):
         # Cached engine state. ``_server_down`` is set on the first connection
         # failure and stays set so we don't retry-and-fail on every turn.
         self._server_down: bool = False
+        self._pending_confirmation: dict[str, Any] | None = None
 
     async def start(self, bus: EventBus) -> None:
         self.bus = bus
@@ -182,6 +183,36 @@ class LLMModule(BaseModule):
         # authoritative for routing. Ollama is no longer asked to decide tool
         # calls; it remains the free-dialogue/final-wording engine.
         intent = event.payload.get("intent")
+        actions = list(event.payload.get("actions") or [])
+        if self._pending_confirmation is not None and intent not in {"confirm", "decline"}:
+            logger.info("PENDING_CONFIRMATION_EXPIRED new_intent=%s", intent)
+            self._pending_confirmation = None
+        if actions:
+            await self._request_plan(event, actions)
+            return
+        if intent == "confirm":
+            pending = self._pending_confirmation
+            self._pending_confirmation = None
+            if pending is None:
+                await self._publish_text(event, "Сейчас нет действия, ожидающего подтверждения.")
+                return
+            await self._request_tool(
+                event,
+                str(pending["tool"]),
+                dict(pending.get("params") or {}),
+                direct_response=True,
+            )
+            return
+        if intent == "decline":
+            if self._pending_confirmation is None:
+                assert self.bus is not None
+                self.bus.publish_event(
+                    event.child("cancel_requested", {"reason": "user_requested"})
+                )
+            else:
+                self._pending_confirmation = None
+                await self._publish_text(event, "Хорошо, действие отменено.")
+            return
         if intent == "get_current_time":
             await self._request_tool(event, "get_current_time", {}, direct_response=True)
             return
@@ -240,6 +271,14 @@ class LLMModule(BaseModule):
         if intent == "list_applications":
             await self._request_tool(event, "list_applications", {}, direct_response=True)
             return
+        if intent in {"browser_control", "system_control", "window_control", "file_control"}:
+            await self._request_tool(
+                event,
+                str(intent),
+                dict(event.payload.get("slots") or {}),
+                direct_response=True,
+            )
+            return
         if intent == "cancel":
             assert self.bus is not None
             self.bus.publish_event(
@@ -258,6 +297,12 @@ class LLMModule(BaseModule):
         # The bus executor for the tool may have set params/result on payload.
         result = event.payload.get("result", {})
         if event.payload.get("direct_response"):
+            confirmation = result.get("confirmation")
+            if result.get("confirmation_required") and isinstance(confirmation, dict):
+                self._pending_confirmation = {
+                    "tool": str(confirmation.get("tool", "")),
+                    "params": dict(confirmation.get("params") or {}),
+                }
             response_text = str(result.get("response_text", "")).strip()
             if not response_text:
                 response_text = "Инструмент завершил работу, но не вернул ответ."
@@ -345,6 +390,96 @@ class LLMModule(BaseModule):
                 },
             )
         )
+
+    async def _request_plan(self, event: Event, actions: list[dict[str, Any]]) -> None:
+        """Execute a compound utterance under one lifecycle TOOL_CALL envelope."""
+        assert self.bus is not None
+        plan: list[tuple[str, dict[str, Any]]] = []
+        for action in actions:
+            intent = str(action.get("intent", "unknown"))
+            slots = dict(action.get("slots") or {})
+            mapped = self._tool_for_action(intent, slots)
+            if mapped is None:
+                await self._publish_text(
+                    event,
+                    f"Я не выполнил составную команду: не удалось безопасно разобрать часть с намерением «{intent}».",
+                )
+                return
+            plan.append(mapped)
+        for tool_name, _params in plan:
+            if not self.tools.has(tool_name):
+                await self._publish_text(event, f"Инструмент {tool_name} недоступен.")
+                return
+        if not self.bus.publish_event(
+            event.child(
+                "tool_call_requested",
+                {"tool": "compound_plan", "plan": [{"tool": name, "params": params} for name, params in plan]},
+            )
+        ):
+            return
+
+        async def execute_plan() -> dict[str, Any]:
+            results: list[dict[str, Any]] = []
+            for tool_name, params in plan:
+                result = await self.tools.execute(tool_name, params)
+                results.append({"tool": tool_name, "result": result})
+                if result.get("confirmation_required") or result.get("ok") is False:
+                    break
+            texts = [str(item["result"].get("response_text", "")).strip() for item in results]
+            combined: dict[str, Any] = {
+                "ok": all(item["result"].get("ok") is not False for item in results),
+                "results": results,
+                "response_text": " ".join(text for text in texts if text),
+            }
+            if results:
+                last = results[-1]["result"]
+                if last.get("confirmation_required"):
+                    combined["confirmation_required"] = True
+                    combined["confirmation"] = last.get("confirmation")
+            return combined
+
+        task = asyncio.create_task(execute_plan())
+        self._active_tool_tasks[event.trace_id] = ("compound_plan", task)
+        try:
+            result = await asyncio.shield(task)
+        finally:
+            active = self._active_tool_tasks.get(event.trace_id)
+            if active is not None and active[1] is task:
+                self._active_tool_tasks.pop(event.trace_id, None)
+        if self.bus.is_trace_closed(event.trace_id):
+            logger.info("TOOL_PLAN_RESULT_DISCARDED trace=%s", event.trace_id)
+            return
+        self.bus.publish_event(
+            event.child(
+                "tool_result",
+                {"tool": "compound_plan", "result": result, "direct_response": True},
+            )
+        )
+
+    @staticmethod
+    def _tool_for_action(
+        intent: str, slots: dict[str, Any]
+    ) -> tuple[str, dict[str, Any]] | None:
+        if intent == "get_current_time":
+            return "get_current_time", {}
+        if intent == "list_applications":
+            return "list_applications", {}
+        if intent == "open_application" and slots.get("application"):
+            return "open_application", {"application": slots["application"]}
+        if intent == "list_reminders":
+            return "list_reminders", {}
+        if intent == "cancel_reminder" and slots.get("reminder_id") is not None:
+            return "cancel_reminder", {"reminder_id": int(slots["reminder_id"])}
+        if intent == "set_reminder" and slots.get("reminder_text"):
+            params: dict[str, Any] = {"message": slots["reminder_text"]}
+            for key in ("minutes", "due_at", "clock_time", "day"):
+                if key in slots:
+                    params[key] = int(slots[key]) if key == "minutes" else slots[key]
+            if any(key in params for key in ("minutes", "due_at", "clock_time")):
+                return "set_reminder", params
+        if intent in {"browser_control", "system_control", "window_control", "file_control"}:
+            return intent, slots
+        return None
 
     async def _publish_text(self, event: Event, response_text: str) -> None:
         assert self.bus is not None

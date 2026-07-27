@@ -338,5 +338,7 @@ async def test_wake_word_subscribes_to_all_trace_termination_cleanup(bus: EventB
     assert set(bus._subscribers) == {
         "interaction_cancelled",
         "interaction_failed",
+        "speech_started",
+        "speech_finished",
     }
     assert bus._subscribers["interaction_failed"] == [mod._on_interaction_failed]
