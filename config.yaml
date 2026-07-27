@@ -64,6 +64,10 @@ modules:
       # The NLU model owns tool routing. Ollama handles only general dialogue;
       # deterministic tool results are returned directly.
       input_event: nlu_result
+      # Probe while the heavier voice models load in parallel. If Ollama is
+      # offline, the first chat turn falls back immediately instead of waiting
+      # for a connection timeout.
+      probe_on_start: true
 
   # Silero TTS. Light; CPU is fine, no GPU contention with STT/LLM.
   tts:
@@ -74,6 +78,15 @@ modules:
       language: ru
       speaker: xenia
       sample_rate: 48000
+      # Silero lazily initializes expensive CPU kernels on its first calls.
+      # Warm them while Whisper loads in parallel, then cache short repeated
+      # confirmations so the first spoken response is not the slowest one.
+      prewarm_enabled: true
+      prewarm_texts:
+        - "Открываю Браузер."
+        - "Открываю Дискорд."
+      cache_max_entries: 16
+      cache_max_chars: 120
 
 memory:
   db_path: memory.db            # long-term SQLite store

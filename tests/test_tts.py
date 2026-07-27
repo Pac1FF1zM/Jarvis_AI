@@ -143,6 +143,113 @@ async def test_real_model_loaded_once_in_start(bus: EventBus, fake_silero):
     assert model.to_calls == ["cpu"]
 
 
+async def test_prewarm_runs_in_background_and_populates_cache_without_playback(
+    bus: EventBus, fake_silero
+):
+    model, _factory, sounddevice = fake_silero
+    mod = TTSModule(
+        ModuleConfig(
+            device="cpu",
+            model="v4_ru",
+            params={
+                "prewarm_enabled": True,
+                "prewarm_texts": ["Открываю браузер."],
+                "cache_max_entries": 4,
+            },
+        )
+    )
+
+    await mod.start(bus)
+    assert mod._prewarm_task is not None
+    await asyncio.wait_for(mod._prewarm_task, timeout=1.0)
+
+    assert [call["text"] for call in model.apply_calls] == ["Открываю браузер."]
+    assert list(mod._audio_cache) == ["Открываю браузер."]
+    assert sounddevice.play_calls == [], "prewarm must never reach the output device"
+
+    await mod.stop()
+
+
+async def test_first_response_waits_for_background_prewarm(
+    bus: EventBus, fake_silero, monkeypatch
+):
+    model, _factory, sounddevice = fake_silero
+    mod = TTSModule(
+        ModuleConfig(
+            device="cpu",
+            model="v4_ru",
+            params={
+                "prewarm_enabled": True,
+                "prewarm_texts": ["Открываю браузер."],
+                "cache_max_entries": 4,
+            },
+        )
+    )
+    release_prewarm = threading.Event()
+    prewarm_started = threading.Event()
+    original_prewarm = mod._prewarm_model_sync
+
+    def blocked_prewarm() -> int:
+        prewarm_started.set()
+        assert release_prewarm.wait(timeout=1.0)
+        return original_prewarm()
+
+    monkeypatch.setattr(mod, "_prewarm_model_sync", blocked_prewarm)
+    await mod.start(bus)
+    assert await asyncio.to_thread(prewarm_started.wait, 1.0)
+    finished = asyncio.Event()
+
+    async def record(_event: Event) -> None:
+        finished.set()
+
+    bus.subscribe("speech_finished", record)
+    run_task = asyncio.create_task(bus.run())
+    bus.publish("response_ready", {"text": "Закрываю браузер."}, trace_id="early")
+    await asyncio.sleep(0.03)
+    assert sounddevice.play_calls == []
+
+    release_prewarm.set()
+    await asyncio.wait_for(finished.wait(), timeout=1.0)
+    await bus.stop()
+    await run_task
+    await mod.stop()
+
+    assert [call["text"] for call in model.apply_calls] == [
+        "Открываю браузер.",
+        "Закрываю браузер.",
+    ]
+
+
+async def test_repeated_short_response_reuses_cached_audio(bus: EventBus, fake_silero):
+    model, _factory, sounddevice = fake_silero
+    mod = TTSModule(
+        ModuleConfig(
+            device="cpu",
+            model="v4_ru",
+            params={"cache_max_entries": 4, "cache_max_chars": 80},
+        )
+    )
+    await mod.start(bus)
+    finished: asyncio.Queue[Event] = asyncio.Queue()
+
+    async def record(event: Event) -> None:
+        finished.put_nowait(event)
+
+    bus.subscribe("speech_finished", record)
+    run_task = asyncio.create_task(bus.run())
+    for trace_id in ("first", "second"):
+        bus.publish("response_ready", {"text": "Открываю браузер."}, trace_id=trace_id)
+        event = await asyncio.wait_for(finished.get(), timeout=1.0)
+        assert event.trace_id == trace_id
+
+    await bus.stop()
+    await run_task
+    await mod.stop()
+
+    assert len(model.apply_calls) == 1
+    assert len(sounddevice.play_calls) == 2
+
+
 async def test_real_synthesis_runs_off_event_loop(bus: EventBus, fake_silero):
     model, _factory, sounddevice = fake_silero
     mod = TTSModule(ModuleConfig(device="cpu", model="v4_ru"))

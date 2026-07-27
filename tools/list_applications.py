@@ -14,7 +14,9 @@ TOOL_SCHEMA: dict[str, Any] = {
 
 async def execute(params: dict[str, Any]) -> dict[str, Any]:
     applications = [spec.display_name for spec in available_applications()]
-    spoken = applications[:15]
+    # Keep the complete machine-readable list in the result, but do not make
+    # the user wait while TTS reads dozens of Start-menu entries aloud.
+    spoken = applications[:7]
     remainder = len(applications) - len(spoken)
     suffix = f" И ещё {remainder}; назовите нужное приложение." if remainder else "."
     return {

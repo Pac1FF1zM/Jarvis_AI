@@ -289,6 +289,8 @@ class _FakeOllamaPkg:
         self.response = response
         self.error = error
         self.chat_calls: list[dict] = []
+        self.show_calls: list[str] = []
+        self.show_error: BaseException | None = None
 
     def chat(self, model, messages, tools=None):
         self.chat_calls.append(
@@ -298,6 +300,12 @@ class _FakeOllamaPkg:
             raise self.error
         return self.response
 
+    def show(self, model):
+        self.show_calls.append(model)
+        if self.show_error is not None:
+            raise self.show_error
+        return {"model": model}
+
 
 @pytest.fixture
 def fake_ollama(monkeypatch):
@@ -305,6 +313,31 @@ def fake_ollama(monkeypatch):
     pkg = _FakeOllamaPkg()
     monkeypatch.setattr(llm_mod, "_OLLAMA", pkg)
     return pkg
+
+
+async def test_startup_probe_caches_unavailable_ollama_before_first_turn(
+    bus: EventBus, fake_ollama, caplog
+):
+    fake_ollama.show_error = ConnectionError("connection refused")
+    tools = ToolRegistry()
+    mod = LLMModule(
+        config=ModuleConfig(
+            device="cpu",
+            model="qwen2.5:7b-instruct",
+            params={"probe_on_start": True},
+        ),
+        gpu_lock=GPULock(),
+        tools=tools,
+        short_term=ShortTermMemory(max_turns=4),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="jarvis.module.llm"):
+        await mod.start(bus)
+
+    assert fake_ollama.show_calls == ["qwen2.5:7b-instruct"]
+    assert mod._server_down is True
+    assert any("startup probe" in record.message for record in caplog.records)
+    await mod.stop()
 
 
 async def test_mocked_tool_calls_drive_full_tool_flow(bus: EventBus, fake_ollama):

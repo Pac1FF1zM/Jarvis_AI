@@ -3,7 +3,13 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 import main as jarvis_main
+from modules.llm import LLMModule
+from modules.nlu import NLUModule
+from modules.stt import STTModule
+from modules.tts import TTSModule
 import modules.wake_word as wake_word_module
 from modules.wake_word import WakeWordModule
 
@@ -84,3 +90,53 @@ async def test_persistent_mode_cancellation_uses_clean_shutdown_path(monkeypatch
     assert wake.stop_calls == 1
     assert not wake.bus._running
     assert not wake.bus._tasks
+
+
+async def test_voice_modules_initialize_in_parallel(monkeypatch):
+    active = 0
+    max_active = 0
+    started: set[str] = set()
+
+    async def delayed_start(self, bus) -> None:
+        nonlocal active, max_active
+        self.bus = bus
+        active += 1
+        max_active = max(max_active, active)
+        started.add(self.name)
+        await asyncio.sleep(0.03)
+        active -= 1
+
+    for module_type in (WakeWordModule, STTModule, NLUModule, LLMModule, TTSModule):
+        monkeypatch.setattr(module_type, "start", delayed_start)
+
+    shutdown = asyncio.Event()
+    shutdown.set()
+    await jarvis_main.run_pipeline("config.yaml", shutdown_event=shutdown)
+
+    assert started == {"wake_word", "stt", "nlu", "llm", "tts"}
+    assert max_active == 5
+
+
+async def test_parallel_startup_cleans_every_module_when_one_engine_fails(
+    monkeypatch,
+):
+    stopped: list[str] = []
+
+    async def start_with_stt_failure(self, bus) -> None:
+        self.bus = bus
+        await asyncio.sleep(0.01 if self.name == "stt" else 0.02)
+        if self.name == "stt":
+            raise RuntimeError("synthetic STT startup failure")
+
+    async def tracked_stop(self) -> None:
+        stopped.append(self.name)
+
+    module_types = (WakeWordModule, STTModule, NLUModule, LLMModule, TTSModule)
+    for module_type in module_types:
+        monkeypatch.setattr(module_type, "start", start_with_stt_failure)
+        monkeypatch.setattr(module_type, "stop", tracked_stop)
+
+    with pytest.raises(RuntimeError, match="synthetic STT startup failure"):
+        await jarvis_main.run_pipeline("config.yaml", shutdown_event=asyncio.Event())
+
+    assert sorted(stopped) == ["llm", "nlu", "stt", "tts", "wake_word"]

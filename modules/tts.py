@@ -15,6 +15,9 @@ import asyncio
 import importlib
 import logging
 import re
+import threading
+import time
+from collections import OrderedDict
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
@@ -143,6 +146,14 @@ class _SpeechSession:
     device_cleanup_required: bool = False
 
 
+@dataclass(frozen=True)
+class _SynthesizedAudio:
+    """Audio returned by Silero together with its cache provenance."""
+
+    samples: Any
+    cache_hit: bool
+
+
 def _resolve_optional_dependencies() -> tuple[Any | None, Any | None]:
     """Resolve the official Silero factory and sounddevice lazily."""
     global _SILERO_TTS, _SOUNDDEVICE
@@ -175,6 +186,16 @@ class TTSModule(BaseModule):
         self._language = str(params.get("language", _DEFAULT_LANGUAGE))
         self._speaker = str(params.get("speaker", _DEFAULT_SPEAKER))
         self._sample_rate = int(params.get("sample_rate", _DEFAULT_SAMPLE_RATE))
+        self._prewarm_enabled = bool(params.get("prewarm_enabled", False))
+        self._cache_max_entries = int(params.get("cache_max_entries", 0))
+        self._cache_max_chars = int(params.get("cache_max_chars", 120))
+        configured_prewarm = params.get("prewarm_texts") or (
+            "Открываю приложение.",
+            "Команда выполнена.",
+        )
+        self._prewarm_texts = tuple(
+            str(text) for text in configured_prewarm if str(text)
+        )
         self._validate_configuration()
 
         # Silero is intentionally CPU-only here.  On the target GTX 1060 3 GB,
@@ -191,6 +212,8 @@ class TTSModule(BaseModule):
 
         self._model: Any = None
         self._sounddevice: Any = None
+        self._audio_cache: OrderedDict[str, Any] = OrderedDict()
+        self._cache_lock = threading.Lock()
         self._state_lock = asyncio.Lock()
         self._generation = 0
         self._owner_trace_id: str | None = None
@@ -201,9 +224,14 @@ class TTSModule(BaseModule):
         self._speak_trace_id: str | None = None
         self._synthesis_worker: asyncio.Task[Any] | None = None
         self._playback_worker: asyncio.Task[None] | None = None
+        self._prewarm_task: asyncio.Task[None] | None = None
 
     def _validate_configuration(self) -> None:
         """Reject known-incompatible Russian Silero settings before download."""
+        if self._cache_max_entries < 0:
+            raise ValueError("cache_max_entries must be non-negative")
+        if self._cache_max_chars <= 0:
+            raise ValueError("cache_max_chars must be positive")
         if self._language != "ru":
             return
         if not (self._model_id.endswith("_ru") or self._model_id.startswith("ru_")):
@@ -253,6 +281,11 @@ class TTSModule(BaseModule):
                 logger.exception(
                     "Silero model load failed — TTS will run in stub-only mode"
                 )
+            if self._model is not None and self._prewarm_enabled:
+                # Do not hold runtime readiness hostage to Silero's lazy CPU
+                # kernel initialization. The first real synthesis awaits this
+                # tracked task, so model access remains serialized and safe.
+                self._prewarm_task = asyncio.create_task(self._prewarm_model())
 
         logger.info(
             "TTSModule started (mode=%s) device=%s model=%s speaker=%s",
@@ -263,6 +296,11 @@ class TTSModule(BaseModule):
         )
 
     async def stop(self) -> None:
+        prewarm_task = self._prewarm_task
+        if prewarm_task is not None:
+            with suppress(asyncio.CancelledError):
+                await asyncio.shield(prewarm_task)
+            self._prewarm_task = None
         async with self._state_lock:
             session = self._session
             if session is not None:
@@ -271,6 +309,8 @@ class TTSModule(BaseModule):
                     self._session = None
             self._clear_session_mirrors(session)
             self._device_owner_generation = None
+        with self._cache_lock:
+            self._audio_cache.clear()
         logger.info("TTSModule stopped")
 
     def _load_model_sync(self, silero_tts: Any) -> Any:
@@ -283,6 +323,37 @@ class TTSModule(BaseModule):
         if callable(to_device):
             to_device(self._device)
         return model
+
+    def _prewarm_model_sync(self) -> int:
+        """Force Silero's lazy CPU kernels to initialize before the first turn."""
+        warmed = 0
+        for text in self._prewarm_texts:
+            speech_text = (
+                _prepare_russian_speech_text(text)
+                if self._language == "ru"
+                else text
+            )
+            self._synthesize_sync(speech_text)
+            warmed += 1
+        return warmed
+
+    async def _prewarm_model(self) -> None:
+        """Warm Silero in the background and consume any optional failure."""
+        started = time.perf_counter()
+        try:
+            warmed = await asyncio.to_thread(self._prewarm_model_sync)
+        except Exception:  # noqa: BLE001 — warm-up is an optimization
+            logger.warning(
+                "Silero prewarm failed; continuing with lazy synthesis",
+                exc_info=True,
+            )
+            return
+        logger.info(
+            "TTS_PREWARM_READY phrases=%d elapsed_ms=%.2f cache_entries=%d",
+            warmed,
+            (time.perf_counter() - started) * 1000.0,
+            len(self._audio_cache),
+        )
 
     # ------------------------------------------------------------------ #
     # Event handlers
@@ -471,8 +542,21 @@ class TTSModule(BaseModule):
                 if self._language == "ru"
                 else text
             )
-            audio = await self._synthesize_audio(speech_text, session)
-            await self._play_audio(audio, session)
+            synthesis_started = time.perf_counter()
+            synthesized = await self._synthesize_audio(speech_text, session)
+            logger.info(
+                "TTS_SYNTHESIS_READY trace=%s elapsed_ms=%.2f cache_hit=%s",
+                session.trace_id,
+                (time.perf_counter() - synthesis_started) * 1000.0,
+                synthesized.cache_hit,
+            )
+            playback_started = time.perf_counter()
+            await self._play_audio(synthesized.samples, session)
+            logger.info(
+                "TTS_PLAYBACK_FINISHED trace=%s elapsed_ms=%.2f",
+                session.trace_id,
+                (time.perf_counter() - playback_started) * 1000.0,
+            )
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 — one bad turn must not kill TTS
@@ -493,6 +577,9 @@ class TTSModule(BaseModule):
         speak task finishes.  This avoids leaving untracked inference running
         in the background.
         """
+        prewarm_task = self._prewarm_task
+        if prewarm_task is not None and not prewarm_task.done():
+            await asyncio.shield(prewarm_task)
         worker = asyncio.create_task(asyncio.to_thread(self._synthesize_sync, text))
         session.synthesis_worker = worker
         self._synthesis_worker = worker
@@ -532,8 +619,18 @@ class TTSModule(BaseModule):
             # retrieving the exception prevents "never retrieved" noise.
             return
 
-    def _synthesize_sync(self, text: str) -> Any:
+    def _synthesize_sync(self, text: str) -> _SynthesizedAudio:
         """Run blocking Silero inference and return CPU audio samples."""
+        cacheable = (
+            self._cache_max_entries > 0 and len(text) <= self._cache_max_chars
+        )
+        if cacheable:
+            with self._cache_lock:
+                cached = self._audio_cache.get(text)
+                if cached is not None:
+                    self._audio_cache.move_to_end(text)
+                    return _SynthesizedAudio(cached, True)
+
         audio = self._model.apply_tts(
             text=text,
             speaker=self._speaker,
@@ -550,7 +647,13 @@ class TTSModule(BaseModule):
         numpy = getattr(audio, "numpy", None)
         if callable(numpy):
             audio = numpy()
-        return audio
+        if cacheable:
+            with self._cache_lock:
+                self._audio_cache[text] = audio
+                self._audio_cache.move_to_end(text)
+                while len(self._audio_cache) > self._cache_max_entries:
+                    self._audio_cache.popitem(last=False)
+        return _SynthesizedAudio(audio, False)
 
     async def _play_audio(self, audio: Any, session: _SpeechSession) -> None:
         """Play samples off-loop; serialized owner performs cancellation cleanup."""

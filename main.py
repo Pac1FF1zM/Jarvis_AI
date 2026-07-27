@@ -185,8 +185,24 @@ async def run_pipeline(
             logger.info("module '%s' disabled by config — skipping", name)
             return None
         module = factory(mc)
-        await module.start(bus)
+        started = asyncio.get_running_loop().time()
+        try:
+            await module.start(bus)
+        except Exception:
+            # A concurrent peer may still finish successfully. Clean this
+            # partially-started module here; the caller cleans completed peers
+            # after gather has observed every result.
+            try:
+                await module.stop()
+            except Exception:  # noqa: BLE001 — preserve the startup cause
+                logger.exception("error cleaning failed startup module %s", name)
+            raise
         modules_started.append(module)
+        logger.info(
+            "MODULE_START_READY name=%s elapsed_ms=%.2f",
+            name,
+            (asyncio.get_running_loop().time() - started) * 1000.0,
+        )
         return module
 
     if text_input is not None:
@@ -199,15 +215,39 @@ async def run_pipeline(
         modules_started.append(text_output)
         logger.info("text mode: wake_word, stt and tts are not initialized")
     else:
-        wake_word = await start_if(
-            "wake_word", lambda mc: WakeWordModule(mc, force_simulated=demo)
+        # Voice engines are independent during initialization. Loading them in
+        # parallel hides Silero's CPU warm-up behind Whisper's CUDA load and
+        # makes readiness depend on the slowest engine instead of their sum.
+        voice_results = await asyncio.gather(
+            start_if(
+                "wake_word", lambda mc: WakeWordModule(mc, force_simulated=demo)
+            ),
+            start_if("stt", lambda mc: STTModule(mc, gpu_lock)),
+            start_if("nlu", lambda mc: NLUModule(mc, gpu_lock)),
+            start_if(
+                "llm", lambda mc: LLMModule(mc, gpu_lock, tools, short_term)
+            ),
+            start_if("tts", lambda mc: TTSModule(mc)),
+            return_exceptions=True,
         )
-        await start_if("stt", lambda mc: STTModule(mc, gpu_lock))
-        await start_if("nlu", lambda mc: NLUModule(mc, gpu_lock))
-        await start_if(
-            "llm", lambda mc: LLMModule(mc, gpu_lock, tools, short_term)
-        )
-        await start_if("tts", lambda mc: TTSModule(mc))
+        startup_errors = [
+            result for result in voice_results if isinstance(result, BaseException)
+        ]
+        if startup_errors:
+            for module in reversed(modules_started):
+                try:
+                    await module.stop()
+                except Exception:  # noqa: BLE001 — preserve the startup cause
+                    logger.exception(
+                        "error cleaning startup peer %s",
+                        getattr(module, "name", "?"),
+                    )
+            modules_started.clear()
+            await reminder_scheduler.stop()
+            long_term.close()
+            raise startup_errors[0]
+        voice_modules = voice_results
+        wake_word = voice_modules[0]
     await orchestrator.start()
 
     # Run the bus in the background.

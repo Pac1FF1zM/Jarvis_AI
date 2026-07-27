@@ -105,6 +105,9 @@ class LLMModule(BaseModule):
         # actions.  Supplying Ollama tool schemas here would create a second,
         # unvalidated execution path for ordinary chat text.
         self._allow_model_tool_calls = self._input_event == "transcription_ready"
+        self._probe_on_start = bool(
+            self.config.params.get("probe_on_start", False)
+        )
         # Remember the last transcription per trace so tool_result re-entry
         # knows which conversation it belongs to. trace_id -> last user text.
         self._pending_trace_text: dict[str, str] = {}
@@ -127,9 +130,26 @@ class LLMModule(BaseModule):
                 "ollama package not installed — pip install ollama; "
                 "LLM will run in stub-only mode"
             )
+        elif self._probe_on_start:
+            try:
+                await asyncio.to_thread(_OLLAMA.show, self.config.model)
+            except Exception as exc:  # noqa: BLE001 — optional local engine
+                if _is_connection_error(exc):
+                    self._server_down = True
+                    logger.warning(
+                        "Ollama unavailable during startup probe; free dialogue "
+                        "will use the fast stub until Jarvis restarts: %s",
+                        exc,
+                    )
+                else:
+                    logger.warning(
+                        "Ollama startup probe failed unexpectedly; the first "
+                        "dialogue turn will retry",
+                        exc_info=True,
+                    )
         logger.info(
             "LLMModule started (mode=%s) model=%s device=%s tools=%s",
-            "real" if _OLLAMA is not None else "stub",
+            "real" if _OLLAMA is not None and not self._server_down else "stub",
             self.config.model,
             self.config.device,
             self.tools.names(),

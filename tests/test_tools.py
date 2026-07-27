@@ -144,6 +144,30 @@ async def test_list_applications_returns_safe_allowlist():
     assert "PowerShell" not in result["applications"]
 
 
+async def test_list_applications_keeps_spoken_summary_short(monkeypatch):
+    applications = tuple(
+        applications_module.ApplicationSpec(
+            name=f"app-{index}", display_name=f"App {index}"
+        )
+        for index in range(20)
+    )
+    monkeypatch.setattr(
+        applications_module, "available_applications", lambda: applications
+    )
+
+    # execute_list_applications imports the function directly, so replace the
+    # bound reference in its defining module as well.
+    import tools.list_applications as list_module
+
+    monkeypatch.setattr(list_module, "available_applications", lambda: applications)
+    result = await execute_list_applications({})
+
+    assert result["applications"] == [f"App {index}" for index in range(20)]
+    assert "App 6" in result["response_text"]
+    assert "App 7" not in result["response_text"]
+    assert "И ещё 13" in result["response_text"]
+
+
 def test_paint_uses_fixed_windows_uri_instead_of_shell():
     paint = resolve_application("paint")
     assert paint is not None
