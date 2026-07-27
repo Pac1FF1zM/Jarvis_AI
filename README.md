@@ -151,6 +151,7 @@ python main.py --calibrate-voice --profile mikhail --profile-name "Михаил"
 runtime-диагностику:
 
 ```powershell
+python main.py --help
 python main.py --doctor
 python main.py --doctor --json   # структурированный отчёт для установщика/CI
 ```

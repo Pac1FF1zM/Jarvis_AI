@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 
 import pytest
 
@@ -12,6 +13,28 @@ import main as main_module
 from modules.stt import STTModule
 from modules.tts import TTSModule
 from modules.wake_word import WakeWordModule
+
+
+def test_help_is_short_user_facing_and_does_not_start_runtime(monkeypatch, capsys):
+    async def forbidden_run(*args, **kwargs):
+        raise AssertionError("runtime initialized while rendering --help")
+
+    monkeypatch.setattr(main_module, "run_pipeline", forbidden_run)
+    monkeypatch.setattr(sys, "argv", ["main.py", "--help"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        main_module.main()
+
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "Jarvis — локальный голосовой помощник" in output
+    assert "Без параметров запускается голосовой режим" in output
+    assert "--text КОМАНДА" in output
+    assert "--doctor" in output
+    assert "--calibrate-voice" in output
+    assert "Что умеет:" in output
+    assert "составные команды" in output
+    assert len(output.splitlines()) <= 40
 
 
 def test_setup_logging_creates_shareable_per_session_transcript(tmp_path):

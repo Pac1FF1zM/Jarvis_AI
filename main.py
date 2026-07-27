@@ -304,45 +304,79 @@ async def _wait_for_state(
     )
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Run persistent Jarvis push-to-talk")
-    mode = parser.add_mutually_exclusive_group()
+def _build_argument_parser() -> argparse.ArgumentParser:
+    """Build the small user-facing CLI without initializing runtime engines."""
+    parser = argparse.ArgumentParser(
+        prog="python main.py",
+        add_help=False,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Jarvis — локальный голосовой помощник для управления компьютером.\n"
+            "Без параметров запускается голосовой режим."
+        ),
+        epilog=(
+            "Что умеет:\n"
+            "  • открывать приложения, файлы, сайты и настройки Windows;\n"
+            "  • управлять окнами, вкладками, громкостью и музыкой;\n"
+            "  • искать в интернете, сообщать время и ставить напоминания;\n"
+            "  • выполнять составные команды и понимать исправления.\n\n"
+            "Примеры:\n"
+            "  python main.py\n"
+            "  python main.py --text \"открой калькулятор\"\n"
+            "  python main.py --doctor\n"
+            "  python main.py --calibrate-voice"
+        ),
+    )
+    mode = parser.add_argument_group("Режимы запуска").add_mutually_exclusive_group()
     mode.add_argument(
         "--text",
-        help="Send one text command through NLU/tools instead of stub audio",
+        metavar="КОМАНДА",
+        help="выполнить одну текстовую команду",
     )
     mode.add_argument(
         "--demo",
         action="store_true",
-        help="Run one simulated audio interaction and exit",
+        help="запустить одну тестовую сессию",
     )
     mode.add_argument(
         "--doctor",
         action="store_true",
-        help="Check runtime, CUDA, engines and audio devices without starting Jarvis",
+        help="проверить систему и зависимости",
     )
     mode.add_argument(
         "--calibrate-voice",
         action="store_true",
-        help="Calibrate microphone and voice levels for a user profile",
+        help="настроить микрофон и голосовой профиль",
     )
-    parser.add_argument(
-        "--config", default=CONFIG_PATH, help="Path to config.yaml"
+    settings = parser.add_argument_group("Настройки")
+    settings.add_argument(
+        "--config", metavar="ФАЙЛ", default=CONFIG_PATH, help="использовать другой конфиг"
     )
-    parser.add_argument(
+    settings.add_argument(
         "--json",
         action="store_true",
-        help="Emit machine-readable JSON (valid only with --doctor)",
+        help="вывести результат --doctor в JSON",
     )
-    parser.add_argument(
+    settings.add_argument(
         "--profile",
+        metavar="ID",
         default="default",
-        help="Profile id used with --calibrate-voice (default: default)",
+        help="выбрать профиль для калибровки",
     )
-    parser.add_argument(
+    settings.add_argument(
         "--profile-name",
-        help="Display name used when creating a profile",
+        metavar="ИМЯ",
+        help="задать имя нового профиля",
     )
+    help_group = parser.add_argument_group("Справка")
+    help_group.add_argument(
+        "-h", "--help", action="help", help="показать эту подсказку"
+    )
+    return parser
+
+
+def main() -> None:
+    parser = _build_argument_parser()
     args = parser.parse_args()
     if args.json and not args.doctor:
         parser.error("--json is valid only together with --doctor")
