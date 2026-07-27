@@ -156,6 +156,70 @@ def test_profile_json_is_versioned_and_atomic_temp_is_removed(tmp_path):
     assert not list(tmp_path.rglob("*.tmp"))
 
 
+def test_profile_listing_is_read_only_and_returns_persisted_ids(tmp_path):
+    manager = ProfileManager(tmp_path / "profiles")
+    manager.ensure_profile("default", "Основной")
+    manager.ensure_profile("mikhail", "Михаил")
+    before = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
+
+    profiles = manager.list_profiles()
+
+    assert [(item["profile_id"], item["name"]) for item in profiles] == [
+        ("default", "Основной"),
+        ("mikhail", "Михаил"),
+    ]
+    assert sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*")) == before
+
+
+def test_main_profiles_cli_prints_ids_without_starting_runtime(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.delenv("JARVIS_DATA_DIR", raising=False)
+    profile_root = tmp_path / "profiles"
+    manager = ProfileManager(profile_root)
+    manager.ensure_profile("default", "Основной")
+    manager.ensure_profile("mikhail", "Михаил")
+    manager.set_active("mikhail")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        yaml.safe_dump({"profiles": {"root": str(profile_root)}}),
+        encoding="utf-8",
+    )
+
+    async def forbidden_pipeline(*args, **kwargs):
+        raise AssertionError("profile listing must not start runtime")
+
+    monkeypatch.setattr(main_module, "run_pipeline", forbidden_pipeline)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["main.py", "--profiles", "--config", str(config_path)],
+    )
+
+    main_module.main()
+
+    output = capsys.readouterr().out
+    assert "  default — Основной" in output
+    assert "* mikhail — Михаил" in output
+    assert "* — активный профиль" in output
+
+
+def test_standalone_profile_argument_is_rejected_before_runtime(monkeypatch, capsys):
+    async def forbidden_pipeline(*args, **kwargs):
+        raise AssertionError("invalid profile arguments must not start runtime")
+
+    monkeypatch.setattr(main_module, "run_pipeline", forbidden_pipeline)
+    monkeypatch.setattr(sys, "argv", ["main.py", "--profile", "ID"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        main_module.main()
+
+    assert exc_info.value.code == 2
+    error = capsys.readouterr().err
+    assert "только с --calibrate-voice" in error
+    assert "python main.py --profiles" in error
+
+
 def test_interactive_calibration_uses_fakes_and_persists_only_aggregates(
     tmp_path, monkeypatch
 ):

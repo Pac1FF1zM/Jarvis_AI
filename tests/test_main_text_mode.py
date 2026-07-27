@@ -32,6 +32,7 @@ def test_help_is_short_user_facing_and_does_not_start_runtime(monkeypatch, capsy
     assert "--text КОМАНДА" in output
     assert "--doctor" in output
     assert "--calibrate-voice" in output
+    assert "--profiles" in output
     assert "Что умеет:" in output
     assert "составные команды" in output
     assert len(output.splitlines()) <= 40

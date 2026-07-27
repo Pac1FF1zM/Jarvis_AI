@@ -331,6 +331,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
             "  python main.py\n"
             "  python main.py --text \"открой калькулятор\"\n"
             "  python main.py --doctor\n"
+            "  python main.py --profiles\n"
             "  python main.py --calibrate-voice"
         ),
     )
@@ -355,6 +356,11 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="настроить микрофон и голосовой профиль",
     )
+    mode.add_argument(
+        "--profiles",
+        action="store_true",
+        help="показать ID сохранённых профилей",
+    )
     settings = parser.add_argument_group("Настройки")
     settings.add_argument(
         "--config", metavar="ФАЙЛ", default=CONFIG_PATH, help="использовать другой конфиг"
@@ -364,16 +370,16 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="вывести результат --doctor в JSON",
     )
-    settings.add_argument(
+    calibration = parser.add_argument_group("Калибровка")
+    calibration.add_argument(
         "--profile",
-        metavar="ID",
-        default="default",
-        help="выбрать профиль для калибровки",
+        metavar="ID_ПРОФИЛЯ",
+        help="профиль для --calibrate-voice",
     )
-    settings.add_argument(
+    calibration.add_argument(
         "--profile-name",
         metavar="ИМЯ",
-        help="задать имя нового профиля",
+        help="имя профиля для --calibrate-voice",
     )
     help_group = parser.add_argument_group("Справка")
     help_group.add_argument(
@@ -386,9 +392,33 @@ def main() -> None:
     parser = _build_argument_parser()
     args = parser.parse_args()
     if args.json and not args.doctor:
-        parser.error("--json is valid only together with --doctor")
+        parser.error("--json используется только вместе с --doctor")
+    if (args.profile is not None or args.profile_name is not None) and not args.calibrate_voice:
+        parser.error(
+            "--profile и --profile-name используются только с --calibrate-voice; "
+            "для просмотра ID выполните `python main.py --profiles`"
+        )
     if args.doctor:
         raise SystemExit(run_doctor(args.config, json_output=args.json))
+    if args.profiles:
+        try:
+            cfg = load_config(args.config)
+            profile_root = str(cfg.profiles.get("root", "")).strip() or None
+            manager = ProfileManager(profile_root)
+            active_id = manager.active_profile_id()
+            profiles = manager.list_profiles()
+        except (OSError, ValueError) as exc:
+            parser.exit(2, f"Не удалось прочитать профили: {exc}\n")
+        print("Профили Jarvis:")
+        known_ids = {str(profile["profile_id"]) for profile in profiles}
+        if active_id not in known_ids:
+            print(f"* {active_id} — будет создан при первом запуске")
+        for profile in profiles:
+            profile_id = str(profile["profile_id"])
+            marker = "*" if profile_id == active_id else " "
+            print(f"{marker} {profile_id} — {profile.get('name') or profile_id}")
+        print("* — активный профиль")
+        return
     if args.calibrate_voice:
         from core.voice_calibration import (
             CalibrationQualityError,
@@ -400,7 +430,7 @@ def main() -> None:
             profile_root = str(cfg.profiles.get("root", "")).strip() or None
             run_interactive_calibration(
                 ProfileManager(profile_root),
-                args.profile,
+                args.profile or "default",
                 profile_name=args.profile_name,
                 input_device=cfg.module("wake_word").params.get("input_device"),
             )

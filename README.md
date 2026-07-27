@@ -130,6 +130,7 @@ python main.py --demo        # один цикл без микрофона и г
 выполнить:
 
 ```powershell
+python main.py --profiles
 python main.py --calibrate-voice
 python main.py --calibrate-voice --profile mikhail --profile-name "Михаил"
 ```

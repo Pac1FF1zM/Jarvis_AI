@@ -83,6 +83,21 @@ class ProfileManager:
         data = self._read_json(path)
         return self.validate_profile_id(data.get("profile_id", "default"))
 
+    def list_profiles(self) -> list[dict[str, Any]]:
+        """Return persisted profiles without creating or modifying any files."""
+        if not self.root.exists():
+            return []
+        profiles: list[dict[str, Any]] = []
+        for path in sorted(self.root.glob("*/profile.json")):
+            profile = self._read_json(path)
+            profile_id = self.validate_profile_id(profile.get("profile_id", ""))
+            if path.parent.name != profile_id:
+                raise ProfileError(
+                    f"profile id {profile_id!r} does not match directory {path.parent.name!r}"
+                )
+            profiles.append(deepcopy(profile))
+        return profiles
+
     def set_active(self, profile_id: str) -> None:
         profile_id = self.validate_profile_id(profile_id)
         self.ensure_profile(profile_id)
