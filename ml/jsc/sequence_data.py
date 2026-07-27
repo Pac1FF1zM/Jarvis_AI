@@ -14,14 +14,35 @@ from .tokenizer import JSCCharTokenizer
 
 ACT_LABELS = tuple(act.value for act in DialogueAct)
 ACT_TO_ID = {name: index for index, name in enumerate(ACT_LABELS)}
+_UTTERANCE_TRANSLATION = str.maketrans(
+    {
+        "ё": "е",
+        "№": " номер ",
+        ";": ",",
+        "-": " ",
+        "–": " ",
+        "—": " ",
+    }
+)
+
+
+def normalize_utterance(value: str) -> str:
+    """Apply a split-independent normalization suitable for STT-like text."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("utterance must be a non-empty string")
+    normalized = value.casefold().translate(_UTTERANCE_TRANSLATION)
+    return " ".join(normalized.split())
 
 
 def serialize_source(example: JSCExample) -> str:
     """Create an unambiguous model input from history, state and current text."""
-    lines = [f"H_{turn.role.upper()}:{turn.text}" for turn in example.history]
+    lines = [
+        f"H_{turn.role.upper()}:{normalize_utterance(turn.text)}"
+        for turn in example.history
+    ]
     if example.state is not None:
         lines.append(f"STATE:{dumps(example.state)}")
-    lines.append(f"USER:{example.text}")
+    lines.append(f"USER:{normalize_utterance(example.text)}")
     return "\n".join(lines)
 
 

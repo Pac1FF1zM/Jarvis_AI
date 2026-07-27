@@ -37,7 +37,8 @@ weights/embeddings и внешние AI API не используются.
 - holdout не участвует в подборе параметров или эпохи.
 
 Текущий этап отмечается в git и меняется только после тестов и измеримого
-выходного гейта. Сейчас нужно выполнить девять baseline-runs на RTX 3090 Ti;
-без их mean/std этап 3 не считается закрытым. Подробности: `ml/jsc/JAL_SPEC_RU.md`,
+выходного гейта. Сейчас нужно выполнить 12 validation-only pilot runs и девять
+multi-seed confirmation runs на RTX 3090 Ti; без их mean/std этап 3 не считается
+закрытым. Подробности: `ml/jsc/JAL_SPEC_RU.md`,
 `training_workspace/jsc_data/README_RU.md` и
 `training_workspace/JSC_BASELINES_RU.md`.

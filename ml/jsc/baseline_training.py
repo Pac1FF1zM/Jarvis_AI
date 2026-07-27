@@ -86,7 +86,7 @@ class TrainingContext:
     registry: ToolSchemaRegistry
     train: tuple[JSCExample, ...]
     validation: tuple[JSCExample, ...]
-    test: tuple[JSCExample, ...]
+    test: tuple[JSCExample, ...] | None
     tokenizer: JSCCharTokenizer
     limits: SequenceLimits
     data_fingerprint: str
@@ -111,8 +111,9 @@ def inspect_training(config: TrainingConfig) -> dict[str, Any]:
         "data": {
             "train": len(context.train),
             "validation": len(context.validation),
-            "test": len(context.test),
-            "holdout_loaded": False,
+            "test": int(context.manifest["splits"]["test"]["examples"]),
+            "test_loaded": context.test is not None,
+            "evaluation_holdout_loaded": False,
             "fingerprint": context.data_fingerprint,
             "acts": dict(sorted(Counter(e.target.act.value for e in context.train).items())),
         },
@@ -295,13 +296,6 @@ def train_baseline(config: TrainingConfig) -> dict[str, Any]:
         device,
         config,
     )
-    test_final = _final_metrics(
-        model,
-        context.test,
-        context,
-        device,
-        config,
-    )
     report = {
         "format_version": 1,
         "architecture": config.architecture,
@@ -310,6 +304,20 @@ def train_baseline(config: TrainingConfig) -> dict[str, Any]:
         "best_epoch": best_epoch,
         "epochs_completed": len(history),
         "parameters": model.parameter_count(),
+        "hyperparameters": {
+            "epochs": config.epochs,
+            "batch_size": config.batch_size,
+            "learning_rate": config.learning_rate,
+            "weight_decay": config.weight_decay,
+            "label_smoothing": config.label_smoothing,
+            "act_loss_weight": config.act_loss_weight,
+            "d_model": config.d_model,
+            "encoder_layers": config.encoder_layers,
+            "decoder_layers": config.decoder_layers,
+            "attention_heads": config.attention_heads,
+            "feedforward_dim": config.feedforward_dim,
+            "dropout": config.dropout,
+        },
         "device": str(device),
         "elapsed_seconds": round(time.perf_counter() - started, 3),
         "data_fingerprint": context.data_fingerprint,
@@ -322,12 +330,100 @@ def train_baseline(config: TrainingConfig) -> dict[str, Any]:
             "evaluation_holdout_loaded": False,
         },
         "validation": validation_final,
-        "test": test_final,
         "history": history,
         "checkpoint": str(best_path.resolve()),
     }
     _atomic_text(report_path, json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     return report
+
+
+def evaluate_locked_test(
+    checkpoint_path: str | Path,
+    data_dir: str | Path,
+    *,
+    device: str = "auto",
+    batch_size: int = 32,
+    allow_smoke: bool = False,
+) -> dict[str, Any]:
+    """Open test only for an already selected immutable checkpoint."""
+    resolved_device = _resolve_device(device)
+    checkpoint = torch.load(
+        Path(checkpoint_path),
+        map_location=resolved_device,
+        weights_only=False,
+    )
+    if checkpoint.get("kind") != "jsc_baseline_inference":
+        raise ValueError("checkpoint is not a JSC inference checkpoint")
+    if checkpoint.get("smoke") and not allow_smoke:
+        raise ValueError("smoke checkpoints cannot be evaluated as trained models")
+    directory = Path(data_dir)
+    manifest = json.loads(
+        (directory / "dataset_manifest.json").read_text(encoding="utf-8")
+    )
+    tools = ToolRegistry()
+    tools.discover("tools")
+    registry = ToolSchemaRegistry.from_tool_registry(tools)
+    if manifest.get("tool_schema_sha256") != registry.schema_fingerprint:
+        raise ValueError("dataset tool schema fingerprint does not match current runtime")
+    if checkpoint.get("tool_schema_sha256") != registry.schema_fingerprint:
+        raise ValueError("checkpoint tool schema fingerprint does not match current runtime")
+    data_fingerprint = _manifest_data_fingerprint(manifest, registry)
+    if checkpoint.get("data_fingerprint") != data_fingerprint:
+        raise ValueError("checkpoint was trained against another dataset manifest")
+    test_path = directory / "test.jsonl"
+    test_content = test_path.read_bytes()
+    if hashlib.sha256(test_content).hexdigest() != manifest["splits"]["test"]["sha256"]:
+        raise ValueError("test hash does not match dataset manifest")
+    test_examples = tuple(load_jsc_jsonl(test_path, registry, expected_split="test"))
+    tokenizer = JSCCharTokenizer.from_dict(checkpoint["tokenizer"])
+    if tokenizer.fingerprint != checkpoint.get("tokenizer_fingerprint"):
+        raise ValueError("checkpoint tokenizer fingerprint is corrupt")
+    model_config = BaselineConfig.from_dict(checkpoint["model_config"])
+    model = JSCBaselineModel(model_config).to(resolved_device)
+    model.load_state_dict(checkpoint["model_state"])
+    model.eval()
+    evaluation_config = TrainingConfig(
+        architecture=model_config.architecture,
+        data_dir=str(directory),
+        output_dir=".",
+        device=device,
+        batch_size=batch_size,
+        d_model=model_config.d_model,
+        encoder_layers=model_config.encoder_layers,
+        decoder_layers=model_config.decoder_layers,
+        attention_heads=model_config.attention_heads,
+        feedforward_dim=model_config.feedforward_dim,
+        dropout=model_config.dropout,
+        max_source_length=model_config.max_source_length,
+        max_target_length=model_config.max_target_length,
+        smoke=bool(checkpoint.get("smoke")),
+    )
+    context = TrainingContext(
+        registry=registry,
+        train=(),
+        validation=(),
+        test=test_examples,
+        tokenizer=tokenizer,
+        limits=SequenceLimits(
+            model_config.max_source_length,
+            model_config.max_target_length,
+        ),
+        data_fingerprint=data_fingerprint,
+        manifest=manifest,
+    )
+    return {
+        "checkpoint": str(Path(checkpoint_path).resolve()),
+        "architecture": model_config.architecture,
+        "seed": checkpoint["seed"],
+        "selected_before_test": True,
+        "metrics": _final_metrics(
+            model,
+            test_examples,
+            context,
+            resolved_device,
+            evaluation_config,
+        ),
+    }
 
 
 def _load_context(config: TrainingConfig) -> TrainingContext:
@@ -340,16 +436,14 @@ def _load_context(config: TrainingConfig) -> TrainingContext:
     if manifest.get("tool_schema_sha256") != registry.schema_fingerprint:
         raise ValueError("dataset tool schema fingerprint does not match current runtime")
     loaded: dict[str, tuple[JSCExample, ...]] = {}
-    digest = hashlib.sha256()
-    for split in ("train", "validation", "test"):
+    for split in ("train", "validation"):
         path = data_dir / f"{split}.jsonl"
         content = path.read_bytes()
         expected_hash = manifest["splits"][split]["sha256"]
         if hashlib.sha256(content).hexdigest() != expected_hash:
             raise ValueError(f"{split} hash does not match dataset manifest")
-        digest.update(split.encode("ascii") + b"\0" + content)
         loaded[split] = tuple(load_jsc_jsonl(path, registry, expected_split=split))
-    digest.update(registry.schema_fingerprint.encode("ascii"))
+    data_fingerprint = _manifest_data_fingerprint(manifest, registry)
     tokenizer = JSCCharTokenizer.fit(tokenizer_training_texts(loaded["train"]))
     limits = SequenceLimits(config.max_source_length, config.max_target_length)
     for split, examples in loaded.items():
@@ -360,12 +454,29 @@ def _load_context(config: TrainingConfig) -> TrainingContext:
         registry=registry,
         train=loaded["train"],
         validation=loaded["validation"],
-        test=loaded["test"],
+        test=None,
         tokenizer=tokenizer,
         limits=limits,
-        data_fingerprint=digest.hexdigest(),
+        data_fingerprint=data_fingerprint,
         manifest=manifest,
     )
+
+
+def _manifest_data_fingerprint(
+    manifest: Mapping[str, Any],
+    registry: ToolSchemaRegistry,
+) -> str:
+    payload = {
+        "version": manifest.get("version"),
+        "data_schema_version": manifest.get("data_schema_version"),
+        "tool_schema_sha256": registry.schema_fingerprint,
+        "splits": {
+            split: manifest["splits"][split]["sha256"]
+            for split in ("train", "validation", "test")
+        },
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _model_config(
