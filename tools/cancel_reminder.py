@@ -13,6 +13,7 @@ TOOL_SCHEMA: dict[str, Any] = {
             "reminder_id": {
                 "type": "integer",
                 "description": "Numeric reminder id shown by list_reminders.",
+                "minimum": 1,
             }
         },
         "required": ["reminder_id"],

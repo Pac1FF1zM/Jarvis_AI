@@ -18,6 +18,7 @@ TOOL_SCHEMA: dict[str, Any] = {
             "application": {
                 "type": "string",
                 "description": "Application name requested by the user.",
+                "enum": [item.name for item in APPLICATIONS],
             },
         },
         "required": ["application"],

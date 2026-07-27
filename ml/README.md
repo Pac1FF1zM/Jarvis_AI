@@ -1,5 +1,8 @@
 # Jarvis ML baseline
 
+Следующее поколение собственной NLU развивается как Jarvis Semantic Core.
+Рабочий порядок и гейты: [`JSC_ROADMAP_RU.md`](JSC_ROADMAP_RU.md).
+
 This directory contains the project's own NLU pipeline. It uses no Hugging
 Face components, pretrained weights or embeddings, downloaded tokenizers, or
 external datasets. PyTorch is only the tensor/autograd framework.

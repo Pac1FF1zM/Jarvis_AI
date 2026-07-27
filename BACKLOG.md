@@ -1,5 +1,8 @@
 # Jarvis backlog
 
+Активный ML-план развития зафиксирован отдельно:
+[`ml/JSC_ROADMAP_RU.md`](ml/JSC_ROADMAP_RU.md).
+
 ## Согласованный roadmap
 
 ### Приоритет 1 — MVP-надежность и полезные функции

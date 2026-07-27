@@ -15,10 +15,12 @@ TOOL_SCHEMA: dict[str, Any] = {
             "minutes": {
                 "type": "integer",
                 "description": "How many minutes from now to fire the reminder.",
+                "minimum": 1,
             },
             "message": {
                 "type": "string",
                 "description": "The reminder text to surface when it fires.",
+                "minLength": 1,
             },
             "due_at": {
                 "type": "string",
@@ -31,9 +33,12 @@ TOOL_SCHEMA: dict[str, Any] = {
             "day": {
                 "type": "string",
                 "description": "Optional Russian day marker: сегодня/завтра.",
+                "enum": ["сегодня", "завтра"],
             },
         },
         "required": ["message"],
+        "x-one-of-required": ["minutes", "due_at", "clock_time"],
+        "x-mutually-exclusive": ["minutes", "due_at", "clock_time"],
     },
 }
 
