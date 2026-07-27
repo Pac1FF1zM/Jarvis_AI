@@ -47,6 +47,12 @@ training_workspace/runs/
 training_workspace/export/
 training_workspace/jsc_runs/
 training_workspace/data/private_holdout.jsonl
+training_workspace/gesture_data/
+training_workspace/gesture_runs/
+training_workspace/gesture_export/
+gesture_data/
+gesture_runs/
+gesture_export/
 installer/cache/
 installer/output/
 installer/.tools/

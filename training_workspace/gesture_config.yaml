@@ -1,0 +1,58 @@
+# Jarvis Gesture Core: all models start from random weights.
+# The test split is never read until the validation-selected candidate is frozen.
+require_cuda: true
+device: cuda
+amp: true
+runs_dir: gesture_runs
+export_dir: gesture_export
+
+data:
+  # Created by: python -m training_workspace.build_gesture_manifest ...
+  manifest: gesture_data/ipn_manifest.jsonl
+  frames: 32
+  image_size: 112
+
+# RTX 3090 Ti starting point. With 24 GB VRAM, increase batch_size carefully
+# only after a check run confirms decoder workers and VRAM are stable.
+batch_size: 24
+num_workers: 4
+
+experiments:
+  - name: tiny_3d_cnn
+    architecture: tiny_3d_cnn
+    width: 32
+    dropout: 0.20
+    epochs: 35
+    patience: 8
+    learning_rate: 0.0005
+    weight_decay: 0.0001
+    label_smoothing: 0.03
+    seed: 17
+
+  - name: cnn_bigru
+    architecture: cnn_bigru
+    width: 32
+    dropout: 0.20
+    epochs: 35
+    patience: 8
+    learning_rate: 0.0005
+    weight_decay: 0.0001
+    label_smoothing: 0.03
+    seed: 29
+
+  - name: cnn_temporal_transformer
+    architecture: cnn_temporal_transformer
+    width: 32
+    dropout: 0.25
+    epochs: 35
+    patience: 8
+    learning_rate: 0.00035
+    weight_decay: 0.0002
+    label_smoothing: 0.04
+    seed: 43
+
+selection:
+  # Initial gates. They are safety limits, not targets to tune on the test set.
+  min_test_macro_f1: 0.70
+  min_no_gesture_recall: 0.85
+  max_false_trigger_rate: 0.15

@@ -1,3 +1,4 @@
 numpy>=1.24
 pyyaml>=6.0
 pytest>=8.0
+opencv-python-headless>=4.10  # local MP4 decoding for the gesture workspace
