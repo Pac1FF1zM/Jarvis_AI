@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 from .data import Example, build_examples, iter_text
 from .models import build_model
-from .schema import INTENTS, SLOT_LABELS
+from .schema import ACTIONABLE_INTENTS, INTENTS, INTENT_SLOTS, SLOT_LABELS
 from .tokenizer import CharTokenizer, WordTokenizer, IGNORE_INDEX
 
 
@@ -48,12 +48,24 @@ def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    # Fair hyperparameter comparisons require repeatable kernels.  These
+    # switches trade a little peak throughput for substantially less seed noise.
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
-def _accuracy(model: nn.Module, loader: DataLoader, device: torch.device) -> dict[str, float]:
+def _accuracy(model: nn.Module, loader: DataLoader, device: torch.device) -> dict[str, object]:
     model.eval()
     intent_correct = intent_total = slot_correct = slot_total = 0
     true_positive = false_positive = false_negative = 0
+    frame_correct = actionable_correct = actionable_total = 0
+    no_slot_total = hallucinated_frames = 0
+    per_slot_counts = {
+        name: {"tp": 0, "fp": 0, "fn": 0}
+        for name in ("duration", "reminder_text", "application")
+    }
     confusion = torch.zeros((len(INTENTS), len(INTENTS)), dtype=torch.long)
     with torch.inference_mode():
         for batch in loader:
@@ -76,6 +88,48 @@ def _accuracy(model: nn.Module, loader: DataLoader, device: torch.device) -> dic
             true_positive += int(((slot_predictions == slots) & expected_entity).sum())
             false_positive += int((predicted_entity & (slot_predictions != slots)).sum())
             false_negative += int((expected_entity & (slot_predictions != slots)).sum())
+            for row in range(intent.numel()):
+                valid_row = valid[row]
+                expected_row = slots[row][valid_row]
+                predicted_row = slot_predictions[row][valid_row]
+                intent_name = INTENTS[int(intent[row])]
+                exact = bool(intent_predictions[row] == intent[row]) and torch.equal(
+                    predicted_row, expected_row
+                )
+                frame_correct += int(exact)
+                if intent_name in ACTIONABLE_INTENTS:
+                    actionable_total += 1
+                    actionable_correct += int(exact)
+                if not INTENT_SLOTS[intent_name]:
+                    no_slot_total += 1
+                    hallucinated_frames += int(bool((predicted_row != 0).any()))
+                for slot_name in per_slot_counts:
+                    expected_type = torch.tensor(
+                        [
+                            (
+                                SLOT_LABELS[int(value)].partition("-")[2]
+                                if int(value) else ""
+                            )
+                            == slot_name
+                            for value in expected_row.cpu()
+                        ],
+                        dtype=torch.bool,
+                    )
+                    predicted_type = torch.tensor(
+                        [
+                            (
+                                SLOT_LABELS[int(value)].partition("-")[2]
+                                if int(value) else ""
+                            )
+                            == slot_name
+                            for value in predicted_row.cpu()
+                        ],
+                        dtype=torch.bool,
+                    )
+                    counts = per_slot_counts[slot_name]
+                    counts["tp"] += int((expected_type & predicted_type).sum())
+                    counts["fp"] += int((~expected_type & predicted_type).sum())
+                    counts["fn"] += int((expected_type & ~predicted_type).sum())
     f1_values: list[float] = []
     for label_id in range(len(INTENTS)):
         tp = int(confusion[label_id, label_id])
@@ -86,6 +140,14 @@ def _accuracy(model: nn.Module, loader: DataLoader, device: torch.device) -> dic
         f1_values.append(2 * precision * recall / max(precision + recall, 1e-12))
     entity_precision = true_positive / max(true_positive + false_positive, 1)
     entity_recall = true_positive / max(true_positive + false_negative, 1)
+    per_slot = {}
+    for name, counts in per_slot_counts.items():
+        precision = counts["tp"] / max(counts["tp"] + counts["fp"], 1)
+        recall = counts["tp"] / max(counts["tp"] + counts["fn"], 1)
+        per_slot[name] = {
+            "f1": 2 * precision * recall / max(precision + recall, 1e-12),
+            "support_tokens": counts["tp"] + counts["fn"],
+        }
     return {
         "intent_accuracy": intent_correct / max(intent_total, 1),
         "intent_macro_f1": sum(f1_values) / len(f1_values),
@@ -93,6 +155,10 @@ def _accuracy(model: nn.Module, loader: DataLoader, device: torch.device) -> dic
         "slot_entity_f1": 2 * entity_precision * entity_recall / max(
             entity_precision + entity_recall, 1e-12
         ),
+        "semantic_frame_exact_match": frame_correct / max(intent_total, 1),
+        "end_to_end_command_accuracy": actionable_correct / max(actionable_total, 1),
+        "slot_hallucination_rate": hallucinated_frames / max(no_slot_total, 1),
+        "per_slot": per_slot,
     }
 
 

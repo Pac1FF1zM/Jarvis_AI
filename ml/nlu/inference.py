@@ -7,7 +7,7 @@ from pathlib import Path
 import torch
 
 from .models import build_model
-from .schema import INTENTS, SLOT_LABELS, NLUResult
+from .schema import INTENTS, INTENT_SLOTS, SLOT_LABELS, NLUResult
 from .tokenizer import CharTokenizer, WordTokenizer
 
 
@@ -122,4 +122,8 @@ def _normalise_slots(text: str, intent: str, slots: dict[str, str]) -> dict[str,
             ).strip(" ,.:;!?-")
             if application:
                 slots["application"] = application
-    return slots
+    # A slot from the wrong intent must never become a tool argument.  The raw
+    # slot head is still measured during training, while runtime uses this
+    # deterministic contract boundary as a final safety net.
+    allowed = INTENT_SLOTS[intent]
+    return {name: value for name, value in slots.items() if name in allowed}

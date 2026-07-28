@@ -11,11 +11,16 @@ import torch
 import yaml
 
 from ml.nlu.custom_data import load_jsonl, validate_splits
+from ml.nlu.data import Example, Span
+from ml.nlu.inference import _normalise_slots
 from ml.nlu.models import build_model
+from ml.nlu.metrics import semantic_frame_metrics
+from ml.nlu.schema import INTENTS, NLUResult, SLOT_LABELS
 from ml.nlu.tokenizer import WordTokenizer
 from ml.nlu.finetune import _restore_with_expanded_vocabulary
-from ml.nlu.manager_train import _route_logits, _route_targets
+from ml.nlu.manager_train import _route_logits, _route_targets, _slot_consistency_loss
 from training_workspace.build_dataset import APPLICATIONS, TARGETS, build
+from training_workspace.nlu_search import confirmation_experiments, generate_phase_one
 from training_workspace.run import run
 
 
@@ -166,6 +171,94 @@ def test_manager_route_loss_groups_intents_and_backpropagates():
     assert torch.isfinite(intent_logits.grad).all()
 
 
+def test_slot_consistency_loss_penalises_intent_illegal_slots():
+    targets = torch.zeros((2, 3), dtype=torch.long)
+    intents = torch.tensor(
+        [INTENTS.index("general_chat"), INTENTS.index("open_application")]
+    )
+    legal = torch.full((2, 3, len(SLOT_LABELS)), -4.0, requires_grad=True)
+    illegal = torch.full((2, 3, len(SLOT_LABELS)), -4.0, requires_grad=True)
+    with torch.no_grad():
+        legal[0, :, SLOT_LABELS.index("O")] = 4.0
+        legal[1, :, SLOT_LABELS.index("B-application")] = 4.0
+        illegal[0, :, SLOT_LABELS.index("B-application")] = 4.0
+        illegal[1, :, SLOT_LABELS.index("B-reminder_text")] = 4.0
+
+    legal_loss = _slot_consistency_loss(legal, intents, targets)
+    illegal_loss = _slot_consistency_loss(illegal, intents, targets)
+    illegal_loss.backward()
+
+    assert legal_loss < illegal_loss
+    assert illegal.grad is not None
+    assert torch.isfinite(illegal.grad).all()
+
+
+def test_semantic_metrics_detect_exact_frames_and_slot_hallucination():
+    reminder = "через 12 минут напомни позвонить"
+    examples = [
+        Example("открой paint", "open_application", (Span(7, 12, "application"),)),
+        Example(
+            reminder,
+            "set_reminder",
+            (
+                Span(reminder.index("12"), reminder.index("12") + 2, "duration"),
+                Span(
+                    reminder.index("позвонить"),
+                    reminder.index("позвонить") + len("позвонить"),
+                    "reminder_text",
+                ),
+            ),
+        ),
+        Example("привет", "general_chat"),
+    ]
+    predictions = [
+        NLUResult("open_application", 0.9, {"application": "Paint"}),
+        NLUResult("set_reminder", 0.8, {"minutes": "12", "reminder_text": "написать"}),
+        NLUResult("open_application", 0.7, {"application": "привет"}),
+    ]
+
+    metrics = semantic_frame_metrics(examples, predictions)
+
+    assert metrics["semantic_frame_exact_match"] == pytest.approx(1 / 3)
+    assert metrics["slot_hallucination_rate"] == 1.0
+    assert metrics["per_slot"]["application"]["f1"] == pytest.approx(2 / 3)
+    assert metrics["per_slot"]["minutes"]["f1"] == 1.0
+    assert metrics["per_slot"]["reminder_text"]["f1"] == 0.0
+
+
+def test_runtime_drops_slots_that_are_illegal_for_predicted_intent():
+    assert _normalise_slots(
+        "привет", "general_chat", {"application": "paint", "reminder_text": "привет"}
+    ) == {}
+    assert _normalise_slots(
+        "открой paint",
+        "open_application",
+        {"reminder_text": "лишнее", "duration": "12"},
+    ) == {"application": "paint"}
+
+
+def test_two_stage_search_is_reproducible_and_seed_fair():
+    search = {
+        "trials": 6,
+        "search_seed": 123,
+        "phase_one_seed": 17,
+        "confirmation_seeds": [17, 43, 101],
+        "space": {"method": ["standard", "augmented", "curriculum"]},
+    }
+
+    first = generate_phase_one(search)
+    second = generate_phase_one(search)
+    confirmation = confirmation_experiments(first[:2], search)
+
+    assert first == second
+    assert {item["seed"] for item in first} == {17}
+    assert {item["method"] for item in first} == {
+        "standard", "augmented", "curriculum"
+    }
+    assert len(confirmation) == 6
+    assert {item["seed"] for item in confirmation} == {17, 43, 101}
+
+
 def test_workspace_uses_char_manager_experiments_and_strict_export_gates():
     root = Path(__file__).resolve().parents[1]
     config = yaml.safe_load(
@@ -173,15 +266,24 @@ def test_workspace_uses_char_manager_experiments_and_strict_export_gates():
     )
     experiments = config["experiments"]
     selection = config["selection"]
+    search = config["search"]
 
     assert {experiment["method"] for experiment in experiments} == {
         "standard", "augmented", "curriculum"
     }
     assert all(experiment["trainer"] == "manager" for experiment in experiments)
     assert all(experiment["architecture"] == "char_cnn" for experiment in experiments)
+    assert search["enabled"] is True
+    assert search["trials"] >= 20
+    assert len(search["confirmation_seeds"]) >= 5
+    assert len({experiment["seed"] for experiment in experiments}) == 1
     assert selection["max_legacy_macro_f1_drop"] == 0.0
     assert selection["min_evaluation_holdout_macro_f1_improvement"] > 0.0
     assert selection["min_holdout_worst_recall"] >= 0.6
+    assert selection["min_slot_entity_f1"] >= 0.78
+    assert selection["max_slot_hallucination_rate"] <= 0.02
+    assert selection["min_semantic_frame_exact_match"] >= 0.80
+    assert selection["max_expected_calibration_error"] <= 0.04
 
 
 def test_copy_script_requires_approved_hash():

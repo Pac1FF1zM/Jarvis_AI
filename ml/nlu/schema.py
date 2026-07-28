@@ -24,6 +24,28 @@ SLOT_LABELS = (
     "I-application",
 )
 
+# Slots are part of the command contract, not free-form model output.  The
+# mapping is shared by training, evaluation, and runtime decoding so those
+# three stages cannot silently disagree about which arguments an intent may
+# produce.
+INTENT_SLOTS: dict[str, frozenset[str]] = {
+    "get_current_time": frozenset(),
+    "set_reminder": frozenset({"minutes", "reminder_text"}),
+    "open_application": frozenset({"application"}),
+    "list_applications": frozenset(),
+    "cancel": frozenset(),
+    "general_chat": frozenset(),
+    "unknown": frozenset(),
+}
+
+ACTIONABLE_INTENTS = frozenset({
+    "get_current_time",
+    "set_reminder",
+    "open_application",
+    "list_applications",
+    "cancel",
+})
+
 
 @dataclass(frozen=True)
 class NLUResult:

@@ -24,7 +24,7 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 from .custom_data import load_jsonl, validate_splits
 from .data import Example, build_examples, iter_text
 from .models import build_model
-from .schema import INTENTS, SLOT_LABELS
+from .schema import INTENTS, INTENT_SLOTS, SLOT_LABELS
 from .tokenizer import CharTokenizer, IGNORE_INDEX, WordTokenizer
 from .train import (
     NLUDataset,
@@ -122,6 +122,50 @@ def _balanced_score(custom_macro_f1: float, legacy_macro_f1: float) -> float:
     return 2.0 * custom_macro_f1 * legacy_macro_f1 / max(
         custom_macro_f1 + legacy_macro_f1, 1e-12
     )
+
+
+def _slot_consistency_loss(
+    slot_logits: torch.Tensor,
+    intent_targets: torch.Tensor,
+    slot_targets: torch.Tensor,
+) -> torch.Tensor:
+    """Penalise probability assigned to slot types illegal for the intent."""
+    allowed = torch.zeros(
+        (len(INTENTS), len(SLOT_LABELS)),
+        dtype=torch.bool,
+        device=slot_logits.device,
+    )
+    allowed[:, 0] = True
+    runtime_to_training = {"minutes": "duration"}
+    for intent_id, intent in enumerate(INTENTS):
+        for runtime_name in INTENT_SLOTS[intent]:
+            slot_name = runtime_to_training.get(runtime_name, runtime_name)
+            for prefix in ("B", "I"):
+                allowed[intent_id, SLOT_LABELS.index(f"{prefix}-{slot_name}")] = True
+    legal_for_example = allowed[intent_targets].unsqueeze(1)
+    illegal_mass = torch.softmax(slot_logits, dim=-1).masked_fill(
+        legal_for_example, 0.0
+    ).sum(dim=-1)
+    valid = slot_targets != IGNORE_INDEX
+    if not bool(valid.any()):
+        return slot_logits.sum() * 0.0
+    return -torch.log1p(-illegal_mass[valid].clamp(max=1.0 - 1e-6)).mean()
+
+
+def _manager_validation_score(
+    custom_metrics: dict[str, object], legacy_metrics: dict[str, object]
+) -> float:
+    """Joint score used only on development data for early stopping."""
+    intent_score = _balanced_score(
+        float(custom_metrics["intent_macro_f1"]),
+        float(legacy_metrics["intent_macro_f1"]),
+    )
+    score = (
+        0.55 * intent_score
+        + 0.25 * float(custom_metrics["slot_entity_f1"])
+        + 0.20 * float(custom_metrics["semantic_frame_exact_match"])
+    )
+    return score - 0.25 * float(custom_metrics["slot_hallucination_rate"])
 
 
 def _model_and_tokenizer(args: argparse.Namespace, texts: list[str]):
@@ -248,6 +292,9 @@ def train_manager(args: argparse.Namespace) -> dict[str, Any]:
                 loss = loss + args.slot_loss_weight * slot_loss(
                     slot_logits.reshape(-1, len(SLOT_LABELS)), slots.reshape(-1)
                 )
+                loss = loss + args.slot_consistency_weight * _slot_consistency_loss(
+                    slot_logits, intents, slots
+                )
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
             nn.utils.clip_grad_norm_(model.parameters(), args.gradient_clip)
@@ -258,9 +305,7 @@ def train_manager(args: argparse.Namespace) -> dict[str, Any]:
 
         custom_metrics = _accuracy(model, custom_validation_loader, device)
         legacy_metrics = _accuracy(model, legacy_validation_loader, device)
-        score = _balanced_score(
-            custom_metrics["intent_macro_f1"], legacy_metrics["intent_macro_f1"]
-        )
+        score = _manager_validation_score(custom_metrics, legacy_metrics)
         history.append(
             {
                 "epoch": float(epoch),
@@ -269,13 +314,17 @@ def train_manager(args: argparse.Namespace) -> dict[str, Any]:
                 "custom_macro_f1": custom_metrics["intent_macro_f1"],
                 "legacy_macro_f1": legacy_metrics["intent_macro_f1"],
                 "custom_slot_f1": custom_metrics["slot_entity_f1"],
+                "custom_frame_exact": custom_metrics["semantic_frame_exact_match"],
+                "custom_slot_hallucination": custom_metrics["slot_hallucination_rate"],
             }
         )
         print(
             f"epoch={epoch:03d} loss={history[-1]['loss']:.4f} "
             f"score={score:.4f} custom_f1={custom_metrics['intent_macro_f1']:.4f} "
             f"legacy_f1={legacy_metrics['intent_macro_f1']:.4f} "
-            f"slot_f1={custom_metrics['slot_entity_f1']:.4f}",
+            f"slot_f1={custom_metrics['slot_entity_f1']:.4f} "
+            f"frame={custom_metrics['semantic_frame_exact_match']:.4f} "
+            f"hallucination={custom_metrics['slot_hallucination_rate']:.4f}",
             flush=True,
         )
         if score > best_score + args.min_delta:
@@ -332,6 +381,8 @@ def train_manager(args: argparse.Namespace) -> dict[str, Any]:
         "method": args.method,
         "manager_routes": [route for route, _intents in ROUTES],
         "route_loss_weight": args.route_loss_weight,
+        "slot_loss_weight": args.slot_loss_weight,
+        "slot_consistency_weight": args.slot_consistency_weight,
         "custom_fraction": args.custom_fraction,
         "device": str(device),
         "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else None,
@@ -381,6 +432,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hidden-dim", type=int, default=64)
     parser.add_argument("--max-length", type=int, default=128)
     parser.add_argument("--slot-loss-weight", type=float, default=0.6)
+    parser.add_argument("--slot-consistency-weight", type=float, default=0.3)
     parser.add_argument("--route-loss-weight", type=float, default=0.35)
     parser.add_argument("--label-smoothing", type=float, default=0.04)
     parser.add_argument("--gradient-clip", type=float, default=1.0)

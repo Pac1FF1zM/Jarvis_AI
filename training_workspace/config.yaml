@@ -16,6 +16,37 @@ data:
   # Older frozen set, never used while designing the new manager experiments.
   final_holdout: ../ml/nlu/holdout_v2.jsonl
 
+# Two-stage search: 24 short, directly comparable trials use the same seed.
+# Only the best three configurations receive the full epoch budget and are
+# repeated on five seeds. Neither holdout is opened during either stage.
+search:
+  enabled: true
+  search_seed: 20260729
+  trials: 24
+  phase_one_seed: 17
+  phase_one_epochs: 28
+  phase_one_patience: 6
+  top_k: 3
+  confirmation_seeds: [17, 43, 101, 211, 307]
+  confirmation_epochs: 70
+  confirmation_patience: 12
+  min_passing_seeds: 4
+  max_length: 128
+  space:
+    method: [standard, augmented, curriculum]
+    batch_size: [128, 256, 512]
+    learning_rate: [0.0004, 0.0015]
+    weight_decay: [0.00003, 0.0003]
+    custom_fraction: [0.30, 0.60]
+    curriculum_start_fraction: [0.15, 0.30]
+    route_loss_weight: [0.20, 0.45]
+    slot_loss_weight: [0.60, 1.60]
+    slot_consistency_weight: [0.10, 0.80]
+    embedding_dim: [48, 64, 96]
+    hidden_dim: [64, 96, 128]
+    label_smoothing: [0.0, 0.06]
+
+# Fallback hand-authored experiments used only when search.enabled is false.
 experiments:
   - name: manager_curriculum
     trainer: manager
@@ -27,6 +58,8 @@ experiments:
     custom_fraction: 0.40
     curriculum_start_fraction: 0.20
     route_loss_weight: 0.35
+    slot_loss_weight: 0.9
+    slot_consistency_weight: 0.3
     patience: 12
     label_smoothing: 0.04
     seed: 17
@@ -40,9 +73,11 @@ experiments:
     learning_rate: 0.0009
     custom_fraction: 0.40
     route_loss_weight: 0.40
+    slot_loss_weight: 1.1
+    slot_consistency_weight: 0.4
     patience: 12
     label_smoothing: 0.04
-    seed: 43
+    seed: 17
 
   - name: manager_standard
     trainer: manager
@@ -53,9 +88,11 @@ experiments:
     learning_rate: 0.0012
     custom_fraction: 0.35
     route_loss_weight: 0.30
+    slot_loss_weight: 0.8
+    slot_consistency_weight: 0.3
     patience: 12
     label_smoothing: 0.04
-    seed: 29
+    seed: 17
 
 benchmark:
   # CPU reflects the current Jarvis runtime deployment. Change to cuda only
@@ -69,7 +106,18 @@ selection:
   min_custom_macro_f1_improvement: 0.10
   max_legacy_macro_f1_drop: 0.0
   min_regression_worst_recall: 0.70
+  min_intent_macro_f1: 0.94
+  min_worst_intent_recall: 0.85
+  min_slot_entity_f1: 0.78
+  max_slot_hallucination_rate: 0.02
+  min_semantic_frame_exact_match: 0.80
+  min_end_to_end_command_accuracy: 0.80
+  max_expected_calibration_error: 0.04
   min_evaluation_holdout_macro_f1_improvement: 0.05
   min_final_holdout_macro_f1_improvement: 0.0
   min_holdout_worst_recall: 0.60
-  max_p95_latency_ms: 10.0
+  min_holdout_slot_entity_f1: 0.78
+  max_holdout_slot_hallucination_rate: 0.02
+  min_holdout_semantic_frame_exact_match: 0.80
+  min_holdout_end_to_end_command_accuracy: 0.80
+  max_p95_latency_ms: 2.0

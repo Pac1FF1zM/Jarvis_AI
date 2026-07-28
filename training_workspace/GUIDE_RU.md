@@ -14,22 +14,25 @@ PyTorch используется только как вычислительны�
 `START_TRAINING.ps1` последовательно:
 
 1. проверяет JSONL, отсутствие пересечения train/validation, два holdout и CUDA;
-2. измеряет baseline отдельно на новых, старых и финальных фразах;
-3. обучает с нуля три режима: `augmented`, `curriculum`, `standard`;
-4. использует символьный токенизатор, поэтому новые слова не превращаются в
+2. измеряет baseline только на development-наборах, не раскрывая holdout;
+3. запускает 24 коротких конфигурации `augmented/curriculum/standard` с одним
+   и тем же seed, чтобы сравнение параметров было честным;
+4. оставляет три лучших конфигурации и повторяет каждую на пяти seed с полным
+   бюджетом эпох; неустойчивый «везучий» запуск не становится победителем;
+5. использует символьный токенизатор, поэтому новые слова не превращаются в
    один бесполезный `<unk>`;
-5. балансирует не только intents, но и долю старого/нового корпуса, не позволяя
+6. балансирует не только intents, но и долю старого/нового корпуса, не позволяя
    новым шаблонам вытеснить старые навыки;
-6. добавляет иерархический route-loss роли менеджера вместе с intent/slot loss;
-7. применяет AMP, TF32, gradient clipping, label smoothing, калибровку и early
-   stopping по гармоническому балансу новых и старых validation-фраз;
-8. отбрасывает кандидатов с регрессией старых команд, низким recall любого
-   intent или превышением CPU latency SLA;
-9. проверяет победителя на двух holdout и создаёт `approved.json` только после
-   прохождения всех гейтов.
+7. добавляет иерархический route-loss и штраф за слоты, несовместимые с intent;
+8. применяет AMP, TF32, gradient clipping, label smoothing, калибровку и early
+   stopping по общей оценке intent, slots и полной semantic frame;
+9. проверяет intent macro-F1, worst recall, F1 каждого slot, hallucination rate,
+   semantic-frame exact match, end-to-end accuracy, ECE и CPU latency;
+10. только после выбора одного репрезентативного checkpoint один раз открывает
+    два holdout и создаёт `approved.json` лишь после прохождения всех гейтов.
 
-RTX 3090 ускорит серию экспериментов, но manager содержит меньше 100 тысяч
-параметров. Главный источник роста точности — разнообразные и правильно
+RTX 3090 ускорит серию экспериментов, но manager всё равно содержит лишь
+десятки или сотни тысяч параметров. Главный источник роста точности — разнообразные и правильно
 размеченные данные, а не загрузка 24 ГБ VRAM.
 
 ## 1. Подготовка компьютера друга
@@ -173,9 +176,10 @@ SHA-256.
 оставить `batch_size: 256`. Если возникает CUDA OOM, уменьшайте до 128/64; если
 GPU почти пуст и данных стало много — увеличивайте до 512.
 
-Не закрывайте PowerShell. Каждая эпоха печатает loss, общий balanced score,
-новый custom F1, старый legacy F1 и slot F1. Early stopping завершает
-бесполезные эпохи автоматически.
+Не закрывайте PowerShell. Первый этап обучает 24 коротких trial; второй — три
+финалиста на seed `17, 43, 101, 211, 307`. Каждая эпоха печатает loss, общий
+manager score, intent F1, slot F1, semantic-frame exact match и hallucination
+rate. Early stopping завершает бесполезные эпохи автоматически.
 
 ## 6. Результаты
 
@@ -183,14 +187,14 @@ GPU почти пуст и данных стало много — увеличи
 
 ```text
 training_workspace/runs/YYYYMMDD_HHMMSS/
-  manager_curriculum.pt
-  manager_augmented.pt
-  manager_standard.pt
+  search_01.pt ... search_24.pt
+  search_XX_seed_17.pt ... search_XX_seed_307.pt
   *.metrics.json
   report.json
 ```
 
-Если кандидат прошёл accuracy, worst-recall, regression и latency-гейты,
+Если конфигурация устойчиво прошла минимум четыре из пяти seed и финальный
+checkpoint прошёл joint-quality, regression, calibration и latency-гейты,
 победитель появится здесь:
 
 ```text
@@ -251,15 +255,23 @@ python main.py --text "какие приложения ты можешь отк�
 
 ## Что настраивать в `config.yaml`
 
-- `experiments[].learning_rate`: скорость обучения с нуля;
-- `custom_fraction`: контролируемая доля нового корпуса в каждом intent;
-- `route_loss_weight`: сила вспомогательного обучения роли менеджера;
-- `label_smoothing`: снижает чрезмерную уверенность;
-- `patience`: сколько эпох ждать улучшения;
+- `search.trials`: число конфигураций первого этапа;
+- `search.top_k`: сколько конфигураций проходят в дорогую проверку;
+- `search.confirmation_seeds`: независимые повторы финалистов;
+- `search.space`: диапазоны learning rate, доли корпуса, размеров сети и весов
+  route/slot/slot-consistency losses;
+- `search.phase_one_patience` и `confirmation_patience`: сколько эпох ждать
+  улучшения общей development-метрики;
 - `selection.min_custom_macro_f1_improvement`: прирост на новых командах;
 - `selection.max_legacy_macro_f1_drop`: допустимая регрессия старых навыков;
 - `selection.min_regression_worst_recall`: нижняя граница recall любого intent
   на старом regression-наборе;
+- `selection.min_slot_entity_f1`: качество извлечения аргументов команды;
+- `selection.max_slot_hallucination_rate`: максимум ложных slots у фраз, где
+  slots не разрешены;
+- `selection.min_semantic_frame_exact_match`: точная доля совпадений intent и
+  всех slots одновременно;
+- `selection.max_expected_calibration_error`: предел ошибки уверенности модели;
 - `selection.min_holdout_worst_recall`: нижняя граница recall любого intent на
   двух финальных наборах;
 - `selection.max_p95_latency_ms`: верхняя граница задержки решения.

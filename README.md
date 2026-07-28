@@ -294,9 +294,11 @@ python -m ml.nlu.evaluate_holdout --checkpoint models/nlu_word_bigru_curriculum.
 Готовое переносимое пространство находится в [`training_workspace/`](training_workspace/).
 Оно обучает с нуля собственную символьную CharCNN без Hugging Face. Модель
 учится как менеджер: сначала различать маршруты `tool / control / dialogue /
-reject`, затем выбирать конкретный intent и извлекать слоты. Runner сравнивает
-`standard`, `augmented` и `curriculum`, контролирует старые команды, worst-class
-recall и CPU latency, а затем проверяет победителя на двух holdout-наборах.
+reject`, затем выбирать конкретный intent и извлекать слоты. Runner выполняет
+двухэтапный поиск: 24 конфигурации сравниваются с одинаковым seed, а три
+финалиста повторяются на пяти seed. Отбор учитывает intent, slots, точную
+semantic frame, ложные slots, калибровку и CPU latency. Два holdout открываются
+только после выбора одного репрезентативного checkpoint.
 Экспорт разрешается только вместе с `approved.json` и контрольной SHA-256.
 
 На компьютере с RTX 3090:
