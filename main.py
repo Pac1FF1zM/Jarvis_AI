@@ -136,6 +136,7 @@ async def run_pipeline(
     from memory.long_term import LongTermMemory
     from memory.short_term import ShortTermMemory
     from modules.llm import LLMModule
+    from modules.gesture_control import GestureControlModule
     from modules.nlu import NLUModule
     from modules.reminders import ReminderScheduler
     from modules.stt import STTModule
@@ -228,6 +229,7 @@ async def run_pipeline(
                 "llm", lambda mc: LLMModule(mc, gpu_lock, tools, short_term)
             ),
             start_if("tts", lambda mc: TTSModule(mc)),
+            start_if("gesture", lambda mc: GestureControlModule(mc, gpu_lock)),
             return_exceptions=True,
         )
         startup_errors = [

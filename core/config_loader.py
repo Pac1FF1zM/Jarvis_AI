@@ -24,7 +24,7 @@ logger = logging.getLogger("jarvis.config")
 # Canonical set of module names the orchestrator/modules expect to find.
 # Fix #5: any ``modules:`` entry not in this set is logged as a warning at
 # load time so typos surface immediately.
-EXPECTED_MODULE_NAMES = frozenset({"wake_word", "stt", "nlu", "llm", "tts"})
+EXPECTED_MODULE_NAMES = frozenset({"gesture", "wake_word", "stt", "nlu", "llm", "tts"})
 
 
 @dataclass

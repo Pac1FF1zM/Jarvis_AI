@@ -8,6 +8,22 @@ orchestrator:
   interaction_timeout_seconds: 60 # hard failure guard; completion is event-driven
 
 modules:
+  # Gesture Core is a separate webcam pipeline. It remains disabled until a
+  # locally trained model has passed its holdout gates and real camera testing.
+  gesture:
+    enabled: false
+    device: cpu
+    model: training_workspace/gesture_export/jarvis_gesture_ipn_best.pt
+    params:
+      camera_index: 0
+      frames: 32
+      image_size: 112
+      window_stride: 4
+      confidence_threshold: 0.90
+      consecutive_windows: 3
+      cooldown_seconds: 1.5
+      armed_on_start: false
+
   wake_word:
     enabled: true
     # Local openWakeWord listens for "Hey Jarvis"; Ctrl+Alt+Space remains a fallback.

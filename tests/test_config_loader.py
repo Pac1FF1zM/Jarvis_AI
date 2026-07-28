@@ -98,7 +98,7 @@ def test_known_names_do_not_warn_on_lookup(caplog):
 def test_expected_module_names_is_canonical_set():
     """Guardrail: the known set includes every canonical pipeline module."""
     assert EXPECTED_MODULE_NAMES == frozenset(
-        {"wake_word", "stt", "nlu", "llm", "tts"}
+        {"gesture", "wake_word", "stt", "nlu", "llm", "tts"}
     )
 
 

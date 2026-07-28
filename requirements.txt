@@ -3,6 +3,7 @@
 # Core async + config (required for the scaffold to run):
 pyyaml>=6.0
 torch>=2.0             # own NLU architectures/training; no pretrained weights
+numpy>=1.24            # local RGB clip buffers for the optional Gesture Core
 #
 # NOTE: pydantic is NOT currently used — config_loader.py is dataclasses-only.
 # If a future config rewrite moves to pydantic-based validation, add it back
@@ -20,6 +21,7 @@ sounddevice>=0.4     # interruptible local audio playback for Silero TTS
 pynput==1.8.2        # Windows global push-to-talk hotkey (no admin required normally)
 silero-vad[onnx-cpu]==6.2.1  # streaming 16 kHz end-of-speech detection
 openwakeword>=0.6,<0.7       # local "Hey Jarvis" wake phrase; ONNX on Windows
+opencv-python>=4.10           # optional local webcam capture for Gesture Core
 
 # Tests only:
 pytest>=8.0
