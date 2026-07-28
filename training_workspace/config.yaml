@@ -7,6 +7,9 @@ export_dir: export
 
 data:
   train: data/train.jsonl
+  # Created only by review_feedback.py after a human approves real sessions.
+  # It is optional and must never contain raw, unreviewed predictions.
+  feedback_train: data/feedback_train.jsonl
   validation: data/validation.jsonl
   # Used only after development/regression selection, never for early stopping.
   evaluation_holdout: data/evaluation_holdout.jsonl

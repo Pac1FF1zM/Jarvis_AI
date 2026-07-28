@@ -126,7 +126,23 @@ python -m training_workspace.build_dataset
 Напоминания сейчас честно отклоняются из-за отсутствия постоянного scheduler.
 Fine-tuning улучшит распознавание intent/slots, но не создаст scheduler.
 
-## 3. Проверка до долгого запуска
+## 3. Добавление проверенного feedback из реальных сессий
+
+Jarvis сохраняет только кандидаты с низкой уверенностью, `unknown` и неудачные
+выполнения в локальную очередь `data/feedback/pending.jsonl`. Нельзя обучаться
+на ней напрямую: сначала проверьте статистику и разметьте записи вручную:
+
+```powershell
+python -m training_workspace.review_feedback --summary
+python -m training_workspace.review_feedback
+```
+
+Подтверждённые примеры будут записаны в
+`training_workspace/data/feedback_train.jsonl`; runner автоматически добавит
+их только к train. Validation и holdout остаются нетронутыми. Если в ответе
+Jarvis была личная информация, запись лучше пометить `d` (discard).
+
+## 4. Проверка до долгого запуска
 
 ```powershell
 .\training_workspace\START_TRAINING.ps1 -CheckOnly
@@ -134,7 +150,7 @@ Fine-tuning улучшит распознавание intent/slots, но не с
 
 Команда проверит пути, JSON, intents, slots и статистику классов без обучения.
 
-## 4. Запуск
+## 5. Запуск
 
 Перенесите на компьютер друга весь актуальный проект. Для обучения обязательно
 нужны как минимум:
@@ -161,7 +177,7 @@ GPU почти пуст и данных стало много — увеличи
 новый custom F1, старый legacy F1 и slot F1. Early stopping завершает
 бесполезные эпохи автоматически.
 
-## 5. Результаты
+## 6. Результаты
 
 Каждый запуск создаёт:
 

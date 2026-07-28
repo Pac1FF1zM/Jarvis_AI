@@ -128,6 +128,23 @@ def _load_intent_only_jsonl(path: Path) -> list[Example]:
     return examples
 
 
+def _example_record(example: Example) -> dict[str, Any]:
+    """Return the friendly JSONL representation expected by manager_train."""
+    slots = {
+        span.label: example.text[span.start:span.end]
+        for span in example.spans
+    }
+    return {"text": example.text, "intent": example.intent, "slots": slots}
+
+
+def _write_examples_jsonl(path: Path, examples: list[Example]) -> None:
+    content = "".join(
+        json.dumps(_example_record(example), ensure_ascii=False, separators=(",", ":")) + "\n"
+        for example in examples
+    )
+    path.write_text(content, encoding="utf-8", newline="\n")
+
+
 def _harmonic_mean(left: float, right: float) -> float:
     return 2.0 * left * right / max(left + right, 1e-12)
 
@@ -169,16 +186,42 @@ def run(config_path: Path, *, check_only: bool = False) -> dict[str, Any]:
     if not base_checkpoint.is_file():
         raise FileNotFoundError(base_checkpoint)
     custom_train = load_jsonl(train_path, allow_empty=False)
+    feedback_path = _resolve(
+        raw["data"].get("feedback_train", "data/feedback_train.jsonl"),
+        config_path,
+    )
+    reviewed_feedback = load_jsonl(feedback_path, allow_empty=True)
     custom_validation = load_jsonl(validation_path, allow_empty=False)
-    data_report = validate_splits(custom_train, custom_validation)
+    base_texts = {example.text.casefold().strip() for example in custom_train}
+    duplicate_feedback = base_texts & {
+        example.text.casefold().strip() for example in reviewed_feedback
+    }
+    if duplicate_feedback:
+        raise ValueError(
+            "reviewed feedback duplicates base train examples: "
+            f"{sorted(duplicate_feedback)[:3]!r}"
+        )
+    combined_train = custom_train + reviewed_feedback
+    data_report = validate_splits(combined_train, custom_validation)
     evaluation_holdout = load_jsonl(evaluation_holdout_path, allow_empty=False)
     final_holdout = _load_intent_only_jsonl(final_holdout_path)
+    # The legacy baseline predates this feedback flow and has its own frozen
+    # comparison policy. Enforce the stricter no-leakage rule for newly added,
+    # human-reviewed examples without retroactively invalidating that baseline.
+    feedback_texts = {example.text.casefold().strip() for example in reviewed_feedback}
+    for name, holdout in (("evaluation_holdout", evaluation_holdout), ("final_holdout", final_holdout)):
+        overlap = feedback_texts & {example.text.casefold().strip() for example in holdout}
+        if overlap:
+            raise ValueError(
+                f"reviewed feedback overlaps {name}: {sorted(overlap)[:3]!r}"
+            )
     legacy_validation = build_examples("validation")
     legacy_regression = build_examples("test")
     data_report.update(
         {
             "evaluation_holdout_examples": len(evaluation_holdout),
             "final_holdout_examples": len(final_holdout),
+            "reviewed_feedback_examples": len(reviewed_feedback),
         }
     )
     print(
@@ -200,6 +243,10 @@ def run(config_path: Path, *, check_only: bool = False) -> dict[str, Any]:
     approval_path.unlink(missing_ok=True)
     run_dir = run_root / datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=False)
+    training_path = train_path
+    if reviewed_feedback:
+        training_path = run_dir / "train_with_reviewed_feedback.jsonl"
+        _write_examples_jsonl(training_path, combined_train)
     benchmark_cfg = raw.get("benchmark") or {}
     benchmark_device = str(benchmark_cfg.get("device", "cpu"))
     warmup = int(benchmark_cfg.get("warmup", 20))
@@ -227,7 +274,7 @@ def run(config_path: Path, *, check_only: bool = False) -> dict[str, Any]:
             raise ValueError(f"unsupported trainer {trainer!r}; expected 'manager'")
         command = [
             sys.executable, "-m", "ml.nlu.manager_train",
-            "--train-data", str(train_path),
+            "--train-data", str(training_path),
             "--validation-data", str(validation_path),
             "--output", str(output),
             "--architecture", str(experiment.get("architecture", "char_cnn")),

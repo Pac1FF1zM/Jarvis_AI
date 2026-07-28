@@ -215,6 +215,10 @@ class NLUModule(BaseModule):
         logger.info("NLUModule stopped")
 
     async def _on_transcription(self, event: Event) -> None:
+        # GestureActionBridge supplies a deterministic intent after the
+        # orchestrator reaches THINKING, so neural NLU must not race it.
+        if event.payload.get("source") == "gesture":
+            return
         await self._stage_event(transcription=event)
 
     async def _on_thinking_ready(self, event: Event) -> None:

@@ -7,8 +7,12 @@ import pytest
 import torch
 
 from core.event_bus import EventBus
+from core.orchestrator import Orchestrator
 from core.gpu_lock import GPULock
+from core.event_payloads import GestureActionReadyPayload
 from ml.gesture.labels import IPN_LABELS
+from modules.command_router import route_explicit_command
+from modules.gesture_bridge import GestureActionBridge
 from modules.gesture_control import GestureControlModule, TemporalGestureGate
 
 
@@ -82,3 +86,47 @@ async def test_arm_is_rejected_when_no_approved_model_is_loaded():
     assert event.event_type == "gesture_mode_changed"
     assert event.payload["armed"] is False
     assert event.payload["reason"] == "model_unavailable"
+
+
+def test_voice_router_treats_gesture_mode_as_a_first_class_command():
+    assert route_explicit_command("включи режим жестов").payload() == {
+        "intent": "gesture_mode", "slots": {"enabled": True}, "confidence": 0.99
+    }
+    assert route_explicit_command("отключи жестами").slots == {"enabled": False}
+
+
+async def test_enabled_gesture_uses_the_normal_jarvis_lifecycle():
+    bus = EventBus()
+    orchestrator = Orchestrator(bus)
+    bridge = GestureActionBridge()
+    received = []
+
+    async def record(event):
+        received.append(event)
+
+    bus.subscribe("nlu_result", record)
+    await orchestrator.start()
+    await bridge.start(bus)
+    runner = __import__("asyncio").create_task(bus.run())
+    bus.publish(
+        "gesture_action_ready",
+        GestureActionReadyPayload(
+            label="G03",
+            action_hint="navigate_up",
+            confidence=0.99,
+            consecutive_windows=3,
+            execution="enabled",
+        ),
+    )
+    for _ in range(50):
+        if received:
+            break
+        await __import__("asyncio").sleep(0.01)
+    await bus.stop()
+    await runner
+    await bridge.stop()
+    await orchestrator.stop()
+
+    assert len(received) == 1
+    assert received[0].payload["intent"] == "system_control"
+    assert received[0].payload["slots"] == {"action": "volume_up", "steps": 2}

@@ -52,6 +52,15 @@ def route_explicit_command(
     if value in {"отмена", "не подтверждаю", "не надо", "передумал", "передумала"}:
         return RoutedAction("decline")
 
+    gesture_mode = re.fullmatch(
+        r"(?:(включи|запусти|активируй|включить|запустить|активировать)|"
+        r"(выключи|отключи|останови|выключить|отключить|остановить))\s+"
+        r"(?:режим\s+)?жест(?:ов|ами)",
+        value,
+    )
+    if gesture_mode:
+        return RoutedAction("gesture_mode", {"enabled": bool(gesture_mode.group(1))})
+
     correction = re.match(
         r"^(?:(?:нет[, ]+)(?:(?:я\s+)?(?:имел|имела)\s+в\s+виду\s+)?|"
         r"(?:я\s+)?(?:имел|имела)\s+в\s+виду\s+)(.+)$",

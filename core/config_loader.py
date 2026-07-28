@@ -57,6 +57,7 @@ class Config:
     tools: dict[str, Any] = field(default_factory=dict)
     reminders: dict[str, Any] = field(default_factory=dict)
     profiles: dict[str, Any] = field(default_factory=dict)
+    feedback: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict)
     # Fix #5: track names we've already warned about so we log once per name.
     _warned_unknown_modules: set[str] = field(default_factory=set)
@@ -123,6 +124,7 @@ def load_config(path: str) -> Config:
         tools=raw.get("tools") or {},
         reminders=raw.get("reminders") or {},
         profiles=raw.get("profiles") or {},
+        feedback=raw.get("feedback") or {},
         raw=raw,
     )
     data_dir = os.environ.get("JARVIS_DATA_DIR", "").strip()
@@ -133,4 +135,5 @@ def load_config(path: str) -> Config:
         config.memory["db_path"] = str(root / "memory.db")
         config.reminders["db_path"] = str(root / "reminders.db")
         config.profiles["root"] = str(root / "profiles")
+        config.feedback["queue_path"] = str(root / "feedback" / "pending.jsonl")
     return config

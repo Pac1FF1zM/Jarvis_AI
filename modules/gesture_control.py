@@ -85,6 +85,7 @@ class GestureControlModule(BaseModule):
         self._image_size = int(params.get("image_size", 112))
         self._window_stride = int(params.get("window_stride", 4))
         self._armed_on_start = bool(params.get("armed_on_start", False))
+        self._execution_enabled = bool(params.get("execution_enabled", False))
         self._gate = TemporalGestureGate(
             confidence_threshold=float(params.get("confidence_threshold", 0.90)),
             consecutive_windows=int(params.get("consecutive_windows", 3)),
@@ -264,8 +265,8 @@ class GestureControlModule(BaseModule):
         if not self._gate.observe(label, confidence, now=time.monotonic()):
             return
         assert self.bus is not None
-        # Important: this is a proposal only. No runtime module subscribes to
-        # it in v1, so recognition cannot trigger a desktop side effect yet.
+        # Desktop control remains outside the CV module. An optional bridge
+        # consumes only explicitly enabled, safe proposals.
         self.bus.publish(
             "gesture_action_ready",
             GestureActionReadyPayload(
@@ -273,7 +274,7 @@ class GestureControlModule(BaseModule):
                 action_hint=JARVIS_ACTION_HINTS[label],
                 confidence=round(confidence, 4),
                 consecutive_windows=self._gate.consecutive_windows,
-                execution="disabled_pending_real_camera_validation",
+                execution="enabled" if self._execution_enabled else "disabled_pending_real_camera_validation",
             ),
         )
         logger.info("GESTURE_ACTION_READY label=%s confidence=%.3f", label, confidence)

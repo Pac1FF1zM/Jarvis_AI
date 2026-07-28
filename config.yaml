@@ -23,6 +23,9 @@ modules:
       consecutive_windows: 3
       cooldown_seconds: 1.5
       armed_on_start: false
+      # Turn on only after real-camera validation. A separate bridge then
+      # maps a small safe gesture allow-list to existing Jarvis commands.
+      execution_enabled: false
 
   wake_word:
     enabled: true
@@ -116,6 +119,15 @@ reminders:
 profiles:
   # Empty means %APPDATA%\Jarvis\profiles. JARVIS_DATA_DIR overrides it.
   root: ""
+
+feedback:
+  # Local only: uncertain/failed NLU turns wait for human review. No audio is
+  # stored and the model is never retrained automatically on predictions.
+  enabled: true
+  queue_path: data/feedback/pending.jsonl
+  min_intent_confidence: 0.72
+  capture_tool_failures: true
+  max_queue_bytes: 5000000
 
 logging:
   level: INFO

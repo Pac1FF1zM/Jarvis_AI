@@ -136,6 +136,8 @@ async def run_pipeline(
     # missing/broken Torch, Whisper, Silero or audio installation.
     from memory.long_term import LongTermMemory
     from memory.short_term import ShortTermMemory
+    from core.ml_feedback import MLFeedbackCollector
+    from modules.gesture_bridge import GestureActionBridge
     from modules.llm import LLMModule
     from modules.gesture_control import GestureControlModule
     from modules.nlu import NLUModule
@@ -158,6 +160,8 @@ async def run_pipeline(
     )
 
     bus = EventBus()
+    feedback_collector = MLFeedbackCollector.from_config(cfg.feedback)
+    await feedback_collector.start(bus)
     gpu_lock = GPULock(concurrency=1)  # serialized GPU access for 3GB VRAM
     orchestrator = Orchestrator(bus, cfg.orchestrator)
     completion = _TraceCompletion()
@@ -210,7 +214,13 @@ async def run_pipeline(
     if text_input is not None:
         await start_if("nlu", lambda mc: NLUModule(mc, gpu_lock))
         await start_if(
-            "llm", lambda mc: LLMModule(mc, gpu_lock, tools, short_term)
+            "llm", lambda mc: LLMModule(
+                mc,
+                gpu_lock,
+                tools,
+                short_term,
+                gesture_enabled=False,
+            )
         )
         text_output = TextOutputModule()
         await text_output.start(bus)
@@ -227,7 +237,13 @@ async def run_pipeline(
             start_if("stt", lambda mc: STTModule(mc, gpu_lock)),
             start_if("nlu", lambda mc: NLUModule(mc, gpu_lock)),
             start_if(
-                "llm", lambda mc: LLMModule(mc, gpu_lock, tools, short_term)
+                "llm", lambda mc: LLMModule(
+                    mc,
+                    gpu_lock,
+                    tools,
+                    short_term,
+                    gesture_enabled=cfg.module("gesture").enabled,
+                )
             ),
             start_if("tts", lambda mc: TTSModule(mc)),
             start_if("gesture", lambda mc: GestureControlModule(mc, gpu_lock)),
@@ -247,10 +263,15 @@ async def run_pipeline(
                     )
             modules_started.clear()
             await reminder_scheduler.stop()
+            await feedback_collector.stop()
             long_term.close()
             raise startup_errors[0]
         voice_modules = voice_results
         wake_word = voice_modules[0]
+        if cfg.module("gesture").enabled and voice_modules[5] is not None:
+            gesture_bridge = GestureActionBridge()
+            await gesture_bridge.start(bus)
+            modules_started.append(gesture_bridge)
     await orchestrator.start()
 
     # Run the bus in the background.
@@ -326,6 +347,7 @@ async def run_pipeline(
                 logger.exception("error stopping wake_word")
             modules_started.remove(wake_word)
         await reminder_scheduler.stop()
+        await feedback_collector.stop()
         await bus.stop()
         await run_task
         for module in reversed(modules_started):

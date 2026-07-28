@@ -44,6 +44,7 @@ from core.base_module import BaseModule
 from core.event_bus import EventBus, Event
 from core.event_payloads import (
     CancelRequestedPayload,
+    GestureModeRequestedPayload,
     ResponseReadyPayload,
     ToolCallRequestedPayload,
     ToolResultPayload,
@@ -100,6 +101,8 @@ class LLMModule(BaseModule):
         gpu_lock: GPULock,
         tools: ToolRegistry,
         short_term: ShortTermMemory,
+        *,
+        gesture_enabled: bool = False,
     ) -> None:
         super().__init__(config)
         self.gpu_lock = gpu_lock
@@ -125,11 +128,14 @@ class LLMModule(BaseModule):
         # failure and stays set so we don't retry-and-fail on every turn.
         self._server_down: bool = False
         self._pending_confirmation: dict[str, Any] | None = None
+        self._gesture_enabled = bool(gesture_enabled)
+        self._pending_gesture_mode: dict[str, bool] = {}
 
     async def start(self, bus: EventBus) -> None:
         self.bus = bus
         bus.subscribe(self._input_event, self._on_transcription)
         bus.subscribe("tool_result", self._on_tool_result)
+        bus.subscribe("gesture_mode_changed", self._on_gesture_mode_changed)
         bus.subscribe("interaction_cancelled", self._on_trace_closed)
         bus.subscribe("interaction_failed", self._on_trace_closed)
         if _OLLAMA is None:
@@ -178,11 +184,13 @@ class LLMModule(BaseModule):
             )
         self._active_tool_tasks.clear()
         self._pending_trace_text.clear()
+        self._pending_gesture_mode.clear()
         logger.info("LLMModule stopped")
 
     async def _on_trace_closed(self, event: Event) -> None:
         """Forget trace-local state and cooperatively cancel an async tool."""
         self._pending_trace_text.pop(event.trace_id, None)
+        self._pending_gesture_mode.pop(event.trace_id, None)
         active = self._active_tool_tasks.get(event.trace_id)
         if active is None:
             return
@@ -301,6 +309,23 @@ class LLMModule(BaseModule):
         if intent == "list_applications":
             await self._request_tool(event, "list_applications", {}, direct_response=True)
             return
+        if intent == "gesture_mode":
+            enabled = bool(dict(event.payload.get("slots") or {}).get("enabled"))
+            if not self._gesture_enabled:
+                await self._publish_text(
+                    event,
+                    "Режим жестов пока не настроен: включите модуль gesture и добавьте обученные веса.",
+                )
+                return
+            assert self.bus is not None
+            self._pending_gesture_mode[event.trace_id] = enabled
+            self.bus.publish_event(
+                event.child(
+                    "gesture_mode_requested",
+                    GestureModeRequestedPayload(enabled=enabled, source="voice"),
+                )
+            )
+            return
         if intent in {"browser_control", "system_control", "window_control", "file_control"}:
             await self._request_tool(
                 event,
@@ -345,6 +370,22 @@ class LLMModule(BaseModule):
         # Re-run generation with the tool output appended as context.
         user_text = self._pending_trace_text.get(event.trace_id, "")
         await self._generate(event, user_text, tool_output=result)
+
+    async def _on_gesture_mode_changed(self, event: Event) -> None:
+        requested = self._pending_gesture_mode.pop(event.trace_id, None)
+        if requested is None:
+            return
+        armed = bool(event.payload.get("armed"))
+        reason = str(event.payload.get("reason") or "")
+        if requested and armed:
+            text = "Режим жестов включен. Камера активна; голосовые команды продолжают работать."
+        elif not requested and not armed:
+            text = "Режим жестов выключен. Жду wake word."
+        elif reason == "model_unavailable":
+            text = "Режим жестов не включен: не найдены или не прошли проверку обученные веса."
+        else:
+            text = "Не удалось изменить режим жестов."
+        await self._publish_text(event, text)
 
     # ------------------------------------------------------------------ #
     # Core generation

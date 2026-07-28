@@ -243,6 +243,25 @@ python main.py --text "нет, я имел в виду Discord"
 feedback для подготовки следующего обучающего корпуса. `logs/jarvis.log`
 по-прежнему содержит только последний запуск для анализа задержек.
 
+### Active Learning из реальных ошибок
+
+Помимо обычного лога Jarvis локально кладёт только сомнительные NLU-решения
+(`unknown`, низкая уверенность) и неудачные выполнения в
+`data/feedback/pending.jsonl`. Аудио, ключи, LLM-переписка и ответы инструментов
+туда не попадают. Очередь ограничена 5 МБ, не добавляется в Git и **никогда не
+используется для автоматического переобучения**.
+
+Перед следующим обучением человек размечает кандидаты:
+
+```powershell
+python -m training_workspace.review_feedback --summary
+python -m training_workspace.review_feedback
+```
+
+Только подтверждённые записи попадают в
+`training_workspace/data/feedback_train.jsonl`; runner подключит их к train,
+сохраняя validation и оба holdout независимыми.
+
 Повторное обучение выбранного baseline:
 
 ```powershell

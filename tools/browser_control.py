@@ -14,7 +14,7 @@ TOOL_SCHEMA: dict[str, Any] = {
     "parameters": {
         "type": "object",
         "properties": {
-            "action": {"type": "string", "enum": ["search", "open_site", "new_tab", "close_tab", "reopen_tab", "next_tab", "previous_tab"]},
+            "action": {"type": "string", "enum": ["search", "open_site", "new_tab", "close_tab", "reopen_tab", "next_tab", "previous_tab", "zoom_in", "zoom_out"]},
             "query": {"type": "string"},
             "url": {"type": "string"},
         },
@@ -57,6 +57,8 @@ async def execute(params: dict[str, Any]) -> dict[str, Any]:
         "reopen_tab": (0x11, 0x10, 0x54),
         "next_tab": (0x11, 0x09),
         "previous_tab": (0x11, 0x10, 0x09),
+        "zoom_in": (0x11, 0xBB),
+        "zoom_out": (0x11, 0xBD),
     }
     if action not in shortcuts:
         return {"ok": False, "error": "unknown_action", "response_text": "Неизвестная команда браузера."}
@@ -67,5 +69,5 @@ async def execute(params: dict[str, Any]) -> dict[str, Any]:
     if not focused:
         return {"ok": False, "error": "browser_not_open", "response_text": "Не найдено открытое окно браузера по умолчанию."}
     await asyncio.to_thread(send_hotkey, *shortcuts[action])
-    labels = {"new_tab": "Открываю новую вкладку", "close_tab": "Закрываю текущую вкладку", "reopen_tab": "Восстанавливаю закрытую вкладку", "next_tab": "Перехожу на следующую вкладку", "previous_tab": "Перехожу на предыдущую вкладку"}
+    labels = {"new_tab": "Открываю новую вкладку", "close_tab": "Закрываю текущую вкладку", "reopen_tab": "Восстанавливаю закрытую вкладку", "next_tab": "Перехожу на следующую вкладку", "previous_tab": "Перехожу на предыдущую вкладку", "zoom_in": "Увеличиваю масштаб", "zoom_out": "Уменьшаю масштаб"}
     return {"ok": True, "response_text": labels[action] + "."}

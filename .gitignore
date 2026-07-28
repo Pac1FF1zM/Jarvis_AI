@@ -36,6 +36,7 @@ logs/
 *.sqlite3
 recordings/
 profiles/
+data/feedback/
 *.wav
 *.flac
 
@@ -47,6 +48,7 @@ training_workspace/runs/
 training_workspace/export/
 training_workspace/jsc_runs/
 training_workspace/data/private_holdout.jsonl
+training_workspace/data/feedback_train.jsonl
 training_workspace/gesture_data/
 training_workspace/gesture_runs/
 training_workspace/gesture_export/
