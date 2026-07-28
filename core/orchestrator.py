@@ -37,6 +37,13 @@ from collections import deque
 from typing import Any
 
 from core.event_bus import EventBus, Event
+from core.event_payloads import (
+    InteractionCompletedPayload,
+    InteractionFailedPayload,
+    InvalidTransitionPayload,
+    NotificationAuthorizedPayload,
+    ThinkingReadyPayload,
+)
 
 logger = logging.getLogger("jarvis.orch")
 
@@ -135,10 +142,10 @@ class Orchestrator:
             )
             self.bus.publish(
                 "invalid_transition",
-                {
-                    "current_state": self.state.value,
-                    "attempted_target": target.value,
-                },
+                InvalidTransitionPayload(
+                    current_state=self.state.value,
+                    attempted_target=target.value,
+                ),
                 trace_id=trace_id,
             )
             return False
@@ -240,17 +247,17 @@ class Orchestrator:
         self._current_trace = None
 
         if trace_id is not None:
-            payload: dict[str, Any] = {
-                "state": State.IDLE.value,
-                "ok": True,
-                "cancelled": True,
-                "reason": reason,
-                "cancelled_state": cancelled_state.value,
-            }
-            if superseded_by is not None:
-                payload["superseded_by"] = superseded_by
             self.bus.publish(
-                "interaction_completed", payload, trace_id=trace_id
+                "interaction_completed",
+                InteractionCompletedPayload(
+                    state=State.IDLE.value,
+                    ok=True,
+                    cancelled=True,
+                    reason=reason,
+                    cancelled_state=cancelled_state.value,
+                    superseded_by=superseded_by,
+                ),
+                trace_id=trace_id,
             )
             logger.info(
                 "INTERACTION_CANCELLED trace=%s state=%s reason=%s",
@@ -342,7 +349,9 @@ class Orchestrator:
         # Lifecycle barrier for NLU. Both handlers receive transcription_ready
         # concurrently, so NLU must not publish a result until this transition
         # has authoritatively completed.
-        self.bus.publish_event(event.child("thinking_ready"))
+        self.bus.publish_event(
+            event.child("thinking_ready", ThinkingReadyPayload())
+        )
 
     async def _on_tool_call(self, event: Event) -> None:
         if not self._is_current_trace(event, "TOOL_CALL"):
@@ -391,14 +400,15 @@ class Orchestrator:
             return
         # Authoritative end-of-interaction signal: published only after the
         # state machine has actually reached IDLE for this trace.
-        completion_payload: dict[str, Any] = {
-            "state": State.IDLE.value,
-            "ok": True,
-        }
-        if sleep_mode:
-            completion_payload["sleep_mode"] = True
         self.bus.publish_event(
-            event.child("interaction_completed", completion_payload)
+            event.child(
+                "interaction_completed",
+                InteractionCompletedPayload(
+                    state=State.IDLE.value,
+                    ok=True,
+                    sleep_mode=True if sleep_mode else None,
+                ),
+            )
         )
         self._start_next_notification()
 
@@ -424,12 +434,12 @@ class Orchestrator:
         self.bus.publish_event(
             event.child(
                 "interaction_completed",
-                {
-                    "state": State.IDLE.value,
-                    "ok": False,
-                    "reason": event.payload.get("reason", "unknown"),
-                    "failed_state": failed_state.value,
-                },
+                InteractionCompletedPayload(
+                    state=State.IDLE.value,
+                    ok=False,
+                    reason=str(event.payload.get("reason", "unknown")),
+                    failed_state=failed_state.value,
+                ),
             )
         )
         self._start_next_notification()
@@ -471,7 +481,12 @@ class Orchestrator:
             self._queued_reminder_ids.discard(int(reminder_id))
         self._current_trace = event.trace_id
         self._arm_interaction_timeout(event.trace_id)
-        self.bus.publish_event(event.child("notification_authorized", event.payload))
+        self.bus.publish_event(
+            event.child(
+                "notification_authorized",
+                NotificationAuthorizedPayload(**dict(event.payload)),
+            )
+        )
         logger.info(
             "NOTIFICATION_AUTHORIZED trace=%s reminder_id=%s",
             event.trace_id,
@@ -507,7 +522,9 @@ class Orchestrator:
             logger.warning("LISTENING_TIMEOUT trace=%s", trace_id)
             self.bus.fail_trace(
                 trace_id,
-                {"reason": "listening_timeout", "state": self.state.value},
+                InteractionFailedPayload(
+                    reason="listening_timeout", state=self.state.value
+                ),
             )
 
     def _cancel_listening_timeout(self) -> None:
@@ -538,7 +555,9 @@ class Orchestrator:
             )
             self.bus.fail_trace(
                 trace_id,
-                {"reason": "interaction_timeout", "state": self.state.value},
+                InteractionFailedPayload(
+                    reason="interaction_timeout", state=self.state.value
+                ),
             )
 
     def _cancel_interaction_timeout(self) -> None:

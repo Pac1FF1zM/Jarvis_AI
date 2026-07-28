@@ -37,10 +37,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 from core.base_module import BaseModule
 from core.event_bus import EventBus, Event
+from core.event_payloads import (
+    CancelRequestedPayload,
+    ResponseReadyPayload,
+    ToolCallRequestedPayload,
+    ToolResultPayload,
+)
 from core.gpu_lock import GPULock
 from memory.short_term import ShortTermMemory
 from tools.registry import ToolRegistry
@@ -227,7 +234,10 @@ class LLMModule(BaseModule):
             if self._pending_confirmation is None:
                 assert self.bus is not None
                 self.bus.publish_event(
-                    event.child("cancel_requested", {"reason": "user_requested"})
+                    event.child(
+                        "cancel_requested",
+                        CancelRequestedPayload(reason="user_requested"),
+                    )
                 )
             else:
                 self._pending_confirmation = None
@@ -302,7 +312,10 @@ class LLMModule(BaseModule):
         if intent == "cancel":
             assert self.bus is not None
             self.bus.publish_event(
-                event.child("cancel_requested", {"reason": "user_requested"})
+                event.child(
+                    "cancel_requested",
+                    CancelRequestedPayload(reason="user_requested"),
+                )
             )
             return
         if intent == "unknown":
@@ -318,7 +331,7 @@ class LLMModule(BaseModule):
         result = event.payload.get("result", {})
         if event.payload.get("direct_response"):
             confirmation = result.get("confirmation")
-            if result.get("confirmation_required") and isinstance(confirmation, dict):
+            if result.get("confirmation_required") and isinstance(confirmation, Mapping):
                 self._pending_confirmation = {
                     "tool": str(confirmation.get("tool", "")),
                     "params": dict(confirmation.get("params") or {}),
@@ -377,7 +390,10 @@ class LLMModule(BaseModule):
             return
         logger.info("TOOL_CALL name=%s params=%s", tool_name, params)
         if not self.bus.publish_event(
-            event.child("tool_call_requested", {"tool": tool_name, "params": params})
+            event.child(
+                "tool_call_requested",
+                ToolCallRequestedPayload(tool=tool_name, params=params),
+            )
         ):
             return
         tool_task = asyncio.create_task(self.tools.execute(tool_name, params))
@@ -403,11 +419,11 @@ class LLMModule(BaseModule):
         self.bus.publish_event(
             event.child(
                 "tool_result",
-                {
-                    "tool": tool_name,
-                    "result": result,
-                    "direct_response": direct_response,
-                },
+                ToolResultPayload(
+                    tool=tool_name,
+                    result=result,
+                    direct_response=direct_response,
+                ),
             )
         )
 
@@ -433,7 +449,10 @@ class LLMModule(BaseModule):
         if not self.bus.publish_event(
             event.child(
                 "tool_call_requested",
-                {"tool": "compound_plan", "plan": [{"tool": name, "params": params} for name, params in plan]},
+                ToolCallRequestedPayload(
+                    tool="compound_plan",
+                    plan=[{"tool": name, "params": params} for name, params in plan],
+                ),
             )
         ):
             return
@@ -472,7 +491,9 @@ class LLMModule(BaseModule):
         self.bus.publish_event(
             event.child(
                 "tool_result",
-                {"tool": "compound_plan", "result": result, "direct_response": True},
+                ToolResultPayload(
+                    tool="compound_plan", result=result, direct_response=True
+                ),
             )
         )
 
@@ -508,7 +529,7 @@ class LLMModule(BaseModule):
             return
         self.short_term.add("assistant", response_text)
         self.bus.publish_event(
-            event.child("response_ready", {"text": response_text})
+            event.child("response_ready", ResponseReadyPayload(text=response_text))
         )
         logger.info("RESPONSE_READY trace=%s text=%r", event.trace_id, response_text)
 

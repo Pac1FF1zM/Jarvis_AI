@@ -22,6 +22,13 @@ from typing import Any
 
 from core.base_module import BaseModule
 from core.event_bus import EventBus, Event
+from core.event_payloads import (
+    AudioCapturedPayload,
+    CancelRequestedPayload,
+    SessionSleepRequestedPayload,
+    SpeechCaptureStartedPayload,
+    WakeWordDetectedPayload,
+)
 from core.profile_manager import device_fingerprint
 from core.voice_calibration import apply_pcm_gain
 
@@ -361,7 +368,7 @@ class WakeWordModule(BaseModule):
         ):
             self.bus.publish(
                 "speech_capture_started",
-                {"source": "microphone"},
+                SpeechCaptureStartedPayload(),
                 trace_id=trace_id,
             )
 
@@ -382,7 +389,7 @@ class WakeWordModule(BaseModule):
             self._wake_listener_pause.set()
             logger.info("VOICE_ACTIVATED source=%s hotkey=%s", source, self._hotkey)
             wake_event = self.bus.publish(
-                "wake_word_detected", {"source": source}
+                "wake_word_detected", WakeWordDetectedPayload(source=source)
             )
             self._trace_sources[wake_event.trace_id] = source
             self._active_trace_id = wake_event.trace_id
@@ -399,10 +406,10 @@ class WakeWordModule(BaseModule):
                 )
                 self.bus.publish(
                     "cancel_requested",
-                    {
-                        "reason": "microphone_capture_failed",
-                        "target_trace_id": wake_event.trace_id,
-                    },
+                    CancelRequestedPayload(
+                        reason="microphone_capture_failed",
+                        target_trace_id=wake_event.trace_id,
+                    ),
                     trace_id=wake_event.trace_id,
                 )
                 return wake_event
@@ -421,32 +428,33 @@ class WakeWordModule(BaseModule):
                     # TTS can finish before wake-word listening resumes.
                     self.bus.publish(
                         "session_sleep_requested",
-                        {"text": "Отключаюсь.", "reason": "active_session_timeout"},
+                        SessionSleepRequestedPayload(
+                            text="Отключаюсь.", reason="active_session_timeout"
+                        ),
                         trace_id=wake_event.trace_id,
                     )
                 else:
                     self.bus.publish(
                         "cancel_requested",
-                        {
-                            "reason": "no_speech",
-                            "target_trace_id": wake_event.trace_id,
-                        },
+                        CancelRequestedPayload(
+                            reason="no_speech", target_trace_id=wake_event.trace_id
+                        ),
                         trace_id=wake_event.trace_id,
                     )
                 return wake_event
             audio_event = wake_event.child(
                 "audio_captured",
-                {
-                    "audio": apply_pcm_gain(result.pcm, self._pcm_gain_db),
-                    "sample_rate": self._sample_rate,
-                    "channels": 1,
-                    "sample_width": _PCM_WIDTH_BYTES,
-                    "duration_ms": result.duration_ms,
-                    "source": "microphone",
-                    "capture_end": result.end_reason,
-                    "voice_calibrated": self._calibration_applied,
-                    "input_device_fingerprint": self._device_fingerprint,
-                },
+                AudioCapturedPayload(
+                    audio=apply_pcm_gain(result.pcm, self._pcm_gain_db),
+                    sample_rate=self._sample_rate,
+                    channels=1,
+                    sample_width=_PCM_WIDTH_BYTES,
+                    duration_ms=result.duration_ms,
+                    source="microphone",
+                    capture_end=result.end_reason,
+                    voice_calibrated=self._calibration_applied,
+                    input_device_fingerprint=self._device_fingerprint,
+                ),
             )
             self.bus.publish_event(audio_event)
             logger.info(
@@ -710,19 +718,19 @@ class WakeWordModule(BaseModule):
             raise RuntimeError("WakeWordModule.start() must be called first")
         logger.info("WAKE_DETECTED (simulated trigger)")
         wake_event = self.bus.publish(
-            "wake_word_detected", {"source": "simulated"}
+            "wake_word_detected", WakeWordDetectedPayload(source="simulated")
         )
         await asyncio.sleep(0.05)
         audio_event = wake_event.child(
             "audio_captured",
-            {
-                "audio": _STUB_AUDIO,
-                "sample_rate": self._sample_rate,
-                "channels": 1,
-                "sample_width": _PCM_WIDTH_BYTES,
-                "duration_ms": 50,
-                "source": "simulated",
-            },
+            AudioCapturedPayload(
+                audio=_STUB_AUDIO,
+                sample_rate=self._sample_rate,
+                channels=1,
+                sample_width=_PCM_WIDTH_BYTES,
+                duration_ms=50,
+                source="simulated",
+            ),
         )
         self.bus.publish_event(audio_event)
         logger.info(

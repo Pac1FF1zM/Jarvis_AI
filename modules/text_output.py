@@ -9,6 +9,7 @@ import logging
 
 from core.base_module import BaseModule
 from core.event_bus import Event, EventBus
+from core.event_payloads import SpeechFinishedPayload, SpeechStartedPayload
 
 logger = logging.getLogger("jarvis.module.text_output")
 
@@ -31,6 +32,10 @@ class TextOutputModule(BaseModule):
     async def _on_response(self, event: Event) -> None:
         assert self.bus is not None
         text = str(event.payload.get("text", ""))
-        self.bus.publish_event(event.child("speech_started", {"text": text}))
+        self.bus.publish_event(
+            event.child("speech_started", SpeechStartedPayload(text=text))
+        )
         print(f"Jarvis: {text}", flush=True)
-        self.bus.publish_event(event.child("speech_finished", {"text": text}))
+        self.bus.publish_event(
+            event.child("speech_finished", SpeechFinishedPayload(text=text))
+        )

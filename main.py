@@ -25,6 +25,7 @@ from typing import Any
 
 from core.config_loader import Config, load_config
 from core.event_bus import EventBus
+from core.event_payloads import TranscriptionReadyPayload, WakeWordDetectedPayload
 from core.gpu_lock import GPULock
 from core.orchestrator import Orchestrator, State
 from core.runtime_diagnostics import run_doctor
@@ -260,14 +261,16 @@ async def run_pipeline(
         if text_input is not None:
             logger.info("=== triggering text interaction text=%r ===", text_input)
             wake_event = bus.publish(
-                "wake_word_detected", {"source": "text"}
+                "wake_word_detected", WakeWordDetectedPayload(source="text")
             )
             await _wait_for_state(
                 orchestrator, State.LISTENING, wake_event.trace_id, timeout=2.0
             )
             bus.publish(
                 "transcription_ready",
-                {"text": text_input, "confidence": 1.0, "source": "text"},
+                TranscriptionReadyPayload(
+                    text=text_input, confidence=1.0, source="text"
+                ),
                 trace_id=wake_event.trace_id,
             )
             await completion.wait(

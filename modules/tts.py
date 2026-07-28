@@ -24,6 +24,7 @@ from typing import Any
 
 from core.base_module import BaseModule
 from core.event_bus import EventBus, Event
+from core.event_payloads import SpeechFinishedPayload, SpeechStartedPayload
 
 logger = logging.getLogger("jarvis.module.tts")
 
@@ -376,7 +377,9 @@ class TTSModule(BaseModule):
             self._owner_trace_id = event.trace_id
             self._device_owner_generation = session.generation
 
-            self.bus.publish_event(event.child("speech_started", {"text": text}))
+            self.bus.publish_event(
+                event.child("speech_started", SpeechStartedPayload(text=text))
+            )
             logger.info(
                 "SPEECH_STARTED trace=%s generation=%d chars=%d",
                 event.trace_id,
@@ -418,7 +421,9 @@ class TTSModule(BaseModule):
 
             if session.device_cleanup_required:
                 await self._stop_audio_if_owner_locked(session.generation)
-            self.bus.publish_event(event.child("speech_finished", {"text": text}))
+            self.bus.publish_event(
+                event.child("speech_finished", SpeechFinishedPayload(text=text))
+            )
             logger.info(
                 "SPEECH_FINISHED trace=%s generation=%d",
                 event.trace_id,

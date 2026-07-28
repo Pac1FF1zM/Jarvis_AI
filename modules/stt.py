@@ -46,6 +46,7 @@ from typing import Any
 
 from core.base_module import BaseModule
 from core.event_bus import EventBus, Event
+from core.event_payloads import TranscriptionReadyPayload
 from core.gpu_lock import GPULock
 
 logger = logging.getLogger("jarvis.module.stt")
@@ -194,7 +195,7 @@ class STTModule(BaseModule):
         text, confidence = await self._transcribe(event.payload)
         out = event.child(
             "transcription_ready",
-            {"text": text, "confidence": confidence},
+            TranscriptionReadyPayload(text=text, confidence=confidence),
         )
         self.bus.publish_event(out)
         logger.info(

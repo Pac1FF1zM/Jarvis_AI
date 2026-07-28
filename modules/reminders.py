@@ -10,6 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from core.event_bus import Event, EventBus
+from core.event_payloads import (
+    InteractionFailedPayload,
+    NotificationDeliverPayload,
+    NotificationPayload,
+    ReminderCancelledPayload,
+)
 
 logger = logging.getLogger("jarvis.module.reminders")
 
@@ -134,7 +140,7 @@ class ReminderScheduler:
             if self.bus is not None:
                 self.bus.publish(
                     "reminder_cancelled",
-                    {"reminder_id": reminder_id},
+                    ReminderCancelledPayload(reminder_id=reminder_id),
                 )
         return reminder
 
@@ -156,13 +162,12 @@ class ReminderScheduler:
             self._queued_ids.add(reminder.id)
             self.bus.publish(
                 "notification_ready",
-                {
-                    "reminder_id": reminder.id,
-                    "text": f"Напоминание: {reminder.message}",
-                    "message": reminder.message,
-                    "due_at": reminder.due_at,
-                    "source": "reminder",
-                },
+                NotificationPayload(
+                    reminder_id=reminder.id,
+                    text=f"Напоминание: {reminder.message}",
+                    message=reminder.message,
+                    due_at=reminder.due_at,
+                ),
             )
             logger.info(
                 "REMINDER_DUE id=%d due_at=%s", reminder.id, reminder.due_at
@@ -180,12 +185,19 @@ class ReminderScheduler:
             self.bus.publish_event(
                 event.child(
                     "interaction_failed",
-                    {"reason": "reminder_not_pending", "reminder_id": reminder_id},
+                    InteractionFailedPayload(
+                        reason="reminder_not_pending", reminder_id=reminder_id
+                    ),
                 )
             )
             return
         assert self.bus is not None
-        self.bus.publish_event(event.child("notification_deliver", event.payload))
+        self.bus.publish_event(
+            event.child(
+                "notification_deliver",
+                NotificationDeliverPayload(**dict(event.payload)),
+            )
+        )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path, timeout=5.0)

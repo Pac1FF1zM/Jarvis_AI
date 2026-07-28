@@ -24,6 +24,11 @@ import torch
 
 from core.base_module import BaseModule
 from core.event_bus import Event, EventBus
+from core.event_payloads import (
+    GestureActionReadyPayload,
+    GestureModeChangedPayload,
+    GestureRuntimeStatusPayload,
+)
 from core.gpu_lock import GPULock
 from ml.gesture.labels import IPN_LABELS, JARVIS_ACTION_HINTS, NO_GESTURE_LABEL
 from ml.gesture.models import GestureModelConfig, build_model
@@ -177,7 +182,9 @@ class GestureControlModule(BaseModule):
         if enabled and not self._model_ready:
             self.bus.publish(
                 "gesture_mode_changed",
-                {"armed": False, "reason": "model_unavailable", "source": source},
+                GestureModeChangedPayload(
+                    armed=False, reason="model_unavailable", source=source
+                ),
             )
             logger.warning("GESTURE_MODE_REJECTED source=%s reason=model_unavailable", source)
             return
@@ -198,7 +205,10 @@ class GestureControlModule(BaseModule):
                 except asyncio.TimeoutError:
                     logger.warning("gesture camera worker did not drain within 2 seconds")
                 self._camera_task = None
-        self.bus.publish("gesture_mode_changed", {"armed": enabled, "source": source})
+        self.bus.publish(
+            "gesture_mode_changed",
+            GestureModeChangedPayload(armed=enabled, source=source),
+        )
         logger.info("GESTURE_MODE armed=%s source=%s", enabled, source)
 
     async def _camera_loop_async(self, generation: int) -> None:
@@ -258,13 +268,13 @@ class GestureControlModule(BaseModule):
         # it in v1, so recognition cannot trigger a desktop side effect yet.
         self.bus.publish(
             "gesture_action_ready",
-            {
-                "label": label,
-                "action_hint": JARVIS_ACTION_HINTS[label],
-                "confidence": round(confidence, 4),
-                "consecutive_windows": self._gate.consecutive_windows,
-                "execution": "disabled_pending_real_camera_validation",
-            },
+            GestureActionReadyPayload(
+                label=label,
+                action_hint=JARVIS_ACTION_HINTS[label],
+                confidence=round(confidence, 4),
+                consecutive_windows=self._gate.consecutive_windows,
+                execution="disabled_pending_real_camera_validation",
+            ),
         )
         logger.info("GESTURE_ACTION_READY label=%s confidence=%.3f", label, confidence)
 
@@ -282,7 +292,7 @@ class GestureControlModule(BaseModule):
         self._loop.call_soon_threadsafe(
             self.bus.publish,
             "gesture_runtime_status",
-            {"status": status, "detail": detail},
+            GestureRuntimeStatusPayload(status=status, detail=detail),
         )
         logger.warning("GESTURE_RUNTIME_STATUS status=%s detail=%s", status, detail)
 

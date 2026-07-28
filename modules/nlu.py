@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 from core.base_module import BaseModule
 from core.event_bus import Event, EventBus
+from core.event_payloads import CancelRequestedPayload, NLUResultPayload
 from core.gpu_lock import GPULock
 from ml.nlu.inference import NLUPredictor
 from ml.nlu.schema import NLUResult
@@ -278,11 +279,11 @@ class NLUModule(BaseModule):
             self.bus.publish_event(
                 event.child(
                     "cancel_requested",
-                    {
-                        "reason": "user_requested",
-                        "text": text,
-                        "intent_confidence": result.confidence,
-                    },
+                    CancelRequestedPayload(
+                        reason="user_requested",
+                        text=text,
+                        intent_confidence=result.confidence,
+                    ),
                 )
             )
             logger.info(
@@ -293,14 +294,14 @@ class NLUModule(BaseModule):
             return
         output = event.child(
             "nlu_result",
-            {
-                "text": text,
-                "confidence": event.payload.get("confidence", 0.0),
-                "intent": accepted_intent,
-                "raw_intent": raw_intent,
-                "intent_confidence": result.confidence,
-                "slots": result.slots if accepted_intent != "unknown" else {},
-                "actions": [
+            NLUResultPayload(
+                text=text,
+                confidence=float(event.payload.get("confidence", 0.0)),
+                intent=accepted_intent,
+                raw_intent=raw_intent,
+                intent_confidence=result.confidence,
+                slots=result.slots if accepted_intent != "unknown" else {},
+                actions=[
                     {
                         **action.payload(),
                         "raw_intent": action.intent,
@@ -309,7 +310,7 @@ class NLUModule(BaseModule):
                     }
                     for action in actions
                 ] if len(actions) > 1 else [],
-            },
+            ),
         )
         remembered = next(
             (

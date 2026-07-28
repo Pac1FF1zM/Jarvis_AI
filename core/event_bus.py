@@ -15,7 +15,14 @@ import time
 import uuid
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Mapping
+
+from core.event_payloads import (
+    EventPayload,
+    InteractionCancelledPayload,
+    InteractionFailedPayload,
+    coerce_event_payload,
+)
 
 logger = logging.getLogger("jarvis.bus")
 
@@ -34,17 +41,24 @@ class Event:
 
     Attributes:
         event_type: logical name, e.g. ``"transcription_ready"``.
-        payload: arbitrary dict of data for the event.
+        payload: immutable mapping created from a typed contract or legacy mapping.
         timestamp: epoch seconds at publish time.
         trace_id: groups every event belonging to one user interaction.
     """
 
     event_type: str
-    payload: dict[str, Any] = field(default_factory=dict)
+    payload: Mapping[str, Any] | EventPayload = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
     trace_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 
-    def child(self, event_type: str, payload: dict[str, Any] | None = None) -> "Event":
+    def __post_init__(self) -> None:
+        self.payload = coerce_event_payload(self.event_type, self.payload)
+
+    def child(
+        self,
+        event_type: str,
+        payload: Mapping[str, Any] | EventPayload | None = None,
+    ) -> "Event":
         """Create a follow-up event that inherits this event's trace_id."""
         return Event(
             event_type=event_type,
@@ -106,7 +120,7 @@ class EventBus:
     def publish(
         self,
         event_type: str,
-        payload: dict[str, Any] | None = None,
+        payload: Mapping[str, Any] | EventPayload | None = None,
         trace_id: str | None = None,
     ) -> Event:
         """Publish a new event. ``trace_id`` is auto-generated if omitted.
@@ -171,7 +185,7 @@ class EventBus:
         trace_id: str,
         *,
         reason: str,
-        details: dict[str, Any] | None = None,
+        details: Mapping[str, Any] | None = None,
     ) -> bool:
         """Atomically tombstone ``trace_id`` and announce its cancellation.
 
@@ -181,7 +195,7 @@ class EventBus:
         tombstone instead. Async tools receive the cancellation event and may
         stop cooperatively.
         """
-        payload = {"reason": reason, **(details or {})}
+        payload = InteractionCancelledPayload(reason=reason, **dict(details or {}))
         if not self._close_trace(trace_id, "cancelled", payload):
             return False
         self._enqueue_terminal(
@@ -189,10 +203,15 @@ class EventBus:
         )
         return True
 
-    def fail_trace(self, trace_id: str, payload: dict[str, Any]) -> bool:
+    def fail_trace(
+        self,
+        trace_id: str,
+        payload: Mapping[str, Any] | InteractionFailedPayload,
+    ) -> bool:
         """Atomically tombstone a failed trace before recovery is dispatched."""
-        failure = dict(payload)
-        failure.setdefault("reason", "unknown")
+        failure_data = dict(payload)
+        failure_data.setdefault("reason", "unknown")
+        failure = InteractionFailedPayload(**failure_data)
         if not self._close_trace(trace_id, "failed", failure):
             logger.info("DUPLICATE_TRACE_FAILURE_IGNORED trace=%s", trace_id)
             return False
