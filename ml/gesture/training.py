@@ -24,6 +24,7 @@ class TrainingSettings:
     patience: int = 8
     device: str = "cuda"
     amp: bool = True
+    run_name: str = "gesture"
 
 
 def seed_everything(seed: int) -> None:
@@ -133,6 +134,15 @@ def train_model(
             "validation": validation,
         }
         history.append(row)
+        print(
+            "GESTURE_EPOCH "
+            f"experiment={settings.run_name} epoch={epoch}/{settings.epochs} "
+            f"train_loss={row['train_loss']:.4f} "
+            f"validation_macro_f1={validation['macro_f1']:.4f} "
+            f"no_gesture_recall={validation['no_gesture_recall']:.4f} "
+            f"selection_score={score:.4f}",
+            flush=True,
+        )
         if score > best_score + 1e-6:
             best_score = score
             best_state = copy.deepcopy(model.state_dict())
@@ -140,6 +150,10 @@ def train_model(
         else:
             stale += 1
             if stale >= settings.patience:
+                print(
+                    f"GESTURE_EARLY_STOP experiment={settings.run_name} epoch={epoch}",
+                    flush=True,
+                )
                 break
     if best_state is None:  # defensive; a non-empty dataset always creates one
         raise RuntimeError("Training did not produce a checkpoint")

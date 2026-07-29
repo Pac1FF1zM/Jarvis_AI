@@ -87,6 +87,11 @@ def run(config: dict[str, Any], config_path: Path, *, check_only: bool) -> dict[
     candidates: list[dict[str, Any]] = []
     # The official test split remains unopened until all candidates have been selected on validation.
     for experiment in config["experiments"]:
+        print(
+            f"GESTURE_EXPERIMENT_START name={experiment['name']} "
+            f"architecture={experiment['architecture']} epochs={experiment['epochs']}",
+            flush=True,
+        )
         seed_everything(int(experiment["seed"]))
         model_config = GestureModelConfig(
             architecture=str(experiment["architecture"]), classes=len(IPN_LABELS),
@@ -97,6 +102,7 @@ def run(config: dict[str, Any], config_path: Path, *, check_only: bool) -> dict[
             epochs=int(experiment["epochs"]), learning_rate=float(experiment["learning_rate"]),
             weight_decay=float(experiment["weight_decay"]), label_smoothing=float(experiment["label_smoothing"]),
             patience=int(experiment["patience"]), device=str(config["device"]), amp=bool(config["amp"]),
+            run_name=str(experiment["name"]),
         )
         trained, history = train_model(
             model,
@@ -110,6 +116,12 @@ def run(config: dict[str, Any], config_path: Path, *, check_only: bool) -> dict[
         payload.update({"experiment": experiment, "validation": validation, "history": history})
         torch.save(payload, checkpoint)
         candidates.append({"name": experiment["name"], "checkpoint": checkpoint, "validation": validation})
+        print(
+            f"GESTURE_EXPERIMENT_DONE name={experiment['name']} "
+            f"validation_macro_f1={validation['macro_f1']:.4f} "
+            f"no_gesture_recall={validation['no_gesture_recall']:.4f}",
+            flush=True,
+        )
 
     winner = max(
         candidates,

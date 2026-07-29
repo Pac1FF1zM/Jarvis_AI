@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+import warnings
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -358,6 +359,25 @@ def _sample_indices(start: int, end: int, frames: int, *, training: bool) -> lis
     return [int(round(value)) for value in positions]
 
 
+def _read_video_frame(
+    capture: Any,
+    frame_index: int,
+    *,
+    position_property: int,
+    max_backtrack: int = 4,
+) -> tuple[np.ndarray, int]:
+    """Decode an annotated frame, tolerating only a small AVI tail mismatch."""
+    for candidate in range(frame_index, max(frame_index - max_backtrack, 0), -1):
+        capture.set(position_property, candidate - 1)
+        ok, frame = capture.read()
+        if ok:
+            return frame, candidate
+    raise RuntimeError(
+        f"Could not decode frame {frame_index} or the previous "
+        f"{max_backtrack - 1} frame(s)"
+    )
+
+
 class VideoGestureDataset(Dataset[tuple[torch.Tensor, int]]):
     """Decode a short RGB clip at read time; no 800k-frame JPEG cache is created."""
 
@@ -394,10 +414,23 @@ class VideoGestureDataset(Dataset[tuple[torch.Tensor, int]]):
             for frame_index in _sample_indices(
                 item.start_frame, item.end_frame, self.frames, training=self.training
             ):
-                capture.set(cv2.CAP_PROP_POS_FRAMES, frame_index - 1)
-                ok, frame = capture.read()
-                if not ok:
-                    raise RuntimeError(f"Could not decode frame {frame_index} from {item.video}")
+                try:
+                    frame, decoded_index = _read_video_frame(
+                        capture,
+                        frame_index,
+                        position_property=cv2.CAP_PROP_POS_FRAMES,
+                    )
+                except RuntimeError as error:
+                    raise RuntimeError(
+                        f"Could not decode frame {frame_index} from {item.video}"
+                    ) from error
+                if decoded_index != frame_index:
+                    warnings.warn(
+                        f"AVI boundary fallback for {item.video}: requested frame "
+                        f"{frame_index}, decoded {decoded_index}",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 frame = cv2.resize(frame, (self.image_size, self.image_size), interpolation=cv2.INTER_AREA)
                 if self.training and random.random() < 0.5:

@@ -6,7 +6,14 @@ import json
 import pytest
 import torch
 
-from ml.gesture.data import GestureSegment, _sample_indices, audit_segments, import_ipn_segments, write_manifest
+from ml.gesture.data import (
+    GestureSegment,
+    _read_video_frame,
+    _sample_indices,
+    audit_segments,
+    import_ipn_segments,
+    write_manifest,
+)
 from ml.gesture.labels import IPN_LABELS
 from ml.gesture.models import ARCHITECTURES, GestureModelConfig, build_model, checkpoint_payload
 from ml.gesture.training import _metrics
@@ -113,6 +120,27 @@ def test_audit_rejects_video_leakage_and_temporal_sampler_is_bounded(tmp_path):
 
     assert _sample_indices(4, 7, 8, training=False) == [4, 4, 5, 5, 6, 6, 7, 7]
     assert all(4 <= item <= 20 for item in _sample_indices(4, 20, 8, training=True))
+
+
+def test_video_decoder_backtracks_only_near_an_avi_boundary():
+    class Capture:
+        def __init__(self):
+            self.position = None
+
+        def set(self, _property, position):
+            self.position = int(position)
+
+        def read(self):
+            if self.position == 9:
+                return False, None
+            return True, torch.tensor(self.position).numpy()
+
+    frame, decoded_index = _read_video_frame(
+        Capture(), 10, position_property=1, max_backtrack=4
+    )
+
+    assert decoded_index == 9
+    assert int(frame) == 8
 
 
 @pytest.mark.parametrize("architecture", ARCHITECTURES)
