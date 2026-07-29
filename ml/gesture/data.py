@@ -130,18 +130,34 @@ def _read_class_index(path: Path) -> dict[int, str]:
     return labels
 
 
-def _read_official_rows(path: Path) -> list[tuple[str, int, int, int]]:
-    rows: list[tuple[str, int, int, int]] = []
+def _read_official_rows(
+    path: Path, labels: dict[int, str]
+) -> list[tuple[str, str, int, int]]:
+    rows: list[tuple[str, str, int, int]] = []
     for line_number, line in enumerate(
         path.read_text(encoding="utf-8-sig").splitlines(), 1
     ):
         if not line.strip():
             continue
-        parts = line.split()
-        if len(parts) != 4:
+        parts = (
+            [part.strip() for part in line.split(",")]
+            if "," in line
+            else line.split()
+        )
+        if parts[0].casefold() in {"video", "video_id", "video_name"}:
+            continue
+        if len(parts) == 6:
+            key, label, _segment_id, start_frame, end_frame, _length = parts
+            label = validate_label(label)
+        elif len(parts) == 4:
+            key, class_index, start_frame, end_frame = parts
+            index = int(class_index)
+            if index not in labels:
+                raise ValueError(f"Unknown IPN class index {index} in {key!r}")
+            label = labels[index]
+        else:
             raise ValueError(f"Invalid IPN annotation at {path}:{line_number}: {line!r}")
-        key, class_index, start_frame, end_frame = parts
-        rows.append((key, int(class_index), int(start_frame), int(end_frame)))
+        rows.append((key, label, int(start_frame), int(end_frame)))
     if not rows:
         raise ValueError(f"No IPN annotations found in {path}")
     return rows
@@ -154,15 +170,13 @@ def _import_official_text_annotations(
     test_path: Path,
 ) -> list[GestureSegment]:
     labels = _read_class_index(class_index_path)
-    train_rows = _read_official_rows(train_path)
-    test_rows = _read_official_rows(test_path)
+    train_rows = _read_official_rows(train_path, labels)
+    test_rows = _read_official_rows(test_path, labels)
     validation_subjects = _internal_validation_subjects(row[0] for row in train_rows)
     records: list[GestureSegment] = []
     resolved_videos: dict[str, Path] = {}
     for source_split, rows in (("training", train_rows), ("test", test_rows)):
-        for key, class_index, start_frame, end_frame in rows:
-            if class_index not in labels:
-                raise ValueError(f"Unknown IPN class index {class_index} in {key!r}")
+        for key, label, start_frame, end_frame in rows:
             split = "test"
             if source_split == "training":
                 split = (
@@ -178,7 +192,7 @@ def _import_official_text_annotations(
             records.append(
                 GestureSegment(
                     video=str(video.resolve()),
-                    label=labels[class_index],
+                    label=label,
                     start_frame=start_frame,
                     end_frame=end_frame,
                     split=split,
