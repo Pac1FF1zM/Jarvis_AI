@@ -110,7 +110,13 @@ def _read_class_index(path: Path) -> dict[int, str]:
     ):
         if not line.strip():
             continue
-        parts = line.split()
+        parts = (
+            [part.strip() for part in line.split(",")]
+            if "," in line
+            else line.split()
+        )
+        if [part.casefold() for part in parts] == ["id", "label"]:
+            continue
         if len(parts) != 2:
             raise ValueError(f"Invalid class index at {path}:{line_number}: {line!r}")
         index, label = int(parts[0]), validate_label(parts[1])

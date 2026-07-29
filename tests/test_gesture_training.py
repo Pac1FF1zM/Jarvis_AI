@@ -60,8 +60,8 @@ def test_ipn_import_reads_google_drive_text_annotations_without_subject_leakage(
     annotations = tmp_path / "annotations"
     videos.mkdir()
     annotations.mkdir()
-    class_index = "\n".join(
-        f"{index} {label}" for index, label in enumerate(IPN_LABELS, 1)
+    class_index = "id,label\n" + "\n".join(
+        f"{index},{label}" for index, label in enumerate(IPN_LABELS, 1)
     )
     (annotations / "classIdx.txt").write_text(class_index, encoding="utf-8")
 
