@@ -143,6 +143,25 @@ def test_video_decoder_backtracks_only_near_an_avi_boundary():
     assert int(frame) == 8
 
 
+def test_video_decoder_can_reach_first_frame_from_early_avi_annotation():
+    class Capture:
+        def __init__(self):
+            self.position = None
+
+        def set(self, _property, position):
+            self.position = int(position)
+
+        def read(self):
+            return self.position == 0, torch.tensor(self.position).numpy()
+
+    frame, decoded_index = _read_video_frame(
+        Capture(), 5, position_property=1, max_backtrack=4
+    )
+
+    assert decoded_index == 1
+    assert int(frame) == 0
+
+
 @pytest.mark.parametrize("architecture", ARCHITECTURES)
 def test_each_from_scratch_video_model_backpropagates_and_serializes(architecture):
     config = GestureModelConfig(architecture=architecture, classes=len(IPN_LABELS), width=8, dropout=0.0)

@@ -367,14 +367,15 @@ def _read_video_frame(
     max_backtrack: int = 4,
 ) -> tuple[np.ndarray, int]:
     """Decode an annotated frame, tolerating only a small AVI tail mismatch."""
-    for candidate in range(frame_index, max(frame_index - max_backtrack, 0), -1):
+    lowest_candidate = max(1, frame_index - max_backtrack)
+    for candidate in range(frame_index, lowest_candidate - 1, -1):
         capture.set(position_property, candidate - 1)
         ok, frame = capture.read()
         if ok:
             return frame, candidate
     raise RuntimeError(
         f"Could not decode frame {frame_index} or the previous "
-        f"{max_backtrack - 1} frame(s)"
+        f"{frame_index - lowest_candidate} frame(s)"
     )
 
 
