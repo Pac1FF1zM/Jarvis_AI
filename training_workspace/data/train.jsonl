@@ -1,840 +1,1120 @@
-{"text":"прерви эту операцию я передумал","intent":"cancel","slots":{}}
-{"text":"назови поддерживаемые приложения джарвис","intent":"list_applications","slots":{}}
-{"text":"хочу узнать больше про машинное обучение","intent":"general_chat","slots":{}}
-{"text":"что доступно из программ джарвис","intent":"list_applications","slots":{}}
-{"text":"покажи варианты для запуска джарвис","intent":"list_applications","slots":{}}
-{"text":"запусти пожалуйста калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
-{"text":"прекрати выполнение команды","intent":"cancel","slots":{}}
-{"text":"не дай забыть через 60 минут закрыть окно","intent":"set_reminder","slots":{"duration":"60","reminder_text":"закрыть окно"}}
-{"text":"останови выполнение прямо сейчас","intent":"cancel","slots":{}}
-{"text":"открой приложение calc","intent":"open_application","slots":{"application":"calc"}}
-{"text":"дай список приложений джарвис","intent":"list_applications","slots":{}}
-{"text":"какие программы тебе доступны полностью","intent":"list_applications","slots":{}}
-{"text":"что ты умеешь открывать полностью","intent":"list_applications","slots":{}}
-{"text":"хочу узнать сколько времени без даты","intent":"get_current_time","slots":{}}
-{"text":"хочу открыть notepad","intent":"open_application","slots":{"application":"notepad"}}
-{"text":"что ты думаешь про погоду и климат","intent":"general_chat","slots":{}}
-{"text":"прерви эту операцию джарвис","intent":"cancel","slots":{}}
-{"text":"назови точное время пожалуйста","intent":"get_current_time","slots":{}}
-{"text":"не открывай дискорд и вернись в ожидание","intent":"cancel","slots":{}}
-{"text":"помоги разобраться в теме фильмы","intent":"general_chat","slots":{}}
-{"text":"джарвис эээ ммм","intent":"unknown","slots":{}}
-{"text":"ну неразборчивые слова","intent":"unknown","slots":{}}
-{"text":"хочу открыть дискор","intent":"open_application","slots":{"application":"дискор"}}
-{"text":"поставь напоминание через 60 минут проверить чайник","intent":"set_reminder","slots":{"duration":"60","reminder_text":"проверить чайник"}}
-{"text":"спустя 10 минут напомни мне забрать документы","intent":"set_reminder","slots":{"duration":"10","reminder_text":"забрать документы"}}
-{"text":"включи пожалуйста browser","intent":"open_application","slots":{"application":"browser"}}
-{"text":"спустя 3 минут напомни мне начать встречу","intent":"set_reminder","slots":{"duration":"3","reminder_text":"начать встречу"}}
-{"text":"запусти notepad","intent":"open_application","slots":{"application":"notepad"}}
-{"text":"проверь что сейчас на часах сейчас","intent":"get_current_time","slots":{}}
-{"text":"остановись прямо сейчас","intent":"cancel","slots":{}}
-{"text":"создай напоминание на 12 минут поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"12","reminder_text":"поставить телефон на зарядку"}}
-{"text":"джарвис через 20 минут напомни начать встречу","intent":"set_reminder","slots":{"duration":"20","reminder_text":"начать встречу"}}
-{"text":"пожалуйста напомни через 60 минут выпить воды","intent":"set_reminder","slots":{"duration":"60","reminder_text":"выпить воды"}}
-{"text":"я передумал и вернись в ожидание","intent":"cancel","slots":{}}
-{"text":"расскажи про компьютерные игры","intent":"general_chat","slots":{}}
-{"text":"отмени текущую команду пожалуйста","intent":"cancel","slots":{}}
-{"text":"джарвис через 25 минут напомни проверить чайник","intent":"set_reminder","slots":{"duration":"25","reminder_text":"проверить чайник"}}
-{"text":"что ты умеешь открывать для запуска","intent":"list_applications","slots":{}}
-{"text":"создай напоминание на 2 минут забрать документы","intent":"set_reminder","slots":{"duration":"2","reminder_text":"забрать документы"}}
-{"text":"покажи список разрешённых программ без лишнего текста","intent":"list_applications","slots":{}}
-{"text":"пожалуйста напомни через 5 минут поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"5","reminder_text":"поставить телефон на зарядку"}}
-{"text":"помоги разобраться в теме музыку","intent":"general_chat","slots":{}}
-{"text":"эм напомни","intent":"unknown","slots":{}}
-{"text":"ну включи эту самую","intent":"unknown","slots":{}}
-{"text":"назови поддерживаемые приложения одним списком","intent":"list_applications","slots":{}}
-{"text":"посмотри сколько времени на часах одним предложением","intent":"get_current_time","slots":{}}
-{"text":"перечисли свой список программ прямо сейчас","intent":"list_applications","slots":{}}
-{"text":"можешь кратко описать интернет","intent":"general_chat","slots":{}}
-{"text":"можешь сказать который час сейчас","intent":"get_current_time","slots":{}}
-{"text":"покажи время на данный момент на компьютере","intent":"get_current_time","slots":{}}
-{"text":"через 1 минут напомни покормить кота","intent":"set_reminder","slots":{"duration":"1","reminder_text":"покормить кота"}}
-{"text":"нужно запустить дискорд","intent":"open_application","slots":{"application":"дискорд"}}
-{"text":"назови точное время без даты","intent":"get_current_time","slots":{}}
-{"text":"не открывай дискорд я передумал","intent":"cancel","slots":{}}
-{"text":"скажи который сейчас час одним предложением","intent":"get_current_time","slots":{}}
-{"text":"проверь что сейчас на часах и ответь голосом","intent":"get_current_time","slots":{}}
-{"text":"какой софт ты можешь включить голосом","intent":"list_applications","slots":{}}
-{"text":"создай напоминание на 1 минут забрать документы","intent":"set_reminder","slots":{"duration":"1","reminder_text":"забрать документы"}}
-{"text":"не запускай браузер пока не нужно","intent":"cancel","slots":{}}
-{"text":"open пейнт","intent":"open_application","slots":{"application":"пейнт"}}
-{"text":"останови выполнение пожалуйста","intent":"cancel","slots":{}}
-{"text":"что доступно из программ пожалуйста","intent":"list_applications","slots":{}}
-{"text":"джарвис скажи время сейчас по местному времени","intent":"get_current_time","slots":{}}
-{"text":"мне нужно знать текущее время по местному времени","intent":"get_current_time","slots":{}}
-{"text":"сбрось текущее действие немедленно","intent":"cancel","slots":{}}
-{"text":"включи пожалуйста explorer","intent":"open_application","slots":{"application":"explorer"}}
-{"text":"на 60 минут поставь напоминание проверить чайник","intent":"set_reminder","slots":{"duration":"60","reminder_text":"проверить чайник"}}
-{"text":"помоги разобраться в теме программирование","intent":"general_chat","slots":{}}
-{"text":"объясни простыми словами программирование","intent":"general_chat","slots":{}}
-{"text":"спустя 2 минут напомни мне ответить коллеге","intent":"set_reminder","slots":{"duration":"2","reminder_text":"ответить коллеге"}}
-{"text":"пожалуйста запусти file explorer","intent":"open_application","slots":{"application":"file explorer"}}
-{"text":"назови поддерживаемые приложения","intent":"list_applications","slots":{}}
-{"text":"покажи список разрешённых программ прямо сейчас","intent":"list_applications","slots":{}}
-{"text":"напомни через 20 минут закрыть окно","intent":"set_reminder","slots":{"duration":"20","reminder_text":"закрыть окно"}}
-{"text":"не открывай дискорд пока не нужно","intent":"cancel","slots":{}}
-{"text":"прекрати выполнение команды я передумал","intent":"cancel","slots":{}}
-{"text":"там потом пожалуйста","intent":"unknown","slots":{}}
-{"text":"помоги разобраться в теме нейронные сети","intent":"general_chat","slots":{}}
-{"text":"спустя 12 минут напомни мне выпить воды","intent":"set_reminder","slots":{"duration":"12","reminder_text":"выпить воды"}}
-{"text":"включи пожалуйста дискор","intent":"open_application","slots":{"application":"дискор"}}
-{"text":"джарвис запусти калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
-{"text":"проверь что сейчас на часах пожалуйста","intent":"get_current_time","slots":{}}
-{"text":"отмени текущую команду прямо сейчас","intent":"cancel","slots":{}}
-{"text":"спустя 10 минут напомни мне проверить почту","intent":"set_reminder","slots":{"duration":"10","reminder_text":"проверить почту"}}
-{"text":"назови точное время одним предложением","intent":"get_current_time","slots":{}}
-{"text":"через 3 минут скажи мне позвонить другу","intent":"set_reminder","slots":{"duration":"3","reminder_text":"позвонить другу"}}
-{"text":"поставь напоминание через 10 минут закрыть окно","intent":"set_reminder","slots":{"duration":"10","reminder_text":"закрыть окно"}}
-{"text":"что доступно из программ голосом","intent":"list_applications","slots":{}}
-{"text":"через 15 минут скажи мне встать и размяться","intent":"set_reminder","slots":{"duration":"15","reminder_text":"встать и размяться"}}
-{"text":"пожалуйста уточни который час на компьютере","intent":"get_current_time","slots":{}}
-{"text":"покажи варианты для запуска без лишнего текста","intent":"list_applications","slots":{}}
-{"text":"можешь кратко описать музыку","intent":"general_chat","slots":{}}
-{"text":"дай список приложений коротко","intent":"list_applications","slots":{}}
-{"text":"пожалуйста напомни через 1 минут позвонить другу","intent":"set_reminder","slots":{"duration":"1","reminder_text":"позвонить другу"}}
-{"text":"покажи список разрешённых программ голосом","intent":"list_applications","slots":{}}
-{"text":"покажи время на данный момент точно","intent":"get_current_time","slots":{}}
-{"text":"джарвис туда и обратно","intent":"unknown","slots":{}}
-{"text":"прерви эту операцию немедленно","intent":"cancel","slots":{}}
-{"text":"можешь кратко описать здоровый сон","intent":"general_chat","slots":{}}
-{"text":"отмена это ошибка","intent":"cancel","slots":{}}
-{"text":"пожалуйста открой black note","intent":"open_application","slots":{"application":"black note"}}
-{"text":"отмени текущую команду и вернись в ожидание","intent":"cancel","slots":{}}
-{"text":"открой калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
-{"text":"подскажи сколько сейчас времени","intent":"get_current_time","slots":{}}
-{"text":"включи дисорд","intent":"open_application","slots":{"application":"дисорд"}}
-{"text":"джарвис запусти task manager","intent":"open_application","slots":{"application":"task manager"}}
-{"text":"какие приложения ты можешь открыть без лишнего текста","intent":"list_applications","slots":{}}
-{"text":"проверь что сейчас на часах точно","intent":"get_current_time","slots":{}}
-{"text":"сообщи текущее время и ответь голосом","intent":"get_current_time","slots":{}}
-{"text":"какие приложения ты можешь открыть голосом","intent":"list_applications","slots":{}}
-{"text":"можешь сказать который час","intent":"get_current_time","slots":{}}
-{"text":"джарвис скажи время сейчас точно","intent":"get_current_time","slots":{}}
-{"text":"джарвис потом сделай как вчера","intent":"unknown","slots":{}}
-{"text":"через несколько минут пожалуйста","intent":"unknown","slots":{}}
-{"text":"через 25 минут напомни позвонить другу","intent":"set_reminder","slots":{"duration":"25","reminder_text":"позвонить другу"}}
-{"text":"можешь кратко описать правильное питание","intent":"general_chat","slots":{}}
-{"text":"сообщи текущее время сейчас","intent":"get_current_time","slots":{}}
-{"text":"эм команда без объекта","intent":"unknown","slots":{}}
-{"text":"почему важно понимать правильное питание","intent":"general_chat","slots":{}}
-{"text":"поставь напоминание через 60 минут ответить коллеге","intent":"set_reminder","slots":{"duration":"60","reminder_text":"ответить коллеге"}}
-{"text":"что ты умеешь открывать без лишнего текста","intent":"list_applications","slots":{}}
-{"text":"запусти мне калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
-{"text":"что ты думаешь про работу процессора","intent":"general_chat","slots":{}}
-{"text":"назови поддерживаемые приложения полностью","intent":"list_applications","slots":{}}
-{"text":"посмотри сколько времени на часах для меня","intent":"get_current_time","slots":{}}
-{"text":"отмена пока не нужно","intent":"cancel","slots":{}}
-{"text":"не запускай браузер пожалуйста","intent":"cancel","slots":{}}
-{"text":"прекрати выполнение команды джарвис","intent":"cancel","slots":{}}
-{"text":"мне нужно открыть пейнт","intent":"open_application","slots":{"application":"пейнт"}}
-{"text":"какие программы тебе доступны","intent":"list_applications","slots":{}}
-{"text":"посмотри сколько времени на часах джарвис","intent":"get_current_time","slots":{}}
-{"text":"почему важно понимать голосовые ассистенты","intent":"general_chat","slots":{}}
-{"text":"какие программы тебе доступны без лишнего текста","intent":"list_applications","slots":{}}
-{"text":"запусти мне task manager","intent":"open_application","slots":{"application":"task manager"}}
-{"text":"не запускай браузер","intent":"cancel","slots":{}}
-{"text":"через 7 минут скажи мне начать встречу","intent":"set_reminder","slots":{"duration":"7","reminder_text":"начать встречу"}}
-{"text":"кажется там потом","intent":"unknown","slots":{}}
-{"text":"давай поговорим про почему дискорд иногда не открывается","intent":"general_chat","slots":{}}
-{"text":"давай поговорим про машинное обучение","intent":"general_chat","slots":{}}
-{"text":"отмени текущую команду немедленно","intent":"cancel","slots":{}}
-{"text":"ничего не запускай и вернись в ожидание","intent":"cancel","slots":{}}
-{"text":"кажется бла бла бла","intent":"unknown","slots":{}}
-{"text":"открой правый","intent":"unknown","slots":{}}
-{"text":"назови точное время джарвис","intent":"get_current_time","slots":{}}
-{"text":"покажи время на данный момент пожалуйста","intent":"get_current_time","slots":{}}
-{"text":"запусти пайнт","intent":"open_application","slots":{"application":"пайнт"}}
-{"text":"спустя 15 минут напомни мне проверить почту","intent":"set_reminder","slots":{"duration":"15","reminder_text":"проверить почту"}}
-{"text":"отмена прямо сейчас","intent":"cancel","slots":{}}
-{"text":"давай поговорим про голосовые ассистенты","intent":"general_chat","slots":{}}
-{"text":"ну там потом","intent":"unknown","slots":{}}
-{"text":"кажется открой правый","intent":"unknown","slots":{}}
-{"text":"сообщи текущее время для меня","intent":"get_current_time","slots":{}}
-{"text":"давай запустим блакнот","intent":"open_application","slots":{"application":"блакнот"}}
-{"text":"джарвис бла бла бла","intent":"unknown","slots":{}}
-{"text":"напомни через 30 минут проверить чайник","intent":"set_reminder","slots":{"duration":"30","reminder_text":"проверить чайник"}}
-{"text":"назови поддерживаемые приложения без лишнего текста","intent":"list_applications","slots":{}}
-{"text":"джарвис скажи время сейчас пожалуйста","intent":"get_current_time","slots":{}}
-{"text":"эээ ммм пожалуйста","intent":"unknown","slots":{}}
-{"text":"сообщи текущее время одним предложением","intent":"get_current_time","slots":{}}
-{"text":"открой мне блекнот","intent":"open_application","slots":{"application":"блекнот"}}
-{"text":"через 12 минут напомни сделать короткий перерыв","intent":"set_reminder","slots":{"duration":"12","reminder_text":"сделать короткий перерыв"}}
-{"text":"хочу узнать сколько времени одним предложением","intent":"get_current_time","slots":{}}
-{"text":"кажется выполни штуку","intent":"unknown","slots":{}}
-{"text":"мне нужно знать текущее время для меня","intent":"get_current_time","slots":{}}
-{"text":"напомни","intent":"unknown","slots":{}}
-{"text":"создай напоминание на 20 минут забрать документы","intent":"set_reminder","slots":{"duration":"20","reminder_text":"забрать документы"}}
-{"text":"сбрось текущее действие пока не нужно","intent":"cancel","slots":{}}
-{"text":"мне нужно знать текущее время и ответь голосом","intent":"get_current_time","slots":{}}
-{"text":"что доступно из программ коротко","intent":"list_applications","slots":{}}
-{"text":"расскажи про изучение английского","intent":"general_chat","slots":{}}
-{"text":"дай список приложений прямо сейчас","intent":"list_applications","slots":{}}
-{"text":"запусти калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
-{"text":"включи пожалуйста диспетчер задач","intent":"open_application","slots":{"application":"диспетчер задач"}}
-{"text":"джарвис через 60 минут напомни начать встречу","intent":"set_reminder","slots":{"duration":"60","reminder_text":"начать встречу"}}
-{"text":"спустя 60 минут напомни мне закрыть окно","intent":"set_reminder","slots":{"duration":"60","reminder_text":"закрыть окно"}}
-{"text":"мне нужно открыть explorer","intent":"open_application","slots":{"application":"explorer"}}
-{"text":"джарвис напомни","intent":"unknown","slots":{}}
-{"text":"ничего не запускай я передумал","intent":"cancel","slots":{}}
-{"text":"прекрати выполнение команды прямо сейчас","intent":"cancel","slots":{}}
-{"text":"помоги разобраться в теме изучение английского","intent":"general_chat","slots":{}}
-{"text":"создай напоминание на 7 минут ответить коллеге","intent":"set_reminder","slots":{"duration":"7","reminder_text":"ответить коллеге"}}
-{"text":"скажи который сейчас час точно","intent":"get_current_time","slots":{}}
-{"text":"создай напоминание на 7 минут начать встречу","intent":"set_reminder","slots":{"duration":"7","reminder_text":"начать встречу"}}
-{"text":"давай поговорим про фильмы","intent":"general_chat","slots":{}}
-{"text":"джарвис открой интернет","intent":"open_application","slots":{"application":"интернет"}}
-{"text":"перечисли доступные приложения","intent":"list_applications","slots":{}}
-{"text":"перечисли свой список программ голосом","intent":"list_applications","slots":{}}
-{"text":"непонятный шум","intent":"unknown","slots":{}}
-{"text":"что из программ можно запустить для запуска","intent":"list_applications","slots":{}}
-{"text":"можешь запустить дискод","intent":"open_application","slots":{"application":"дискод"}}
-{"text":"включи calc","intent":"open_application","slots":{"application":"calc"}}
-{"text":"объясни простыми словами голосовые ассистенты","intent":"general_chat","slots":{}}
-{"text":"пожалуйста уточни который час по местному времени","intent":"get_current_time","slots":{}}
-{"text":"покажи список разрешённых программ полностью","intent":"list_applications","slots":{}}
-{"text":"пожалуйста уточни который час для меня","intent":"get_current_time","slots":{}}
-{"text":"напомни через 1 минут забрать документы","intent":"set_reminder","slots":{"duration":"1","reminder_text":"забрать документы"}}
-{"text":"эм ну вот это","intent":"unknown","slots":{}}
-{"text":"мне нужно знать текущее время джарвис","intent":"get_current_time","slots":{}}
-{"text":"прекрати выполнение команды пожалуйста","intent":"cancel","slots":{}}
-{"text":"запусти мне calc","intent":"open_application","slots":{"application":"calc"}}
-{"text":"покажи время на данный момент и ответь голосом","intent":"get_current_time","slots":{}}
-{"text":"открой мне calc","intent":"open_application","slots":{"application":"calc"}}
-{"text":"эм туда и обратно","intent":"unknown","slots":{}}
-{"text":"не открывай дискорд","intent":"cancel","slots":{}}
-{"text":"давай поговорим про разницу между файлами и папками","intent":"general_chat","slots":{}}
-{"text":"хочу узнать больше про компьютерные игры","intent":"general_chat","slots":{}}
-{"text":"подскажи сколько сейчас времени точно","intent":"get_current_time","slots":{}}
-{"text":"ну приложение без названия","intent":"unknown","slots":{}}
-{"text":"спустя 1 минут напомни мне ответить коллеге","intent":"set_reminder","slots":{"duration":"1","reminder_text":"ответить коллеге"}}
-{"text":"стоп джарвис без подтверждения","intent":"cancel","slots":{}}
-{"text":"хочу открыть file explorer","intent":"open_application","slots":{"application":"file explorer"}}
-{"text":"можешь кратко описать фильмы","intent":"general_chat","slots":{}}
-{"text":"джарвис запусти explorer","intent":"open_application","slots":{"application":"explorer"}}
-{"text":"открой browser","intent":"open_application","slots":{"application":"browser"}}
-{"text":"подскажи сколько сейчас времени пожалуйста","intent":"get_current_time","slots":{}}
-{"text":"ничего не запускай это ошибка","intent":"cancel","slots":{}}
-{"text":"помоги разобраться в теме машинное обучение","intent":"general_chat","slots":{}}
-{"text":"ничего не запускай прямо сейчас","intent":"cancel","slots":{}}
-{"text":"ну непонятный шум","intent":"unknown","slots":{}}
-{"text":"открой интернет","intent":"open_application","slots":{"application":"интернет"}}
-{"text":"перечисли свой список программ полностью","intent":"list_applications","slots":{}}
-{"text":"расскажи про как выбрать браузер по умолчанию","intent":"general_chat","slots":{}}
-{"text":"объясни простыми словами операционные системы","intent":"general_chat","slots":{}}
-{"text":"объясни простыми словами космос","intent":"general_chat","slots":{}}
-{"text":"помоги разобраться в теме погоду и климат","intent":"general_chat","slots":{}}
-{"text":"запусти calc","intent":"open_application","slots":{"application":"calc"}}
-{"text":"почему важно понимать как выбрать браузер по умолчанию","intent":"general_chat","slots":{}}
-{"text":"open notepad","intent":"open_application","slots":{"application":"notepad"}}
-{"text":"на 7 минут поставь напоминание отправить отчёт","intent":"set_reminder","slots":{"duration":"7","reminder_text":"отправить отчёт"}}
-{"text":"какой софт ты можешь включить пожалуйста","intent":"list_applications","slots":{}}
-{"text":"отставить команду немедленно","intent":"cancel","slots":{}}
-{"text":"какие программы тебе доступны одним списком","intent":"list_applications","slots":{}}
-{"text":"перечисли свой список программ","intent":"list_applications","slots":{}}
-{"text":"давай поговорим про изучение английского","intent":"general_chat","slots":{}}
-{"text":"объясни простыми словами роботы","intent":"general_chat","slots":{}}
-{"text":"хочу узнать больше про нейронные сети","intent":"general_chat","slots":{}}
-{"text":"почему важно понимать локальные модели","intent":"general_chat","slots":{}}
-{"text":"мне нужно знать текущее время точно","intent":"get_current_time","slots":{}}
-{"text":"перечисли свой список программ для запуска","intent":"list_applications","slots":{}}
-{"text":"сделай это пожалуйста","intent":"unknown","slots":{}}
-{"text":"кажется запусти","intent":"unknown","slots":{}}
-{"text":"создай напоминание на 3 минут отправить отчёт","intent":"set_reminder","slots":{"duration":"3","reminder_text":"отправить отчёт"}}
-{"text":"через 20 минут скажи мне проверить чайник","intent":"set_reminder","slots":{"duration":"20","reminder_text":"проверить чайник"}}
-{"text":"потом сделай как вчера пожалуйста","intent":"unknown","slots":{}}
-{"text":"я передумал я передумал","intent":"cancel","slots":{}}
-{"text":"кажется включи эту самую","intent":"unknown","slots":{}}
-{"text":"хочу узнать сколько времени точно","intent":"get_current_time","slots":{}}
-{"text":"на 25 минут поставь напоминание проверить чайник","intent":"set_reminder","slots":{"duration":"25","reminder_text":"проверить чайник"}}
-{"text":"пожалуйста уточни который час пожалуйста","intent":"get_current_time","slots":{}}
-{"text":"пожалуйста уточни который час точно","intent":"get_current_time","slots":{}}
-{"text":"отмени текущую команду я передумал","intent":"cancel","slots":{}}
-{"text":"расскажи про историю компьютеров","intent":"general_chat","slots":{}}
-{"text":"пожалуйста напомни через 3 минут закрыть окно","intent":"set_reminder","slots":{"duration":"3","reminder_text":"закрыть окно"}}
-{"text":"остановись пока не нужно","intent":"cancel","slots":{}}
-{"text":"запусти browser","intent":"open_application","slots":{"application":"browser"}}
-{"text":"хочу узнать сколько времени по местному времени","intent":"get_current_time","slots":{}}
-{"text":"не надо это делать немедленно","intent":"cancel","slots":{}}
-{"text":"на 2 минут поставь напоминание проверить почту","intent":"set_reminder","slots":{"duration":"2","reminder_text":"проверить почту"}}
-{"text":"мне нужно знать текущее время без даты","intent":"get_current_time","slots":{}}
-{"text":"напомни через 2 минут позвонить другу","intent":"set_reminder","slots":{"duration":"2","reminder_text":"позвонить другу"}}
-{"text":"расскажи про локальные модели","intent":"general_chat","slots":{}}
-{"text":"создай напоминание на 12 минут проверить загрузку","intent":"set_reminder","slots":{"duration":"12","reminder_text":"проверить загрузку"}}
-{"text":"что ты думаешь про роботы","intent":"general_chat","slots":{}}
-{"text":"объясни простыми словами безопасность данных","intent":"general_chat","slots":{}}
-{"text":"через 1 минут напомни забрать документы","intent":"set_reminder","slots":{"duration":"1","reminder_text":"забрать документы"}}
-{"text":"хочу открыть диспетчер задач","intent":"open_application","slots":{"application":"диспетчер задач"}}
-{"text":"объясни простыми словами почему дискорд иногда не открывается","intent":"general_chat","slots":{}}
-{"text":"помоги разобраться в теме локальные модели","intent":"general_chat","slots":{}}
-{"text":"открой task manager","intent":"open_application","slots":{"application":"task manager"}}
-{"text":"пожалуйста запусти дискод","intent":"open_application","slots":{"application":"дискод"}}
-{"text":"ничего не запускай","intent":"cancel","slots":{}}
-{"text":"перечисли доступные приложения коротко","intent":"list_applications","slots":{}}
-{"text":"проверь что сейчас на часах без даты","intent":"get_current_time","slots":{}}
-{"text":"действие без деталей пожалуйста","intent":"unknown","slots":{}}
-{"text":"стоп джарвис это ошибка","intent":"cancel","slots":{}}
-{"text":"запусти мне browser","intent":"open_application","slots":{"application":"browser"}}
-{"text":"пожалуйста напомни через 5 минут позвонить другу","intent":"set_reminder","slots":{"duration":"5","reminder_text":"позвонить другу"}}
-{"text":"можешь запустить проводник","intent":"open_application","slots":{"application":"проводник"}}
-{"text":"перечисли доступные приложения голосом","intent":"list_applications","slots":{}}
-{"text":"запусти мне пайнт","intent":"open_application","slots":{"application":"пайнт"}}
-{"text":"остановись без подтверждения","intent":"cancel","slots":{}}
-{"text":"проверь что сейчас на часах джарвис","intent":"get_current_time","slots":{}}
-{"text":"скажи который сейчас час пожалуйста","intent":"get_current_time","slots":{}}
-{"text":"хочу узнать больше про правильное питание","intent":"general_chat","slots":{}}
-{"text":"хочу узнать больше про погоду и климат","intent":"general_chat","slots":{}}
-{"text":"открой пейнт","intent":"open_application","slots":{"application":"пейнт"}}
-{"text":"помоги разобраться в теме разницу между файлами и папками","intent":"general_chat","slots":{}}
-{"text":"потом сделай как вчера","intent":"unknown","slots":{}}
-{"text":"ну команда без объекта","intent":"unknown","slots":{}}
-{"text":"пожалуйста напомни через 5 минут достать бельё","intent":"set_reminder","slots":{"duration":"5","reminder_text":"достать бельё"}}
-{"text":"почему важно понимать здоровый сон","intent":"general_chat","slots":{}}
-{"text":"не запускай браузер прямо сейчас","intent":"cancel","slots":{}}
-{"text":"не дай забыть через 30 минут забрать документы","intent":"set_reminder","slots":{"duration":"30","reminder_text":"забрать документы"}}
-{"text":"кажется через несколько минут","intent":"unknown","slots":{}}
-{"text":"спустя 25 минут напомни мне позвонить другу","intent":"set_reminder","slots":{"duration":"25","reminder_text":"позвонить другу"}}
-{"text":"не открывай дискорд пожалуйста","intent":"cancel","slots":{}}
-{"text":"спустя 60 минут напомни мне отправить отчёт","intent":"set_reminder","slots":{"duration":"60","reminder_text":"отправить отчёт"}}
-{"text":"скажи который сейчас час и ответь голосом","intent":"get_current_time","slots":{}}
-{"text":"назови поддерживаемые приложения на моём компьютере","intent":"list_applications","slots":{}}
-{"text":"я передумал пока не нужно","intent":"cancel","slots":{}}
-{"text":"что ты умеешь открывать на моём компьютере","intent":"list_applications","slots":{}}
-{"text":"что доступно из программ на моём компьютере","intent":"list_applications","slots":{}}
-{"text":"джарвис открой","intent":"unknown","slots":{}}
-{"text":"объясни простыми словами работу процессора","intent":"general_chat","slots":{}}
-{"text":"пожалуйста запусти блекнот","intent":"open_application","slots":{"application":"блекнот"}}
-{"text":"прерви эту операцию","intent":"cancel","slots":{}}
-{"text":"какие приложения ты можешь открыть пожалуйста","intent":"list_applications","slots":{}}
-{"text":"объясни простыми словами как выбрать браузер по умолчанию","intent":"general_chat","slots":{}}
-{"text":"спустя 30 минут напомни мне начать встречу","intent":"set_reminder","slots":{"duration":"30","reminder_text":"начать встречу"}}
-{"text":"перечисли свой список программ джарвис","intent":"list_applications","slots":{}}
-{"text":"назови точное время для меня","intent":"get_current_time","slots":{}}
-{"text":"там потом","intent":"unknown","slots":{}}
-{"text":"почему важно понимать музыку","intent":"general_chat","slots":{}}
-{"text":"что ты умеешь открывать прямо сейчас","intent":"list_applications","slots":{}}
-{"text":"можешь сказать который час одним предложением","intent":"get_current_time","slots":{}}
-{"text":"ну один два три","intent":"unknown","slots":{}}
-{"text":"стоп джарвис пока не нужно","intent":"cancel","slots":{}}
-{"text":"эм действие без деталей","intent":"unknown","slots":{}}
-{"text":"не дай забыть через 25 минут сделать короткий перерыв","intent":"set_reminder","slots":{"duration":"25","reminder_text":"сделать короткий перерыв"}}
-{"text":"кажется приложение без названия","intent":"unknown","slots":{}}
-{"text":"джарвис действие без деталей","intent":"unknown","slots":{}}
-{"text":"расскажи про роботы","intent":"general_chat","slots":{}}
-{"text":"сбрось текущее действие прямо сейчас","intent":"cancel","slots":{}}
-{"text":"дай список приложений одним списком","intent":"list_applications","slots":{}}
-{"text":"что ты думаешь про правильное питание","intent":"general_chat","slots":{}}
-{"text":"запусти мне блекнот","intent":"open_application","slots":{"application":"блекнот"}}
-{"text":"хочу узнать больше про изучение английского","intent":"general_chat","slots":{}}
-{"text":"открой мне discord","intent":"open_application","slots":{"application":"discord"}}
-{"text":"поставь напоминание через 20 минут забрать документы","intent":"set_reminder","slots":{"duration":"20","reminder_text":"забрать документы"}}
-{"text":"джарвис запусти","intent":"unknown","slots":{}}
-{"text":"спустя 45 минут напомни мне поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"45","reminder_text":"поставить телефон на зарядку"}}
-{"text":"можешь запустить файлы","intent":"open_application","slots":{"application":"файлы"}}
-{"text":"запусти мне интернет","intent":"open_application","slots":{"application":"интернет"}}
-{"text":"открой explorer","intent":"open_application","slots":{"application":"explorer"}}
-{"text":"назови точное время сейчас","intent":"get_current_time","slots":{}}
-{"text":"пожалуйста напомни через 7 минут проверить чайник","intent":"set_reminder","slots":{"duration":"7","reminder_text":"проверить чайник"}}
-{"text":"не надо это делать без подтверждения","intent":"cancel","slots":{}}
-{"text":"через 30 минут напомни ответить коллеге","intent":"set_reminder","slots":{"duration":"30","reminder_text":"ответить коллеге"}}
-{"text":"джарвис через 12 минут напомни сделать короткий перерыв","intent":"set_reminder","slots":{"duration":"12","reminder_text":"сделать короткий перерыв"}}
-{"text":"неразборчивые слова пожалуйста","intent":"unknown","slots":{}}
-{"text":"напомни через 45 минут покормить кота","intent":"set_reminder","slots":{"duration":"45","reminder_text":"покормить кота"}}
-{"text":"включи пожалуйста браузер","intent":"open_application","slots":{"application":"браузер"}}
-{"text":"проверь что сейчас на часах","intent":"get_current_time","slots":{}}
-{"text":"отмени текущую команду пока не нужно","intent":"cancel","slots":{}}
-{"text":"что из программ можно запустить голосом","intent":"list_applications","slots":{}}
-{"text":"перечисли свой список программ пожалуйста","intent":"list_applications","slots":{}}
-{"text":"не запускай браузер без подтверждения","intent":"cancel","slots":{}}
-{"text":"джарвис через 7 минут напомни проверить чайник","intent":"set_reminder","slots":{"duration":"7","reminder_text":"проверить чайник"}}
-{"text":"пожалуйста напомни через 12 минут покормить кота","intent":"set_reminder","slots":{"duration":"12","reminder_text":"покормить кота"}}
-{"text":"эм бла бла бла","intent":"unknown","slots":{}}
-{"text":"покажи список разрешённых программ для запуска","intent":"list_applications","slots":{}}
-{"text":"эм продолжай туда","intent":"unknown","slots":{}}
-{"text":"объясни простыми словами погоду и климат","intent":"general_chat","slots":{}}
-{"text":"сбрось текущее действие джарвис","intent":"cancel","slots":{}}
-{"text":"не надо это делать это ошибка","intent":"cancel","slots":{}}
-{"text":"подскажи сколько сейчас времени на компьютере","intent":"get_current_time","slots":{}}
-{"text":"джарвис приложение без названия","intent":"unknown","slots":{}}
-{"text":"можешь кратко описать безопасность данных","intent":"general_chat","slots":{}}
-{"text":"перечисли доступные приложения без лишнего текста","intent":"list_applications","slots":{}}
-{"text":"сбрось текущее действие без подтверждения","intent":"cancel","slots":{}}
-{"text":"что доступно из программ одним списком","intent":"list_applications","slots":{}}
-{"text":"какие программы тебе доступны на моём компьютере","intent":"list_applications","slots":{}}
-{"text":"джарвис скажи время сейчас без даты","intent":"get_current_time","slots":{}}
-{"text":"ничего не запускай немедленно","intent":"cancel","slots":{}}
-{"text":"остановись пожалуйста","intent":"cancel","slots":{}}
-{"text":"не открывай дискорд джарвис","intent":"cancel","slots":{}}
-{"text":"назови поддерживаемые приложения пожалуйста","intent":"list_applications","slots":{}}
-{"text":"сбрось текущее действие","intent":"cancel","slots":{}}
-{"text":"джарвис включи эту самую","intent":"unknown","slots":{}}
-{"text":"какие приложения ты можешь открыть коротко","intent":"list_applications","slots":{}}
-{"text":"я передумал пожалуйста","intent":"cancel","slots":{}}
-{"text":"через 15 минут скажи мне достать бельё","intent":"set_reminder","slots":{"duration":"15","reminder_text":"достать бельё"}}
-{"text":"джарвис запусти дисорд","intent":"open_application","slots":{"application":"дисорд"}}
-{"text":"давай откроем calc","intent":"open_application","slots":{"application":"calc"}}
-{"text":"джарвис скажи время сейчас сейчас","intent":"get_current_time","slots":{}}
-{"text":"кажется сделай это","intent":"unknown","slots":{}}
-{"text":"отставить команду это ошибка","intent":"cancel","slots":{}}
-{"text":"покажи варианты для запуска","intent":"list_applications","slots":{}}
-{"text":"стоп джарвис я передумал","intent":"cancel","slots":{}}
-{"text":"дай список приложений полностью","intent":"list_applications","slots":{}}
-{"text":"что-нибудь такое","intent":"unknown","slots":{}}
-{"text":"хочу узнать больше про разницу между файлами и папками","intent":"general_chat","slots":{}}
-{"text":"объясни простыми словами фильмы","intent":"general_chat","slots":{}}
-{"text":"хочу узнать сколько времени пожалуйста","intent":"get_current_time","slots":{}}
-{"text":"какой софт ты можешь включить без лишнего текста","intent":"list_applications","slots":{}}
-{"text":"отмена немедленно","intent":"cancel","slots":{}}
-{"text":"сделай это","intent":"unknown","slots":{}}
-{"text":"дай список приложений на моём компьютере","intent":"list_applications","slots":{}}
-{"text":"выполни штуку","intent":"unknown","slots":{}}
-{"text":"эм эээ ммм","intent":"unknown","slots":{}}
-{"text":"проверь что сейчас на часах для меня","intent":"get_current_time","slots":{}}
-{"text":"кажется ну вот это","intent":"unknown","slots":{}}
-{"text":"эм там потом","intent":"unknown","slots":{}}
-{"text":"на 10 минут поставь напоминание поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"10","reminder_text":"поставить телефон на зарядку"}}
-{"text":"можешь кратко описать погоду и климат","intent":"general_chat","slots":{}}
-{"text":"давай поговорим про интернет","intent":"general_chat","slots":{}}
-{"text":"ничего не запускай джарвис","intent":"cancel","slots":{}}
-{"text":"проверь что сейчас на часах одним предложением","intent":"get_current_time","slots":{}}
-{"text":"назови точное время точно","intent":"get_current_time","slots":{}}
-{"text":"пожалуйста уточни который час джарвис","intent":"get_current_time","slots":{}}
-{"text":"перечисли свой список программ без лишнего текста","intent":"list_applications","slots":{}}
-{"text":"что доступно из программ без лишнего текста","intent":"list_applications","slots":{}}
-{"text":"можешь кратко описать программирование","intent":"general_chat","slots":{}}
-{"text":"спустя 25 минут напомни мне выпить воды","intent":"set_reminder","slots":{"duration":"25","reminder_text":"выпить воды"}}
-{"text":"почему важно понимать машинное обучение","intent":"general_chat","slots":{}}
-{"text":"открой пожалуйста файлы","intent":"open_application","slots":{"application":"файлы"}}
-{"text":"сообщи текущее время по местному времени","intent":"get_current_time","slots":{}}
-{"text":"покажи список разрешённых программ","intent":"list_applications","slots":{}}
-{"text":"запусти пожалуйста discord","intent":"open_application","slots":{"application":"discord"}}
-{"text":"открой мне интернет","intent":"open_application","slots":{"application":"интернет"}}
-{"text":"через 10 минут напомни забрать документы","intent":"set_reminder","slots":{"duration":"10","reminder_text":"забрать документы"}}
-{"text":"эм открой","intent":"unknown","slots":{}}
-{"text":"спустя 10 минут напомни мне проверить загрузку","intent":"set_reminder","slots":{"duration":"10","reminder_text":"проверить загрузку"}}
-{"text":"эм какая-то команда","intent":"unknown","slots":{}}
-{"text":"сообщи текущее время пожалуйста","intent":"get_current_time","slots":{}}
-{"text":"что ты думаешь про почему дискорд иногда не открывается","intent":"general_chat","slots":{}}
-{"text":"ничего не запускай без подтверждения","intent":"cancel","slots":{}}
-{"text":"можешь кратко описать назначение калькулятора","intent":"general_chat","slots":{}}
-{"text":"запусти дисорд","intent":"open_application","slots":{"application":"дисорд"}}
-{"text":"посмотри сколько времени на часах без даты","intent":"get_current_time","slots":{}}
-{"text":"открой","intent":"unknown","slots":{}}
-{"text":"на 1 минут поставь напоминание выпить воды","intent":"set_reminder","slots":{"duration":"1","reminder_text":"выпить воды"}}
-{"text":"хочу узнать больше про здоровый сон","intent":"general_chat","slots":{}}
-{"text":"почему важно понимать историю компьютеров","intent":"general_chat","slots":{}}
-{"text":"через 7 минут напомни покормить кота","intent":"set_reminder","slots":{"duration":"7","reminder_text":"покормить кота"}}
-{"text":"что ты умеешь открывать одним списком","intent":"list_applications","slots":{}}
-{"text":"джарвис продолжай туда","intent":"unknown","slots":{}}
-{"text":"открой мне task manager","intent":"open_application","slots":{"application":"task manager"}}
-{"text":"перечисли доступные приложения джарвис","intent":"list_applications","slots":{}}
-{"text":"открой мне explorer","intent":"open_application","slots":{"application":"explorer"}}
-{"text":"можешь сказать который час и ответь голосом","intent":"get_current_time","slots":{}}
-{"text":"хочу узнать больше про видеокарты","intent":"general_chat","slots":{}}
-{"text":"через 25 минут скажи мне позвонить другу","intent":"set_reminder","slots":{"duration":"25","reminder_text":"позвонить другу"}}
-{"text":"запусти пожалуйста диспетчер задач","intent":"open_application","slots":{"application":"диспетчер задач"}}
-{"text":"спустя 30 минут напомни мне сделать короткий перерыв","intent":"set_reminder","slots":{"duration":"30","reminder_text":"сделать короткий перерыв"}}
-{"text":"прерви эту операцию пока не нужно","intent":"cancel","slots":{}}
-{"text":"джарвис скажи время сейчас для меня","intent":"get_current_time","slots":{}}
-{"text":"продолжай туда пожалуйста","intent":"unknown","slots":{}}
-{"text":"хочу узнать больше про голосовые ассистенты","intent":"general_chat","slots":{}}
-{"text":"что из программ можно запустить коротко","intent":"list_applications","slots":{}}
-{"text":"какие приложения ты можешь открыть одним списком","intent":"list_applications","slots":{}}
-{"text":"объясни простыми словами машинное обучение","intent":"general_chat","slots":{}}
-{"text":"открой пожалуйста explorer","intent":"open_application","slots":{"application":"explorer"}}
-{"text":"пожалуйста запусти task manager","intent":"open_application","slots":{"application":"task manager"}}
-{"text":"включи эту самую","intent":"unknown","slots":{}}
-{"text":"пожалуйста уточни который час без даты","intent":"get_current_time","slots":{}}
-{"text":"покажи варианты для запуска голосом","intent":"list_applications","slots":{}}
-{"text":"open интернет","intent":"open_application","slots":{"application":"интернет"}}
-{"text":"что из программ можно запустить","intent":"list_applications","slots":{}}
-{"text":"ну продолжай туда","intent":"unknown","slots":{}}
-{"text":"какие программы тебе доступны для запуска","intent":"list_applications","slots":{}}
-{"text":"хочу открыть калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
-{"text":"джарвис открой task manager","intent":"open_application","slots":{"application":"task manager"}}
-{"text":"отставить команду прямо сейчас","intent":"cancel","slots":{}}
-{"text":"стоп джарвис и вернись в ожидание","intent":"cancel","slots":{}}
-{"text":"хочу узнать больше про историю компьютеров","intent":"general_chat","slots":{}}
-{"text":"не дай забыть через 15 минут достать бельё","intent":"set_reminder","slots":{"duration":"15","reminder_text":"достать бельё"}}
-{"text":"почему важно понимать почему дискорд иногда не открывается","intent":"general_chat","slots":{}}
-{"text":"объясни простыми словами здоровый сон","intent":"general_chat","slots":{}}
-{"text":"через 5 минут скажи мне выключить духовку","intent":"set_reminder","slots":{"duration":"5","reminder_text":"выключить духовку"}}
-{"text":"отмени текущую команду это ошибка","intent":"cancel","slots":{}}
-{"text":"эм через несколько минут","intent":"unknown","slots":{}}
-{"text":"хочу открыть дисорд","intent":"open_application","slots":{"application":"дисорд"}}
-{"text":"пожалуйста напомни через 7 минут забрать документы","intent":"set_reminder","slots":{"duration":"7","reminder_text":"забрать документы"}}
-{"text":"перечисли свой список программ коротко","intent":"list_applications","slots":{}}
-{"text":"через несколько минут","intent":"unknown","slots":{}}
-{"text":"джарвис запусти black note","intent":"open_application","slots":{"application":"black note"}}
-{"text":"дай список приложений для запуска","intent":"list_applications","slots":{}}
-{"text":"мне нужно открыть калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
-{"text":"покажи варианты для запуска полностью","intent":"list_applications","slots":{}}
-{"text":"назови поддерживаемые приложения прямо сейчас","intent":"list_applications","slots":{}}
-{"text":"спустя 5 минут напомни мне проверить загрузку","intent":"set_reminder","slots":{"duration":"5","reminder_text":"проверить загрузку"}}
-{"text":"я передумал это ошибка","intent":"cancel","slots":{}}
-{"text":"пожалуйста напомни через 60 минут забрать документы","intent":"set_reminder","slots":{"duration":"60","reminder_text":"забрать документы"}}
-{"text":"останови выполнение немедленно","intent":"cancel","slots":{}}
-{"text":"сообщи текущее время на компьютере","intent":"get_current_time","slots":{}}
-{"text":"на 1 минут поставь напоминание забрать документы","intent":"set_reminder","slots":{"duration":"1","reminder_text":"забрать документы"}}
-{"text":"open task manager","intent":"open_application","slots":{"application":"task manager"}}
-{"text":"давай поговорим про видеокарты","intent":"general_chat","slots":{}}
-{"text":"что ты думаешь про операционные системы","intent":"general_chat","slots":{}}
-{"text":"можешь кратко описать локальные модели","intent":"general_chat","slots":{}}
-{"text":"не надо это делать","intent":"cancel","slots":{}}
-{"text":"включи пожалуйста paint","intent":"open_application","slots":{"application":"paint"}}
-{"text":"отставить команду я передумал","intent":"cancel","slots":{}}
-{"text":"джарвис скажи время сейчас на компьютере","intent":"get_current_time","slots":{}}
-{"text":"не надо это делать пожалуйста","intent":"cancel","slots":{}}
-{"text":"можешь запустить пейнт","intent":"open_application","slots":{"application":"пейнт"}}
-{"text":"хочу открыть task manager","intent":"open_application","slots":{"application":"task manager"}}
-{"text":"проверь что сейчас на часах по местному времени","intent":"get_current_time","slots":{}}
-{"text":"нужно запустить пейнт","intent":"open_application","slots":{"application":"пейнт"}}
-{"text":"спустя 2 минут напомни мне закрыть окно","intent":"set_reminder","slots":{"duration":"2","reminder_text":"закрыть окно"}}
-{"text":"скажи который сейчас час","intent":"get_current_time","slots":{}}
-{"text":"пожалуйста открой диспетчер задач","intent":"open_application","slots":{"application":"диспетчер задач"}}
-{"text":"что ты думаешь про назначение калькулятора","intent":"general_chat","slots":{}}
-{"text":"джарвис там потом","intent":"unknown","slots":{}}
-{"text":"спустя 12 минут напомни мне покормить кота","intent":"set_reminder","slots":{"duration":"12","reminder_text":"покормить кота"}}
-{"text":"какой софт ты можешь включить на моём компьютере","intent":"list_applications","slots":{}}
-{"text":"давай откроем блокноты","intent":"open_application","slots":{"application":"блокноты"}}
-{"text":"джарвис через 15 минут напомни проверить чайник","intent":"set_reminder","slots":{"duration":"15","reminder_text":"проверить чайник"}}
-{"text":"подскажи сколько сейчас времени для меня","intent":"get_current_time","slots":{}}
-{"text":"пожалуйста напомни через 25 минут проверить чайник","intent":"set_reminder","slots":{"duration":"25","reminder_text":"проверить чайник"}}
-{"text":"прерви эту операцию пожалуйста","intent":"cancel","slots":{}}
-{"text":"нужно запустить пайнт","intent":"open_application","slots":{"application":"пайнт"}}
-{"text":"расскажи про здоровый сон","intent":"general_chat","slots":{}}
-{"text":"джарвис через 45 минут напомни встать и размяться","intent":"set_reminder","slots":{"duration":"45","reminder_text":"встать и размяться"}}
-{"text":"расскажи про машинное обучение","intent":"general_chat","slots":{}}
-{"text":"ну не знаю","intent":"unknown","slots":{}}
-{"text":"объясни простыми словами компьютерные игры","intent":"general_chat","slots":{}}
-{"text":"прекрати выполнение команды немедленно","intent":"cancel","slots":{}}
-{"text":"прекрати выполнение команды это ошибка","intent":"cancel","slots":{}}
-{"text":"я передумал немедленно","intent":"cancel","slots":{}}
-{"text":"отмена без подтверждения","intent":"cancel","slots":{}}
-{"text":"джарвис через 3 минут напомни достать бельё","intent":"set_reminder","slots":{"duration":"3","reminder_text":"достать бельё"}}
-{"text":"кажется потом сделай как вчера","intent":"unknown","slots":{}}
-{"text":"спустя 25 минут напомни мне покормить кота","intent":"set_reminder","slots":{"duration":"25","reminder_text":"покормить кота"}}
-{"text":"сбрось текущее действие это ошибка","intent":"cancel","slots":{}}
-{"text":"не дай забыть через 1 минут проверить чайник","intent":"set_reminder","slots":{"duration":"1","reminder_text":"проверить чайник"}}
-{"text":"отмени текущую команду джарвис","intent":"cancel","slots":{}}
-{"text":"хочу узнать сколько времени для меня","intent":"get_current_time","slots":{}}
-{"text":"включи пожалуйста калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
-{"text":"можешь сказать который час точно","intent":"get_current_time","slots":{}}
-{"text":"покажи список разрешённых программ пожалуйста","intent":"list_applications","slots":{}}
-{"text":"подскажи сколько сейчас времени без даты","intent":"get_current_time","slots":{}}
-{"text":"прекрати выполнение команды без подтверждения","intent":"cancel","slots":{}}
-{"text":"какой софт ты можешь включить джарвис","intent":"list_applications","slots":{}}
-{"text":"можешь кратко описать историю компьютеров","intent":"general_chat","slots":{}}
-{"text":"джарвис через 15 минут напомни достать бельё","intent":"set_reminder","slots":{"duration":"15","reminder_text":"достать бельё"}}
-{"text":"сбрось текущее действие я передумал","intent":"cancel","slots":{}}
-{"text":"назови поддерживаемые приложения коротко","intent":"list_applications","slots":{}}
-{"text":"помоги разобраться в теме работу процессора","intent":"general_chat","slots":{}}
-{"text":"напомни через 30 минут поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"30","reminder_text":"поставить телефон на зарядку"}}
-{"text":"отставить команду пока не нужно","intent":"cancel","slots":{}}
-{"text":"назови точное время на компьютере","intent":"get_current_time","slots":{}}
-{"text":"запусти пожалуйста","intent":"unknown","slots":{}}
-{"text":"напомни через 3 минут покормить кота","intent":"set_reminder","slots":{"duration":"3","reminder_text":"покормить кота"}}
-{"text":"покажи время на данный момент сейчас","intent":"get_current_time","slots":{}}
-{"text":"не запускай браузер немедленно","intent":"cancel","slots":{}}
-{"text":"на 2 минут поставь напоминание достать бельё","intent":"set_reminder","slots":{"duration":"2","reminder_text":"достать бельё"}}
-{"text":"давай запустим файлы","intent":"open_application","slots":{"application":"файлы"}}
-{"text":"включи пожалуйста task manager","intent":"open_application","slots":{"application":"task manager"}}
-{"text":"можешь кратко описать изучение английского","intent":"general_chat","slots":{}}
-{"text":"покажи варианты для запуска коротко","intent":"list_applications","slots":{}}
-{"text":"что доступно из программ","intent":"list_applications","slots":{}}
-{"text":"спустя 5 минут напомни мне поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"5","reminder_text":"поставить телефон на зарядку"}}
-{"text":"не надо это делать и вернись в ожидание","intent":"cancel","slots":{}}
-{"text":"давай поговорим про безопасность данных","intent":"general_chat","slots":{}}
-{"text":"покажи список разрешённых программ джарвис","intent":"list_applications","slots":{}}
-{"text":"что из программ можно запустить прямо сейчас","intent":"list_applications","slots":{}}
-{"text":"перечисли доступные приложения полностью","intent":"list_applications","slots":{}}
-{"text":"расскажи про видеокарты","intent":"general_chat","slots":{}}
-{"text":"покажи список разрешённых программ на моём компьютере","intent":"list_applications","slots":{}}
-{"text":"на 45 минут поставь напоминание ответить коллеге","intent":"set_reminder","slots":{"duration":"45","reminder_text":"ответить коллеге"}}
-{"text":"джарвис открой правый","intent":"unknown","slots":{}}
-{"text":"мне нужно знать текущее время сейчас","intent":"get_current_time","slots":{}}
-{"text":"посмотри сколько времени на часах и ответь голосом","intent":"get_current_time","slots":{}}
-{"text":"сообщи текущее время точно","intent":"get_current_time","slots":{}}
-{"text":"какой софт ты можешь включить полностью","intent":"list_applications","slots":{}}
-{"text":"открой black note","intent":"open_application","slots":{"application":"black note"}}
-{"text":"что ты думаешь про космос","intent":"general_chat","slots":{}}
-{"text":"стоп джарвис немедленно","intent":"cancel","slots":{}}
-{"text":"что ты умеешь открывать пожалуйста","intent":"list_applications","slots":{}}
-{"text":"спустя 3 минут напомни мне проверить загрузку","intent":"set_reminder","slots":{"duration":"3","reminder_text":"проверить загрузку"}}
-{"text":"давай поговорим про нейронные сети","intent":"general_chat","slots":{}}
-{"text":"покажи варианты для запуска для запуска","intent":"list_applications","slots":{}}
-{"text":"включи эту самую пожалуйста","intent":"unknown","slots":{}}
-{"text":"launch пейнт","intent":"open_application","slots":{"application":"пейнт"}}
-{"text":"пожалуйста открой explorer","intent":"open_application","slots":{"application":"explorer"}}
-{"text":"джарвис команда без объекта","intent":"unknown","slots":{}}
-{"text":"через 15 минут напомни позвонить другу","intent":"set_reminder","slots":{"duration":"15","reminder_text":"позвонить другу"}}
-{"text":"покажи время на данный момент по местному времени","intent":"get_current_time","slots":{}}
-{"text":"какой софт ты можешь включить прямо сейчас","intent":"list_applications","slots":{}}
-{"text":"останови выполнение пока не нужно","intent":"cancel","slots":{}}
-{"text":"посмотри сколько времени на часах сейчас","intent":"get_current_time","slots":{}}
-{"text":"джарвис сделай это","intent":"unknown","slots":{}}
-{"text":"хочу узнать сколько времени на компьютере","intent":"get_current_time","slots":{}}
-{"text":"кажется не знаю","intent":"unknown","slots":{}}
-{"text":"остановись и вернись в ожидание","intent":"cancel","slots":{}}
-{"text":"что из программ можно запустить полностью","intent":"list_applications","slots":{}}
-{"text":"поставь напоминание через 10 минут ответить коллеге","intent":"set_reminder","slots":{"duration":"10","reminder_text":"ответить коллеге"}}
-{"text":"какие программы тебе доступны пожалуйста","intent":"list_applications","slots":{}}
-{"text":"какой софт ты можешь включить одним списком","intent":"list_applications","slots":{}}
-{"text":"объясни простыми словами музыку","intent":"general_chat","slots":{}}
-{"text":"кажется непонятный шум","intent":"unknown","slots":{}}
-{"text":"хочу узнать сколько времени джарвис","intent":"get_current_time","slots":{}}
-{"text":"включи пожалуйста паинт","intent":"open_application","slots":{"application":"паинт"}}
-{"text":"отмена я передумал","intent":"cancel","slots":{}}
-{"text":"объясни простыми словами локальные модели","intent":"general_chat","slots":{}}
-{"text":"можешь сказать который час без даты","intent":"get_current_time","slots":{}}
-{"text":"эм запусти","intent":"unknown","slots":{}}
-{"text":"через 12 минут скажи мне покормить кота","intent":"set_reminder","slots":{"duration":"12","reminder_text":"покормить кота"}}
-{"text":"скажи который сейчас час джарвис","intent":"get_current_time","slots":{}}
-{"text":"какие программы тебе доступны коротко","intent":"list_applications","slots":{}}
-{"text":"хочу узнать больше про безопасность данных","intent":"general_chat","slots":{}}
-{"text":"не открывай дискорд немедленно","intent":"cancel","slots":{}}
-{"text":"включи пожалуйста калькулятор","intent":"open_application","slots":{"application":"калькулятор"}}
-{"text":"кажется неразборчивые слова","intent":"unknown","slots":{}}
-{"text":"ну через несколько минут","intent":"unknown","slots":{}}
-{"text":"давай запустим браузер","intent":"open_application","slots":{"application":"браузер"}}
-{"text":"эээ ммм","intent":"unknown","slots":{}}
-{"text":"дай список приложений голосом","intent":"list_applications","slots":{}}
-{"text":"сообщи текущее время без даты","intent":"get_current_time","slots":{}}
-{"text":"приложение без названия пожалуйста","intent":"unknown","slots":{}}
-{"text":"скажи который сейчас час для меня","intent":"get_current_time","slots":{}}
-{"text":"расскажи про правильное питание","intent":"general_chat","slots":{}}
-{"text":"пожалуйста напомни через 15 минут покормить кота","intent":"set_reminder","slots":{"duration":"15","reminder_text":"покормить кота"}}
-{"text":"джарвис скажи время сейчас одним предложением","intent":"get_current_time","slots":{}}
-{"text":"что из программ можно запустить без лишнего текста","intent":"list_applications","slots":{}}
-{"text":"эм сделай это","intent":"unknown","slots":{}}
-{"text":"отставить команду без подтверждения","intent":"cancel","slots":{}}
-{"text":"помоги разобраться в теме операционные системы","intent":"general_chat","slots":{}}
-{"text":"один два три пожалуйста","intent":"unknown","slots":{}}
-{"text":"прекрати выполнение команды пока не нужно","intent":"cancel","slots":{}}
-{"text":"мне нужно знать текущее время пожалуйста","intent":"get_current_time","slots":{}}
-{"text":"можешь сказать который час по местному времени","intent":"get_current_time","slots":{}}
-{"text":"открой приложение file explorer","intent":"open_application","slots":{"application":"file explorer"}}
-{"text":"можешь сказать который час пожалуйста","intent":"get_current_time","slots":{}}
-{"text":"ну вот это","intent":"unknown","slots":{}}
-{"text":"что из программ можно запустить пожалуйста","intent":"list_applications","slots":{}}
-{"text":"бла бла бла пожалуйста","intent":"unknown","slots":{}}
-{"text":"эм включи эту самую","intent":"unknown","slots":{}}
-{"text":"останови выполнение и вернись в ожидание","intent":"cancel","slots":{}}
-{"text":"джарвис открой браузер","intent":"open_application","slots":{"application":"браузер"}}
-{"text":"что ты думаешь про историю компьютеров","intent":"general_chat","slots":{}}
-{"text":"напомни пожалуйста","intent":"unknown","slots":{}}
-{"text":"джарвис через 45 минут напомни проверить чайник","intent":"set_reminder","slots":{"duration":"45","reminder_text":"проверить чайник"}}
-{"text":"отмена пожалуйста","intent":"cancel","slots":{}}
-{"text":"почему важно понимать операционные системы","intent":"general_chat","slots":{}}
-{"text":"останови выполнение я передумал","intent":"cancel","slots":{}}
-{"text":"стоп джарвис прямо сейчас","intent":"cancel","slots":{}}
-{"text":"хочу узнать сколько времени и ответь голосом","intent":"get_current_time","slots":{}}
-{"text":"остановись немедленно","intent":"cancel","slots":{}}
-{"text":"launch пэйнт","intent":"open_application","slots":{"application":"пэйнт"}}
-{"text":"стоп джарвис пожалуйста","intent":"cancel","slots":{}}
-{"text":"перечисли свой список программ одним списком","intent":"list_applications","slots":{}}
-{"text":"спустя 7 минут напомни мне проверить чайник","intent":"set_reminder","slots":{"duration":"7","reminder_text":"проверить чайник"}}
-{"text":"помоги разобраться в теме историю компьютеров","intent":"general_chat","slots":{}}
-{"text":"расскажи про безопасность данных","intent":"general_chat","slots":{}}
-{"text":"что ты умеешь открывать голосом","intent":"list_applications","slots":{}}
-{"text":"остановись это ошибка","intent":"cancel","slots":{}}
-{"text":"прерви эту операцию прямо сейчас","intent":"cancel","slots":{}}
-{"text":"не запускай браузер и вернись в ожидание","intent":"cancel","slots":{}}
-{"text":"хочу узнать сколько времени сейчас","intent":"get_current_time","slots":{}}
-{"text":"назови точное время по местному времени","intent":"get_current_time","slots":{}}
-{"text":"джарвис что-нибудь такое","intent":"unknown","slots":{}}
-{"text":"открой приложение task manager","intent":"open_application","slots":{"application":"task manager"}}
-{"text":"джарвис один два три","intent":"unknown","slots":{}}
-{"text":"запусти программу дискод","intent":"open_application","slots":{"application":"дискод"}}
-{"text":"что доступно из программ для запуска","intent":"list_applications","slots":{}}
-{"text":"запусти","intent":"unknown","slots":{}}
-{"text":"создай напоминание на 3 минут проверить чайник","intent":"set_reminder","slots":{"duration":"3","reminder_text":"проверить чайник"}}
-{"text":"что доступно из программ прямо сейчас","intent":"list_applications","slots":{}}
-{"text":"включи task manager","intent":"open_application","slots":{"application":"task manager"}}
-{"text":"не открывай дискорд прямо сейчас","intent":"cancel","slots":{}}
-{"text":"через 12 минут скажи мне закрыть окно","intent":"set_reminder","slots":{"duration":"12","reminder_text":"закрыть окно"}}
-{"text":"эм не знаю","intent":"unknown","slots":{}}
-{"text":"что из программ можно запустить одним списком","intent":"list_applications","slots":{}}
-{"text":"выполни штуку пожалуйста","intent":"unknown","slots":{}}
-{"text":"скажи который сейчас час без даты","intent":"get_current_time","slots":{}}
-{"text":"мне нужно знать текущее время на компьютере","intent":"get_current_time","slots":{}}
-{"text":"объясни простыми словами интернет","intent":"general_chat","slots":{}}
-{"text":"расскажи про фильмы","intent":"general_chat","slots":{}}
-{"text":"хочу открыть пайнт","intent":"open_application","slots":{"application":"пайнт"}}
-{"text":"через 3 минут скажи мне поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"3","reminder_text":"поставить телефон на зарядку"}}
-{"text":"кажется что-нибудь такое","intent":"unknown","slots":{}}
-{"text":"какие приложения ты можешь открыть полностью","intent":"list_applications","slots":{}}
-{"text":"покажи время на данный момент без даты","intent":"get_current_time","slots":{}}
-{"text":"покажи время на данный момент джарвис","intent":"get_current_time","slots":{}}
-{"text":"отмена и вернись в ожидание","intent":"cancel","slots":{}}
-{"text":"покажи время на данный момент одним предложением","intent":"get_current_time","slots":{}}
-{"text":"ну вот это пожалуйста","intent":"unknown","slots":{}}
-{"text":"создай напоминание на 25 минут позвонить другу","intent":"set_reminder","slots":{"duration":"25","reminder_text":"позвонить другу"}}
-{"text":"нужно запустить browser","intent":"open_application","slots":{"application":"browser"}}
-{"text":"ну туда и обратно","intent":"unknown","slots":{}}
-{"text":"пожалуйста открой browser","intent":"open_application","slots":{"application":"browser"}}
-{"text":"джарвис через 1 минут напомни сделать короткий перерыв","intent":"set_reminder","slots":{"duration":"1","reminder_text":"сделать короткий перерыв"}}
-{"text":"ну открой","intent":"unknown","slots":{}}
-{"text":"через 2 минут скажи мне забрать документы","intent":"set_reminder","slots":{"duration":"2","reminder_text":"забрать документы"}}
-{"text":"перечисли доступные приложения одним списком","intent":"list_applications","slots":{}}
-{"text":"кажется продолжай туда","intent":"unknown","slots":{}}
 {"text":"почему важно понимать назначение калькулятора","intent":"general_chat","slots":{}}
-{"text":"эм что-нибудь такое","intent":"unknown","slots":{}}
-{"text":"мне нужно знать текущее время","intent":"get_current_time","slots":{}}
-{"text":"какие приложения ты можешь открыть для запуска","intent":"list_applications","slots":{}}
-{"text":"можешь кратко описать компьютерные игры","intent":"general_chat","slots":{}}
-{"text":"мне нужно знать текущее время одним предложением","intent":"get_current_time","slots":{}}
-{"text":"посмотри сколько времени на часах пожалуйста","intent":"get_current_time","slots":{}}
-{"text":"помоги разобраться в теме безопасность данных","intent":"general_chat","slots":{}}
-{"text":"что из программ можно запустить на моём компьютере","intent":"list_applications","slots":{}}
-{"text":"поставь напоминание через 25 минут отправить отчёт","intent":"set_reminder","slots":{"duration":"25","reminder_text":"отправить отчёт"}}
-{"text":"хочу узнать больше про музыку","intent":"general_chat","slots":{}}
-{"text":"покажи варианты для запуска одним списком","intent":"list_applications","slots":{}}
-{"text":"давай запустим black note","intent":"open_application","slots":{"application":"black note"}}
-{"text":"не открывай дискорд без подтверждения","intent":"cancel","slots":{}}
-{"text":"покажи варианты для запуска пожалуйста","intent":"list_applications","slots":{}}
-{"text":"неразборчивые слова","intent":"unknown","slots":{}}
-{"text":"джарвис какая-то команда","intent":"unknown","slots":{}}
-{"text":"назови точное время и ответь голосом","intent":"get_current_time","slots":{}}
-{"text":"пожалуйста уточни который час одним предложением","intent":"get_current_time","slots":{}}
-{"text":"эм открой правый","intent":"unknown","slots":{}}
-{"text":"расскажи про работу процессора","intent":"general_chat","slots":{}}
-{"text":"запусти дискод","intent":"open_application","slots":{"application":"дискод"}}
-{"text":"скажи который сейчас час на компьютере","intent":"get_current_time","slots":{}}
-{"text":"open дискод","intent":"open_application","slots":{"application":"дискод"}}
-{"text":"можешь сказать который час на компьютере","intent":"get_current_time","slots":{}}
-{"text":"что ты умеешь открывать коротко","intent":"list_applications","slots":{}}
-{"text":"открой блекнот","intent":"open_application","slots":{"application":"блекнот"}}
-{"text":"джарвис скажи время сейчас джарвис","intent":"get_current_time","slots":{}}
-{"text":"что-нибудь такое пожалуйста","intent":"unknown","slots":{}}
-{"text":"какой софт ты можешь включить","intent":"list_applications","slots":{}}
-{"text":"проверь что сейчас на часах на компьютере","intent":"get_current_time","slots":{}}
-{"text":"сбрось текущее действие пожалуйста","intent":"cancel","slots":{}}
-{"text":"напомни через 12 минут проверить загрузку","intent":"set_reminder","slots":{"duration":"12","reminder_text":"проверить загрузку"}}
-{"text":"ну действие без деталей","intent":"unknown","slots":{}}
-{"text":"джарвис не знаю","intent":"unknown","slots":{}}
-{"text":"кажется действие без деталей","intent":"unknown","slots":{}}
-{"text":"не надо это делать джарвис","intent":"cancel","slots":{}}
-{"text":"я передумал прямо сейчас","intent":"cancel","slots":{}}
-{"text":"что ты думаешь про машинное обучение","intent":"general_chat","slots":{}}
-{"text":"покажи список разрешённых программ одним списком","intent":"list_applications","slots":{}}
-{"text":"отставить команду джарвис","intent":"cancel","slots":{}}
-{"text":"хочу узнать больше про как выбрать браузер по умолчанию","intent":"general_chat","slots":{}}
-{"text":"давай запустим task manager","intent":"open_application","slots":{"application":"task manager"}}
-{"text":"хочу открыть дискорд","intent":"open_application","slots":{"application":"дискорд"}}
-{"text":"на 1 минут поставь напоминание ответить коллеге","intent":"set_reminder","slots":{"duration":"1","reminder_text":"ответить коллеге"}}
-{"text":"launch file explorer","intent":"open_application","slots":{"application":"file explorer"}}
-{"text":"какой софт ты можешь включить для запуска","intent":"list_applications","slots":{}}
-{"text":"что ты думаешь про программирование","intent":"general_chat","slots":{}}
-{"text":"джарвис открой browser","intent":"open_application","slots":{"application":"browser"}}
-{"text":"дай список приложений","intent":"list_applications","slots":{}}
-{"text":"подскажи сколько сейчас времени по местному времени","intent":"get_current_time","slots":{}}
-{"text":"нужно запустить калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
-{"text":"открой пожалуйста интернет","intent":"open_application","slots":{"application":"интернет"}}
-{"text":"launch файлы","intent":"open_application","slots":{"application":"файлы"}}
-{"text":"ну что-нибудь такое","intent":"unknown","slots":{}}
-{"text":"что доступно из программ полностью","intent":"list_applications","slots":{}}
-{"text":"перечисли доступные приложения для запуска","intent":"list_applications","slots":{}}
-{"text":"покажи время на данный момент","intent":"get_current_time","slots":{}}
-{"text":"напомни через 30 минут покормить кота","intent":"set_reminder","slots":{"duration":"30","reminder_text":"покормить кота"}}
-{"text":"джарвис скажи время сейчас","intent":"get_current_time","slots":{}}
-{"text":"можешь сказать который час для меня","intent":"get_current_time","slots":{}}
-{"text":"сбрось текущее действие и вернись в ожидание","intent":"cancel","slots":{}}
-{"text":"джарвис неразборчивые слова","intent":"unknown","slots":{}}
-{"text":"какие программы тебе доступны голосом","intent":"list_applications","slots":{}}
-{"text":"открой правый пожалуйста","intent":"unknown","slots":{}}
-{"text":"запусти task manager","intent":"open_application","slots":{"application":"task manager"}}
-{"text":"ну сделай это","intent":"unknown","slots":{}}
-{"text":"что из программ можно запустить джарвис","intent":"list_applications","slots":{}}
-{"text":"какие программы тебе доступны прямо сейчас","intent":"list_applications","slots":{}}
-{"text":"давай откроем пайнт","intent":"open_application","slots":{"application":"пайнт"}}
-{"text":"поставь напоминание через 5 минут поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"5","reminder_text":"поставить телефон на зарядку"}}
-{"text":"пожалуйста уточни который час","intent":"get_current_time","slots":{}}
-{"text":"не дай забыть через 20 минут позвонить другу","intent":"set_reminder","slots":{"duration":"20","reminder_text":"позвонить другу"}}
-{"text":"что ты думаешь про фильмы","intent":"general_chat","slots":{}}
-{"text":"launch калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
-{"text":"расскажи про музыку","intent":"general_chat","slots":{}}
-{"text":"приложение без названия","intent":"unknown","slots":{}}
-{"text":"пожалуйста уточни который час и ответь голосом","intent":"get_current_time","slots":{}}
-{"text":"перечисли доступные приложения пожалуйста","intent":"list_applications","slots":{}}
-{"text":"давай откроем файлы","intent":"open_application","slots":{"application":"файлы"}}
-{"text":"через 2 минут напомни покормить кота","intent":"set_reminder","slots":{"duration":"2","reminder_text":"покормить кота"}}
-{"text":"можешь кратко описать нейронные сети","intent":"general_chat","slots":{}}
-{"text":"спустя 10 минут напомни мне покормить кота","intent":"set_reminder","slots":{"duration":"10","reminder_text":"покормить кота"}}
-{"text":"давай поговорим про программирование","intent":"general_chat","slots":{}}
-{"text":"почему важно понимать безопасность данных","intent":"general_chat","slots":{}}
-{"text":"какие программы тебе доступны джарвис","intent":"list_applications","slots":{}}
-{"text":"джарвис ну вот это","intent":"unknown","slots":{}}
-{"text":"прерви эту операцию это ошибка","intent":"cancel","slots":{}}
-{"text":"ну напомни","intent":"unknown","slots":{}}
-{"text":"отмени текущую команду","intent":"cancel","slots":{}}
-{"text":"джарвис выполни штуку","intent":"unknown","slots":{}}
-{"text":"запусти мне пэйнт","intent":"open_application","slots":{"application":"пэйнт"}}
-{"text":"не надо это делать прямо сейчас","intent":"cancel","slots":{}}
-{"text":"дай список приложений без лишнего текста","intent":"list_applications","slots":{}}
-{"text":"почему важно понимать нейронные сети","intent":"general_chat","slots":{}}
-{"text":"ну ну вот это","intent":"unknown","slots":{}}
-{"text":"ничего не запускай пожалуйста","intent":"cancel","slots":{}}
-{"text":"кажется команда без объекта","intent":"unknown","slots":{}}
-{"text":"пожалуйста уточни который час сейчас","intent":"get_current_time","slots":{}}
-{"text":"джарвис непонятный шум","intent":"unknown","slots":{}}
-{"text":"останови выполнение это ошибка","intent":"cancel","slots":{}}
-{"text":"прерви эту операцию без подтверждения","intent":"cancel","slots":{}}
-{"text":"объясни простыми словами назначение калькулятора","intent":"general_chat","slots":{}}
-{"text":"можешь сказать который час джарвис","intent":"get_current_time","slots":{}}
-{"text":"джарвис через 20 минут напомни проверить почту","intent":"set_reminder","slots":{"duration":"20","reminder_text":"проверить почту"}}
-{"text":"джарвис запусти пэйнт","intent":"open_application","slots":{"application":"пэйнт"}}
-{"text":"открой приложение black note","intent":"open_application","slots":{"application":"black note"}}
-{"text":"спустя 20 минут напомни мне покормить кота","intent":"set_reminder","slots":{"duration":"20","reminder_text":"покормить кота"}}
 {"text":"что ты думаешь про как выбрать браузер по умолчанию","intent":"general_chat","slots":{}}
-{"text":"джарвис открой блокноты","intent":"open_application","slots":{"application":"блокноты"}}
-{"text":"эм приложение без названия","intent":"unknown","slots":{}}
-{"text":"пожалуйста запусти пеинт","intent":"open_application","slots":{"application":"пеинт"}}
-{"text":"что ты думаешь про локальные модели","intent":"general_chat","slots":{}}
-{"text":"создай напоминание на 5 минут проверить чайник","intent":"set_reminder","slots":{"duration":"5","reminder_text":"проверить чайник"}}
-{"text":"кажется туда и обратно","intent":"unknown","slots":{}}
-{"text":"непонятный шум пожалуйста","intent":"unknown","slots":{}}
-{"text":"перечисли доступные приложения на моём компьютере","intent":"list_applications","slots":{}}
-{"text":"включи блакнот","intent":"open_application","slots":{"application":"блакнот"}}
-{"text":"остановись я передумал","intent":"cancel","slots":{}}
-{"text":"ну потом сделай как вчера","intent":"unknown","slots":{}}
-{"text":"останови выполнение без подтверждения","intent":"cancel","slots":{}}
-{"text":"можешь кратко описать роботы","intent":"general_chat","slots":{}}
-{"text":"посмотри сколько времени на часах на компьютере","intent":"get_current_time","slots":{}}
-{"text":"кажется открой","intent":"unknown","slots":{}}
-{"text":"какая-то команда пожалуйста","intent":"unknown","slots":{}}
+{"text":"спустя 30 минут напомни мне сделать короткий перерыв","intent":"set_reminder","slots":{"duration":"30","reminder_text":"сделать короткий перерыв"}}
+{"text":"какие программы тебе доступны","intent":"list_applications","slots":{}}
+{"text":"объясни простыми словами компьютерные игры","intent":"general_chat","slots":{}}
+{"text":"какие программы тебе доступны голосом","intent":"list_applications","slots":{}}
+{"text":"дай список приложений коротко","intent":"list_applications","slots":{}}
+{"text":"хочу открыть дискор","intent":"open_application","slots":{"application":"дискор"}}
+{"text":"хочу открыть диспетчер задач","intent":"open_application","slots":{"application":"диспетчер задач"}}
+{"text":"расскажи про интернет","intent":"general_chat","slots":{}}
+{"text":"вроде открой","intent":"unknown","slots":{}}
+{"text":"джарвис что-нибудь такое","intent":"unknown","slots":{}}
+{"text":"ну вот это пожалуйста","intent":"unknown","slots":{}}
+{"text":"через 7 минут напомни покормить кота","intent":"set_reminder","slots":{"duration":"7","reminder_text":"покормить кота"}}
+{"text":"запусти программу блекнот","intent":"open_application","slots":{"application":"блекнот"}}
+{"text":"эм бла бла бла","intent":"unknown","slots":{}}
+{"text":"останови выполнение пожалуйста","intent":"cancel","slots":{}}
+{"text":"джарвис запусти блокноты","intent":"open_application","slots":{"application":"блокноты"}}
+{"text":"мне нужно знать текущее время без даты","intent":"get_current_time","slots":{}}
 {"text":"через 45 минут скажи мне покормить кота","intent":"set_reminder","slots":{"duration":"45","reminder_text":"покормить кота"}}
-{"text":"хочу узнать больше про роботы","intent":"general_chat","slots":{}}
-{"text":"расскажи про назначение калькулятора","intent":"general_chat","slots":{}}
-{"text":"открой блакнот","intent":"open_application","slots":{"application":"блакнот"}}
-{"text":"открой приложение калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
-{"text":"спустя 2 минут напомни мне забрать документы","intent":"set_reminder","slots":{"duration":"2","reminder_text":"забрать документы"}}
+{"text":"дай список приложений полностью","intent":"list_applications","slots":{}}
+{"text":"покажи список разрешённых программ полностью","intent":"list_applications","slots":{}}
+{"text":"открой пожалуйста пэйнт","intent":"open_application","slots":{"application":"пэйнт"}}
+{"text":"покажи варианты для запуска без лишнего текста","intent":"list_applications","slots":{}}
+{"text":"отмени запуск дискорда без подтверждения","intent":"cancel","slots":{}}
+{"text":"короче открой","intent":"unknown","slots":{}}
+{"text":"открой пожалуйста task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"какие программы тебе доступны одним списком","intent":"list_applications","slots":{}}
+{"text":"напомни через 2 минут позвонить другу","intent":"set_reminder","slots":{"duration":"2","reminder_text":"позвонить другу"}}
+{"text":"джарвис не знаю","intent":"unknown","slots":{}}
+{"text":"какие программы тебе доступны без пояснений","intent":"list_applications","slots":{}}
+{"text":"помоги разобраться в теме почему дискорд иногда не открывается","intent":"general_chat","slots":{}}
+{"text":"объясни простыми словами изучение английского","intent":"general_chat","slots":{}}
+{"text":"объясни простыми словами программирование","intent":"general_chat","slots":{}}
+{"text":"покажи варианты для запуска","intent":"list_applications","slots":{}}
+{"text":"прекрати выполнение команды пока не нужно","intent":"cancel","slots":{}}
+{"text":"отмени текущую команду и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"что ты умеешь открывать прямо сейчас","intent":"list_applications","slots":{}}
+{"text":"подскажи сколько сейчас времени джарвис","intent":"get_current_time","slots":{}}
+{"text":"не выполняй предыдущую команду","intent":"cancel","slots":{}}
+{"text":"перечисли доступные приложения которые доступны","intent":"list_applications","slots":{}}
+{"text":"проверь что сейчас на часах одним предложением","intent":"get_current_time","slots":{}}
+{"text":"можешь сказать который час коротко","intent":"get_current_time","slots":{}}
+{"text":"можешь сказать который час пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"можешь сказать который час без даты","intent":"get_current_time","slots":{}}
+{"text":"можешь кратко описать погоду и климат","intent":"general_chat","slots":{}}
+{"text":"мне нужно знать текущее время коротко","intent":"get_current_time","slots":{}}
+{"text":"запусти мне калькулятор","intent":"open_application","slots":{"application":"калькулятор"}}
+{"text":"ничего не запускай немедленно","intent":"cancel","slots":{}}
+{"text":"приложение без названия пожалуйста","intent":"unknown","slots":{}}
+{"text":"давай откроем file explorer","intent":"open_application","slots":{"application":"file explorer"}}
+{"text":"мне сейчас нужен дисорд","intent":"open_application","slots":{"application":"дисорд"}}
+{"text":"поставь напоминание когда-нибудь","intent":"unknown","slots":{}}
+{"text":"нет не это прекрати","intent":"cancel","slots":{}}
+{"text":"спустя 60 минут напомни мне закрыть окно","intent":"set_reminder","slots":{"duration":"60","reminder_text":"закрыть окно"}}
+{"text":"проверь что сейчас на часах для меня","intent":"get_current_time","slots":{}}
+{"text":"не надо это делать","intent":"cancel","slots":{}}
+{"text":"на 20 минут поставь напоминание встать и размяться","intent":"set_reminder","slots":{"duration":"20","reminder_text":"встать и размяться"}}
+{"text":"какие приложения ты можешь открыть голосом","intent":"list_applications","slots":{}}
+{"text":"объясни простыми словами фильмы","intent":"general_chat","slots":{}}
+{"text":"покажи варианты для запуска полностью","intent":"list_applications","slots":{}}
+{"text":"напомни через 30 минут покормить кота","intent":"set_reminder","slots":{"duration":"30","reminder_text":"покормить кота"}}
+{"text":"что ты умеешь открывать одним списком","intent":"list_applications","slots":{}}
+{"text":"не надо это делать без подтверждения","intent":"cancel","slots":{}}
+{"text":"джарвис запусти блекнот","intent":"open_application","slots":{"application":"блекнот"}}
+{"text":"перечисли свой список программ одним списком","intent":"list_applications","slots":{}}
+{"text":"что доступно из программ коротко","intent":"list_applications","slots":{}}
+{"text":"давай запустим paint","intent":"open_application","slots":{"application":"paint"}}
+{"text":"сообщи текущее время точно","intent":"get_current_time","slots":{}}
+{"text":"пожалуйста напомни через 12 минут покормить кота","intent":"set_reminder","slots":{"duration":"12","reminder_text":"покормить кота"}}
+{"text":"нет не открывай приложение и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"какой софт ты можешь включить коротко","intent":"list_applications","slots":{}}
+{"text":"напомни через 30 минут поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"30","reminder_text":"поставить телефон на зарядку"}}
+{"text":"расскажи про изучение английского","intent":"general_chat","slots":{}}
+{"text":"назови поддерживаемые приложения","intent":"list_applications","slots":{}}
+{"text":"отмени текущую команду это ошибка","intent":"cancel","slots":{}}
+{"text":"хочу открыть discord","intent":"open_application","slots":{"application":"discord"}}
+{"text":"посмотри сколько времени на часах на компьютере","intent":"get_current_time","slots":{}}
+{"text":"объясни простыми словами интернет","intent":"general_chat","slots":{}}
+{"text":"подскажи сколько сейчас времени на компьютере","intent":"get_current_time","slots":{}}
 {"text":"джарвис через несколько минут","intent":"unknown","slots":{}}
-{"text":"бла бла бла","intent":"unknown","slots":{}}
-{"text":"давай поговорим про назначение калькулятора","intent":"general_chat","slots":{}}
-{"text":"на 25 минут поставь напоминание отправить отчёт","intent":"set_reminder","slots":{"duration":"25","reminder_text":"отправить отчёт"}}
-{"text":"давай поговорим про погоду и климат","intent":"general_chat","slots":{}}
-{"text":"через 12 минут скажи мне проверить загрузку","intent":"set_reminder","slots":{"duration":"12","reminder_text":"проверить загрузку"}}
-{"text":"прекрати выполнение команды и вернись в ожидание","intent":"cancel","slots":{}}
-{"text":"пожалуйста напомни через 12 минут сделать короткий перерыв","intent":"set_reminder","slots":{"duration":"12","reminder_text":"сделать короткий перерыв"}}
-{"text":"почему важно понимать фильмы","intent":"general_chat","slots":{}}
-{"text":"не знаю пожалуйста","intent":"unknown","slots":{}}
-{"text":"кажется эээ ммм","intent":"unknown","slots":{}}
-{"text":"джарвис через 20 минут напомни закрыть окно","intent":"set_reminder","slots":{"duration":"20","reminder_text":"закрыть окно"}}
-{"text":"давай поговорим про историю компьютеров","intent":"general_chat","slots":{}}
-{"text":"подскажи сколько сейчас времени сейчас","intent":"get_current_time","slots":{}}
-{"text":"джарвис через 7 минут напомни достать бельё","intent":"set_reminder","slots":{"duration":"7","reminder_text":"достать бельё"}}
-{"text":"назови поддерживаемые приложения голосом","intent":"list_applications","slots":{}}
-{"text":"объясни простыми словами разницу между файлами и папками","intent":"general_chat","slots":{}}
-{"text":"запусти программу интернет","intent":"open_application","slots":{"application":"интернет"}}
-{"text":"на 3 минут поставь напоминание встать и размяться","intent":"set_reminder","slots":{"duration":"3","reminder_text":"встать и размяться"}}
+{"text":"хочу узнать сколько времени для меня","intent":"get_current_time","slots":{}}
+{"text":"не надо это делать это ошибка","intent":"cancel","slots":{}}
+{"text":"джарвис бла бла бла","intent":"unknown","slots":{}}
+{"text":"прерви эту операцию прямо сейчас","intent":"cancel","slots":{}}
+{"text":"пожалуйста уточни который час по местному времени","intent":"get_current_time","slots":{}}
+{"text":"останови выполнение прямо сейчас","intent":"cancel","slots":{}}
+{"text":"покажи explorer","intent":"open_application","slots":{"application":"explorer"}}
+{"text":"вроде команда без объекта","intent":"unknown","slots":{}}
+{"text":"давай поговорим про нейронные сети","intent":"general_chat","slots":{}}
+{"text":"сообщи текущее время пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"хочу узнать сколько времени одним предложением","intent":"get_current_time","slots":{}}
+{"text":"джарвис скажи время сейчас без даты","intent":"get_current_time","slots":{}}
+{"text":"поставь напоминание через 10 минут ответить коллеге","intent":"set_reminder","slots":{"duration":"10","reminder_text":"ответить коллеге"}}
+{"text":"чем браузер отличается от проводника","intent":"general_chat","slots":{}}
+{"text":"кажется один два три","intent":"unknown","slots":{}}
+{"text":"не надо это делать пока не нужно","intent":"cancel","slots":{}}
+{"text":"объясни простыми словами работу процессора","intent":"general_chat","slots":{}}
+{"text":"расскажи про компьютерные игры","intent":"general_chat","slots":{}}
+{"text":"какие программы тебе доступны прямо сейчас","intent":"list_applications","slots":{}}
+{"text":"открой приложение discord","intent":"open_application","slots":{"application":"discord"}}
+{"text":"джарвис скажи время сейчас джарвис","intent":"get_current_time","slots":{}}
+{"text":"не дай забыть через 60 минут закрыть окно","intent":"set_reminder","slots":{"duration":"60","reminder_text":"закрыть окно"}}
+{"text":"эм не знаю","intent":"unknown","slots":{}}
+{"text":"покажи варианты для запуска голосом","intent":"list_applications","slots":{}}
+{"text":"мне нужно знать текущее время на системных часах","intent":"get_current_time","slots":{}}
+{"text":"отставить команду я передумал","intent":"cancel","slots":{}}
+{"text":"подскажи сколько сейчас времени пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"выполни штуку пожалуйста","intent":"unknown","slots":{}}
+{"text":"джарвис сделай это","intent":"unknown","slots":{}}
+{"text":"эм один два три","intent":"unknown","slots":{}}
+{"text":"скажи который сейчас час на компьютере","intent":"get_current_time","slots":{}}
+{"text":"мне сейчас нужен notepad","intent":"open_application","slots":{"application":"notepad"}}
+{"text":"напомни через 7 минут поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"7","reminder_text":"поставить телефон на зарядку"}}
+{"text":"мне сейчас нужен блекнот","intent":"open_application","slots":{"application":"блекнот"}}
+{"text":"поставь напоминание через 60 минут ответить коллеге","intent":"set_reminder","slots":{"duration":"60","reminder_text":"ответить коллеге"}}
+{"text":"вроде выполни штуку","intent":"unknown","slots":{}}
+{"text":"короче продолжай туда","intent":"unknown","slots":{}}
+{"text":"покажи список разрешённых программ голосом","intent":"list_applications","slots":{}}
+{"text":"хочу узнать сколько времени на системных часах","intent":"get_current_time","slots":{}}
+{"text":"дай список приложений без лишнего текста","intent":"list_applications","slots":{}}
+{"text":"прерви эту операцию я передумал","intent":"cancel","slots":{}}
+{"text":"эм туда и обратно","intent":"unknown","slots":{}}
+{"text":"спустя 5 минут напомни мне достать бельё","intent":"set_reminder","slots":{"duration":"5","reminder_text":"достать бельё"}}
+{"text":"какие приложения ты можешь открыть в белом списке","intent":"list_applications","slots":{}}
+{"text":"запусти мне task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"кажется непонятный шум","intent":"unknown","slots":{}}
+{"text":"я передумал это ошибка","intent":"cancel","slots":{}}
+{"text":"хочу узнать больше про разницу между файлами и папками","intent":"general_chat","slots":{}}
+{"text":"мне нужно знать текущее время для меня","intent":"get_current_time","slots":{}}
+{"text":"хочу узнать больше про погоду и климат","intent":"general_chat","slots":{}}
+{"text":"почему важно понимать интернет","intent":"general_chat","slots":{}}
+{"text":"напомни через 1 минут забрать документы","intent":"set_reminder","slots":{"duration":"1","reminder_text":"забрать документы"}}
+{"text":"запусти программу блакнот","intent":"open_application","slots":{"application":"блакнот"}}
+{"text":"перечисли свой список программ для запуска","intent":"list_applications","slots":{}}
+{"text":"покажи время на данный момент","intent":"get_current_time","slots":{}}
+{"text":"мне сейчас нужен проводник","intent":"open_application","slots":{"application":"проводник"}}
+{"text":"спустя 15 минут напомни мне проверить почту","intent":"set_reminder","slots":{"duration":"15","reminder_text":"проверить почту"}}
+{"text":"джарвис скажи время сейчас","intent":"get_current_time","slots":{}}
+{"text":"на 1 минут поставь напоминание ответить коллеге","intent":"set_reminder","slots":{"duration":"1","reminder_text":"ответить коллеге"}}
+{"text":"пожалуйста запусти пеинт","intent":"open_application","slots":{"application":"пеинт"}}
+{"text":"отмена это ошибка","intent":"cancel","slots":{}}
+{"text":"создай напоминание на 3 минут встать и размяться","intent":"set_reminder","slots":{"duration":"3","reminder_text":"встать и размяться"}}
+{"text":"ну включи эту самую","intent":"unknown","slots":{}}
+{"text":"посмотри сколько времени на часах","intent":"get_current_time","slots":{}}
+{"text":"не запускай браузер джарвис","intent":"cancel","slots":{}}
+{"text":"ничего не запускай я передумал","intent":"cancel","slots":{}}
+{"text":"можешь кратко описать разницу между файлами и папками","intent":"general_chat","slots":{}}
+{"text":"как работают напоминания в компьютере","intent":"general_chat","slots":{}}
+{"text":"вроде неразборчивые слова","intent":"unknown","slots":{}}
+{"text":"отмена прямо сейчас","intent":"cancel","slots":{}}
+{"text":"стоп не надо открывать браузер пожалуйста","intent":"cancel","slots":{}}
+{"text":"дай список приложений одним списком","intent":"list_applications","slots":{}}
+{"text":"мне сейчас нужен калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
+{"text":"пожалуйста напомни через 5 минут позвонить другу","intent":"set_reminder","slots":{"duration":"5","reminder_text":"позвонить другу"}}
 {"text":"не надо это делать я передумал","intent":"cancel","slots":{}}
-{"text":"джарвис открой discord","intent":"open_application","slots":{"application":"discord"}}
-{"text":"скажи который сейчас час по местному времени","intent":"get_current_time","slots":{}}
-{"text":"через 2 минут скажи мне отправить отчёт","intent":"set_reminder","slots":{"duration":"2","reminder_text":"отправить отчёт"}}
-{"text":"запусти дискор","intent":"open_application","slots":{"application":"дискор"}}
-{"text":"подскажи сколько сейчас времени и ответь голосом","intent":"get_current_time","slots":{}}
-{"text":"помоги разобраться в теме здоровый сон","intent":"general_chat","slots":{}}
-{"text":"прерви эту операцию и вернись в ожидание","intent":"cancel","slots":{}}
-{"text":"покажи варианты для запуска на моём компьютере","intent":"list_applications","slots":{}}
+{"text":"не запускай браузер пожалуйста","intent":"cancel","slots":{}}
+{"text":"эээ ммм пожалуйста","intent":"unknown","slots":{}}
+{"text":"что из программ можно запустить полностью","intent":"list_applications","slots":{}}
+{"text":"дай список приложений по категориям","intent":"list_applications","slots":{}}
+{"text":"расскажи про машинное обучение","intent":"general_chat","slots":{}}
+{"text":"назови поддерживаемые приложения одним списком","intent":"list_applications","slots":{}}
+{"text":"давай поговорим про программирование","intent":"general_chat","slots":{}}
+{"text":"ну сделай это","intent":"unknown","slots":{}}
+{"text":"заканчивай выполнение команды","intent":"cancel","slots":{}}
+{"text":"ну вот это","intent":"unknown","slots":{}}
+{"text":"сообщи текущее время без даты","intent":"get_current_time","slots":{}}
+{"text":"проверь что сейчас на часах точно","intent":"get_current_time","slots":{}}
+{"text":"назови поддерживаемые приложения полностью","intent":"list_applications","slots":{}}
+{"text":"непонятный шум","intent":"unknown","slots":{}}
+{"text":"остановись прямо сейчас","intent":"cancel","slots":{}}
+{"text":"что ты думаешь про правильное питание","intent":"general_chat","slots":{}}
+{"text":"спустя 3 минут напомни мне начать встречу","intent":"set_reminder","slots":{"duration":"3","reminder_text":"начать встречу"}}
+{"text":"что ты думаешь про погоду и климат","intent":"general_chat","slots":{}}
+{"text":"объясни простыми словами разницу между файлами и папками","intent":"general_chat","slots":{}}
+{"text":"не открывай дискорд прямо сейчас","intent":"cancel","slots":{}}
+{"text":"через 1 минут напомни забрать документы","intent":"set_reminder","slots":{"duration":"1","reminder_text":"забрать документы"}}
+{"text":"стоп не надо открывать браузер немедленно","intent":"cancel","slots":{}}
+{"text":"нет я имел в виду другое","intent":"unknown","slots":{}}
+{"text":"подскажи сколько сейчас времени на системных часах","intent":"get_current_time","slots":{}}
+{"text":"стоп не надо открывать браузер пока не нужно","intent":"cancel","slots":{}}
+{"text":"джарвис через 25 минут напомни проверить чайник","intent":"set_reminder","slots":{"duration":"25","reminder_text":"проверить чайник"}}
+{"text":"джарвис через 20 минут напомни проверить почту","intent":"set_reminder","slots":{"duration":"20","reminder_text":"проверить почту"}}
+{"text":"через 15 минут напомни позвонить другу","intent":"set_reminder","slots":{"duration":"15","reminder_text":"позвонить другу"}}
+{"text":"можешь сказать который час и ответь голосом","intent":"get_current_time","slots":{}}
+{"text":"спустя 2 минут напомни мне закрыть окно","intent":"set_reminder","slots":{"duration":"2","reminder_text":"закрыть окно"}}
+{"text":"отмени запуск дискорда пожалуйста","intent":"cancel","slots":{}}
+{"text":"сбрось текущее действие и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"открой мне дискод","intent":"open_application","slots":{"application":"дискод"}}
+{"text":"отмена без подтверждения","intent":"cancel","slots":{}}
+{"text":"пожалуйста напомни через 10 минут закрыть окно","intent":"set_reminder","slots":{"duration":"10","reminder_text":"закрыть окно"}}
+{"text":"какие программы тебе доступны без лишнего текста","intent":"list_applications","slots":{}}
+{"text":"дай список приложений которые доступны","intent":"list_applications","slots":{}}
+{"text":"перечисли свой список программ на моём компьютере","intent":"list_applications","slots":{}}
+{"text":"остановись пока не нужно","intent":"cancel","slots":{}}
+{"text":"не открывай дискорд и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"спустя 25 минут напомни мне покормить кота","intent":"set_reminder","slots":{"duration":"25","reminder_text":"покормить кота"}}
+{"text":"непонятный шум пожалуйста","intent":"unknown","slots":{}}
+{"text":"покажи пайнт","intent":"open_application","slots":{"application":"пайнт"}}
+{"text":"пожалуйста уточни который час без даты","intent":"get_current_time","slots":{}}
+{"text":"передумал запускать программу","intent":"cancel","slots":{}}
+{"text":"через 15 минут скажи мне достать бельё","intent":"set_reminder","slots":{"duration":"15","reminder_text":"достать бельё"}}
+{"text":"передумал запускать программу джарвис","intent":"cancel","slots":{}}
+{"text":"какой софт ты можешь включить","intent":"list_applications","slots":{}}
 {"text":"какие приложения ты можешь открыть прямо сейчас","intent":"list_applications","slots":{}}
+{"text":"через 10 минут скажи мне забрать документы","intent":"set_reminder","slots":{"duration":"10","reminder_text":"забрать документы"}}
+{"text":"мне сейчас нужен browser","intent":"open_application","slots":{"application":"browser"}}
+{"text":"подскажи сколько сейчас времени и ответь голосом","intent":"get_current_time","slots":{}}
+{"text":"создай напоминание на 7 минут ответить коллеге","intent":"set_reminder","slots":{"duration":"7","reminder_text":"ответить коллеге"}}
+{"text":"что ты думаешь про роботы","intent":"general_chat","slots":{}}
+{"text":"почему важно понимать голосовые ассистенты","intent":"general_chat","slots":{}}
+{"text":"ничего не запускай прямо сейчас","intent":"cancel","slots":{}}
+{"text":"не открывай дискорд пока не нужно","intent":"cancel","slots":{}}
+{"text":"скажи который сейчас час коротко","intent":"get_current_time","slots":{}}
+{"text":"неразборчивые слова","intent":"unknown","slots":{}}
+{"text":"сделай команду","intent":"unknown","slots":{}}
+{"text":"вроде сделай это","intent":"unknown","slots":{}}
+{"text":"можешь сказать который час по местному времени","intent":"get_current_time","slots":{}}
+{"text":"перечисли свой список программ которые доступны","intent":"list_applications","slots":{}}
+{"text":"перечисли свой список программ пожалуйста","intent":"list_applications","slots":{}}
+{"text":"не надо это делать пожалуйста","intent":"cancel","slots":{}}
+{"text":"джарвис запусти task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"можешь кратко описать музыку","intent":"general_chat","slots":{}}
+{"text":"посмотри сколько времени на часах джарвис","intent":"get_current_time","slots":{}}
+{"text":"хочу открыть калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
+{"text":"пожалуйста напомни через 3 минут закрыть окно","intent":"set_reminder","slots":{"duration":"3","reminder_text":"закрыть окно"}}
+{"text":"хочу узнать больше про здоровый сон","intent":"general_chat","slots":{}}
+{"text":"помоги разобраться в теме программирование","intent":"general_chat","slots":{}}
+{"text":"хочу открыть calc","intent":"open_application","slots":{"application":"calc"}}
+{"text":"что ты думаешь про голосовые ассистенты","intent":"general_chat","slots":{}}
+{"text":"покажи варианты для запуска которые доступны","intent":"list_applications","slots":{}}
+{"text":"покажи варианты для запуска по категориям","intent":"list_applications","slots":{}}
+{"text":"спустя 3 минут напомни мне проверить загрузку","intent":"set_reminder","slots":{"duration":"3","reminder_text":"проверить загрузку"}}
+{"text":"запусти мне дискорд","intent":"open_application","slots":{"application":"дискорд"}}
+{"text":"короче команда без объекта","intent":"unknown","slots":{}}
+{"text":"посмотри сколько времени на часах по местному времени","intent":"get_current_time","slots":{}}
+{"text":"объясни простыми словами назначение калькулятора","intent":"general_chat","slots":{}}
+{"text":"на 3 минут поставь напоминание встать и размяться","intent":"set_reminder","slots":{"duration":"3","reminder_text":"встать и размяться"}}
+{"text":"стоп джарвис это ошибка","intent":"cancel","slots":{}}
+{"text":"хочу узнать больше про правильное питание","intent":"general_chat","slots":{}}
+{"text":"туда и обратно пожалуйста","intent":"unknown","slots":{}}
+{"text":"спустя 10 минут напомни мне покормить кота","intent":"set_reminder","slots":{"duration":"10","reminder_text":"покормить кота"}}
+{"text":"джарвис через 3 минут напомни достать бельё","intent":"set_reminder","slots":{"duration":"3","reminder_text":"достать бельё"}}
+{"text":"отставить команду пожалуйста","intent":"cancel","slots":{}}
+{"text":"что из программ можно запустить которые доступны","intent":"list_applications","slots":{}}
+{"text":"передумал запускать программу прямо сейчас","intent":"cancel","slots":{}}
+{"text":"какие приложения ты можешь открыть по категориям","intent":"list_applications","slots":{}}
+{"text":"объясни простыми словами локальные модели","intent":"general_chat","slots":{}}
+{"text":"какие приложения ты можешь открыть полностью","intent":"list_applications","slots":{}}
+{"text":"открой пожалуйста","intent":"unknown","slots":{}}
+{"text":"не надо запускать калькулятор","intent":"cancel","slots":{}}
+{"text":"можешь запустить дискор","intent":"open_application","slots":{"application":"дискор"}}
+{"text":"какие программы тебе доступны в белом списке","intent":"list_applications","slots":{}}
+{"text":"джарвис через 1 минут напомни сделать короткий перерыв","intent":"set_reminder","slots":{"duration":"1","reminder_text":"сделать короткий перерыв"}}
+{"text":"дай список приложений в белом списке","intent":"list_applications","slots":{}}
+{"text":"остановись немедленно","intent":"cancel","slots":{}}
+{"text":"помоги разобраться в теме фильмы","intent":"general_chat","slots":{}}
+{"text":"что доступно из программ которые доступны","intent":"list_applications","slots":{}}
+{"text":"какие программы тебе доступны для запуска","intent":"list_applications","slots":{}}
+{"text":"покажи дискор","intent":"open_application","slots":{"application":"дискор"}}
+{"text":"скажи который сейчас час","intent":"get_current_time","slots":{}}
+{"text":"скажи который сейчас час и ответь голосом","intent":"get_current_time","slots":{}}
+{"text":"какой софт ты можешь включить без лишнего текста","intent":"list_applications","slots":{}}
+{"text":"останови то что сейчас запускается","intent":"cancel","slots":{}}
+{"text":"отмена и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"зайди в диспетчер задач","intent":"open_application","slots":{"application":"диспетчер задач"}}
+{"text":"отмени текущую команду","intent":"cancel","slots":{}}
+{"text":"давай откроем дискор","intent":"open_application","slots":{"application":"дискор"}}
+{"text":"сбрось текущее действие пока не нужно","intent":"cancel","slots":{}}
+{"text":"эм непонятный шум","intent":"unknown","slots":{}}
+{"text":"скажи который сейчас час для меня","intent":"get_current_time","slots":{}}
+{"text":"короче не знаю","intent":"unknown","slots":{}}
+{"text":"стоп джарвис прямо сейчас","intent":"cancel","slots":{}}
+{"text":"прекрати выполнение команды это ошибка","intent":"cancel","slots":{}}
+{"text":"не дай забыть через 20 минут позвонить другу","intent":"set_reminder","slots":{"duration":"20","reminder_text":"позвонить другу"}}
+{"text":"джарвис через 1 минут напомни позвонить другу","intent":"set_reminder","slots":{"duration":"1","reminder_text":"позвонить другу"}}
+{"text":"хочу узнать сколько времени коротко","intent":"get_current_time","slots":{}}
+{"text":"спустя 30 минут напомни мне выпить воды","intent":"set_reminder","slots":{"duration":"30","reminder_text":"выпить воды"}}
+{"text":"напомни через 12 минут проверить загрузку","intent":"set_reminder","slots":{"duration":"12","reminder_text":"проверить загрузку"}}
+{"text":"джарвис скажи время сейчас для меня","intent":"get_current_time","slots":{}}
+{"text":"назови точное время для меня","intent":"get_current_time","slots":{}}
+{"text":"можешь сказать который час в моём часовом поясе","intent":"get_current_time","slots":{}}
+{"text":"джарвис скажи время сейчас одним предложением","intent":"get_current_time","slots":{}}
+{"text":"покажи время на данный момент для меня","intent":"get_current_time","slots":{}}
+{"text":"расскажи про здоровый сон","intent":"general_chat","slots":{}}
+{"text":"пожалуйста уточни который час точно","intent":"get_current_time","slots":{}}
+{"text":"что ты думаешь про историю компьютеров","intent":"general_chat","slots":{}}
+{"text":"покажи время на данный момент точно","intent":"get_current_time","slots":{}}
+{"text":"посмотри сколько времени на часах в моём часовом поясе","intent":"get_current_time","slots":{}}
+{"text":"джарвис действие без деталей","intent":"unknown","slots":{}}
+{"text":"открой приложение пейнт","intent":"open_application","slots":{"application":"пейнт"}}
+{"text":"кажется сделай это","intent":"unknown","slots":{}}
+{"text":"кажется там потом","intent":"unknown","slots":{}}
+{"text":"open дисорд","intent":"open_application","slots":{"application":"дисорд"}}
+{"text":"стоп джарвис пожалуйста","intent":"cancel","slots":{}}
+{"text":"нужно запустить калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
+{"text":"проверь что сейчас на часах коротко","intent":"get_current_time","slots":{}}
+{"text":"назови точное время и ответь голосом","intent":"get_current_time","slots":{}}
+{"text":"сообщи текущее время сейчас","intent":"get_current_time","slots":{}}
+{"text":"через 30 минут напомни ответить коллеге","intent":"set_reminder","slots":{"duration":"30","reminder_text":"ответить коллеге"}}
+{"text":"сообщи текущее время и ответь голосом","intent":"get_current_time","slots":{}}
+{"text":"что ты думаешь про локальные модели","intent":"general_chat","slots":{}}
+{"text":"эм команда без объекта","intent":"unknown","slots":{}}
+{"text":"прерви эту операцию немедленно","intent":"cancel","slots":{}}
+{"text":"создай напоминание на 25 минут позвонить другу","intent":"set_reminder","slots":{"duration":"25","reminder_text":"позвонить другу"}}
+{"text":"поставь напоминание через 10 минут закрыть окно","intent":"set_reminder","slots":{"duration":"10","reminder_text":"закрыть окно"}}
+{"text":"не запускай браузер немедленно","intent":"cancel","slots":{}}
+{"text":"что ты думаешь про машинное обучение","intent":"general_chat","slots":{}}
+{"text":"не надо это делать прямо сейчас","intent":"cancel","slots":{}}
+{"text":"что из программ можно запустить без лишнего текста","intent":"list_applications","slots":{}}
+{"text":"спустя 60 минут напомни мне отправить отчёт","intent":"set_reminder","slots":{"duration":"60","reminder_text":"отправить отчёт"}}
+{"text":"запусти мне проводник","intent":"open_application","slots":{"application":"проводник"}}
+{"text":"открой приложение calc","intent":"open_application","slots":{"application":"calc"}}
+{"text":"дискорд наверное","intent":"unknown","slots":{}}
+{"text":"стоп не надо открывать браузер джарвис","intent":"cancel","slots":{}}
+{"text":"расскажи про программирование","intent":"general_chat","slots":{}}
+{"text":"покажи время на данный момент на компьютере","intent":"get_current_time","slots":{}}
+{"text":"какие программы тебе доступны джарвис","intent":"list_applications","slots":{}}
+{"text":"кажется что-нибудь такое","intent":"unknown","slots":{}}
+{"text":"прерви эту операцию это ошибка","intent":"cancel","slots":{}}
+{"text":"эм эээ ммм","intent":"unknown","slots":{}}
+{"text":"джарвис через 20 минут напомни начать встречу","intent":"set_reminder","slots":{"duration":"20","reminder_text":"начать встречу"}}
+{"text":"отмени текущую команду джарвис","intent":"cancel","slots":{}}
+{"text":"что-нибудь такое","intent":"unknown","slots":{}}
+{"text":"подскажи сколько сейчас времени для меня","intent":"get_current_time","slots":{}}
+{"text":"спустя 10 минут напомни мне проверить загрузку","intent":"set_reminder","slots":{"duration":"10","reminder_text":"проверить загрузку"}}
+{"text":"зайди в блокнот","intent":"open_application","slots":{"application":"блокнот"}}
+{"text":"открой пожалуйста browser","intent":"open_application","slots":{"application":"browser"}}
+{"text":"вроде бла бла бла","intent":"unknown","slots":{}}
+{"text":"бла бла бла пожалуйста","intent":"unknown","slots":{}}
+{"text":"запусти мне пайнт","intent":"open_application","slots":{"application":"пайнт"}}
+{"text":"нет не открывай приложение это ошибка","intent":"cancel","slots":{}}
+{"text":"отставить команду прямо сейчас","intent":"cancel","slots":{}}
+{"text":"прекрати выполнение команды без подтверждения","intent":"cancel","slots":{}}
+{"text":"пожалуйста открой калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
+{"text":"напомни","intent":"unknown","slots":{}}
+{"text":"покажи блакнот","intent":"open_application","slots":{"application":"блакнот"}}
+{"text":"открой file explorer","intent":"open_application","slots":{"application":"file explorer"}}
+{"text":"включи пожалуйста task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"прекрати выполнение команды джарвис","intent":"cancel","slots":{}}
+{"text":"хочу открыть дискорд","intent":"open_application","slots":{"application":"дискорд"}}
+{"text":"расскажи про безопасность данных","intent":"general_chat","slots":{}}
+{"text":"джарвис открой блокноты","intent":"open_application","slots":{"application":"блокноты"}}
+{"text":"вроде эээ ммм","intent":"unknown","slots":{}}
+{"text":"можешь кратко описать видеокарты","intent":"general_chat","slots":{}}
+{"text":"через 5 минут скажи мне выключить духовку","intent":"set_reminder","slots":{"duration":"5","reminder_text":"выключить духовку"}}
+{"text":"сделай это пожалуйста","intent":"unknown","slots":{}}
+{"text":"посмотри сколько времени на часах без объяснений","intent":"get_current_time","slots":{}}
+{"text":"не надо это делать немедленно","intent":"cancel","slots":{}}
+{"text":"через 10 минут напомни забрать документы","intent":"set_reminder","slots":{"duration":"10","reminder_text":"забрать документы"}}
+{"text":"посмотри сколько времени на часах точно","intent":"get_current_time","slots":{}}
+{"text":"отмени текущую команду пожалуйста","intent":"cancel","slots":{}}
+{"text":"не открывай дискорд джарвис","intent":"cancel","slots":{}}
+{"text":"покажи paint","intent":"open_application","slots":{"application":"paint"}}
+{"text":"короче бла бла бла","intent":"unknown","slots":{}}
+{"text":"стоп не надо открывать браузер без подтверждения","intent":"cancel","slots":{}}
+{"text":"что из программ можно запустить в белом списке","intent":"list_applications","slots":{}}
+{"text":"можешь сказать который час на системных часах","intent":"get_current_time","slots":{}}
+{"text":"пожалуйста напомни через 7 минут проверить чайник","intent":"set_reminder","slots":{"duration":"7","reminder_text":"проверить чайник"}}
+{"text":"нет я передумал открывать дискорд","intent":"cancel","slots":{}}
+{"text":"включи дисорд","intent":"open_application","slots":{"application":"дисорд"}}
+{"text":"кажется продолжай туда","intent":"unknown","slots":{}}
+{"text":"джарвис запусти","intent":"unknown","slots":{}}
+{"text":"назови поддерживаемые приложения для запуска","intent":"list_applications","slots":{}}
+{"text":"что доступно из программ","intent":"list_applications","slots":{}}
+{"text":"что ты умеешь открывать коротко","intent":"list_applications","slots":{}}
+{"text":"покажи варианты для запуска на моём компьютере","intent":"list_applications","slots":{}}
+{"text":"поставь напоминание через 15 минут достать бельё","intent":"set_reminder","slots":{"duration":"15","reminder_text":"достать бельё"}}
+{"text":"что ты умеешь открывать полностью","intent":"list_applications","slots":{}}
+{"text":"хочу узнать сколько времени джарвис","intent":"get_current_time","slots":{}}
+{"text":"поставь напоминание через 20 минут покормить кота","intent":"set_reminder","slots":{"duration":"20","reminder_text":"покормить кота"}}
+{"text":"посмотри сколько времени на часах без даты","intent":"get_current_time","slots":{}}
+{"text":"отставить команду и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"проверь что сейчас на часах пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"объясни простыми словами безопасность данных","intent":"general_chat","slots":{}}
+{"text":"нужно запустить пэйнт","intent":"open_application","slots":{"application":"пэйнт"}}
+{"text":"объясни простыми словами видеокарты","intent":"general_chat","slots":{}}
+{"text":"включи пожалуйста калькулятор","intent":"open_application","slots":{"application":"калькулятор"}}
+{"text":"отмени запуск дискорда и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"поставь напоминание через 15 минут поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"15","reminder_text":"поставить телефон на зарядку"}}
+{"text":"что доступно из программ на моём компьютере","intent":"list_applications","slots":{}}
+{"text":"передумал запускать программу и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"что доступно из программ для запуска","intent":"list_applications","slots":{}}
+{"text":"джарвис непонятный шум","intent":"unknown","slots":{}}
+{"text":"что ты думаешь про почему дискорд иногда не открывается","intent":"general_chat","slots":{}}
+{"text":"отставить команду джарвис","intent":"cancel","slots":{}}
+{"text":"стоп джарвис немедленно","intent":"cancel","slots":{}}
+{"text":"ну действие без деталей","intent":"unknown","slots":{}}
+{"text":"пожалуйста уточни который час в моём часовом поясе","intent":"get_current_time","slots":{}}
+{"text":"через 25 минут напомни позвонить другу","intent":"set_reminder","slots":{"duration":"25","reminder_text":"позвонить другу"}}
+{"text":"хочу узнать больше про роботы","intent":"general_chat","slots":{}}
+{"text":"джарвис через 15 минут напомни проверить чайник","intent":"set_reminder","slots":{"duration":"15","reminder_text":"проверить чайник"}}
+{"text":"почему важно понимать почему дискорд иногда не открывается","intent":"general_chat","slots":{}}
+{"text":"перечисли доступные приложения без лишнего текста","intent":"list_applications","slots":{}}
+{"text":"давай поговорим про операционные системы","intent":"general_chat","slots":{}}
+{"text":"запусти мне диспетчер задач","intent":"open_application","slots":{"application":"диспетчер задач"}}
+{"text":"перейди в браузер","intent":"open_application","slots":{"application":"браузер"}}
+{"text":"вроде действие без деталей","intent":"unknown","slots":{}}
+{"text":"стоп джарвис я передумал","intent":"cancel","slots":{}}
+{"text":"перечисли свой список программ голосом","intent":"list_applications","slots":{}}
+{"text":"кажется напомни","intent":"unknown","slots":{}}
+{"text":"поставь напоминание через 5 минут поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"5","reminder_text":"поставить телефон на зарядку"}}
+{"text":"можешь запустить explorer","intent":"open_application","slots":{"application":"explorer"}}
+{"text":"прерви эту операцию без подтверждения","intent":"cancel","slots":{}}
+{"text":"почему важно понимать историю компьютеров","intent":"general_chat","slots":{}}
+{"text":"создай напоминание на 1 минут забрать документы","intent":"set_reminder","slots":{"duration":"1","reminder_text":"забрать документы"}}
+{"text":"запусти пожалуйста диспетчер задач","intent":"open_application","slots":{"application":"диспетчер задач"}}
+{"text":"вроде не знаю","intent":"unknown","slots":{}}
+{"text":"создай напоминание на 20 минут забрать документы","intent":"set_reminder","slots":{"duration":"20","reminder_text":"забрать документы"}}
+{"text":"эм там потом","intent":"unknown","slots":{}}
+{"text":"хочу узнать больше про голосовые ассистенты","intent":"general_chat","slots":{}}
+{"text":"покажи список разрешённых программ джарвис","intent":"list_applications","slots":{}}
+{"text":"перечисли свой список программ коротко","intent":"list_applications","slots":{}}
+{"text":"нет не открывай приложение немедленно","intent":"cancel","slots":{}}
+{"text":"команда без объекта пожалуйста","intent":"unknown","slots":{}}
+{"text":"назови поддерживаемые приложения без пояснений","intent":"list_applications","slots":{}}
+{"text":"я ошибся не открывай блокнот","intent":"cancel","slots":{}}
+{"text":"объясни простыми словами как выбрать браузер по умолчанию","intent":"general_chat","slots":{}}
+{"text":"почему важно понимать нейронные сети","intent":"general_chat","slots":{}}
+{"text":"давай поговорим про машинное обучение","intent":"general_chat","slots":{}}
+{"text":"пожалуйста уточни который час для меня","intent":"get_current_time","slots":{}}
+{"text":"через 2 минут скажи мне забрать документы","intent":"set_reminder","slots":{"duration":"2","reminder_text":"забрать документы"}}
+{"text":"можешь сказать который час","intent":"get_current_time","slots":{}}
+{"text":"через 15 минут скажи мне встать и размяться","intent":"set_reminder","slots":{"duration":"15","reminder_text":"встать и размяться"}}
+{"text":"ну там потом","intent":"unknown","slots":{}}
+{"text":"напомни через 12 минут сделать короткий перерыв","intent":"set_reminder","slots":{"duration":"12","reminder_text":"сделать короткий перерыв"}}
+{"text":"не открывай дискорд пожалуйста","intent":"cancel","slots":{}}
+{"text":"стоп джарвис и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"перечисли доступные приложения коротко","intent":"list_applications","slots":{}}
+{"text":"ну потом сделай как вчера","intent":"unknown","slots":{}}
+{"text":"эм приложение без названия","intent":"unknown","slots":{}}
+{"text":"давай откроем browser","intent":"open_application","slots":{"application":"browser"}}
+{"text":"включи эту самую пожалуйста","intent":"unknown","slots":{}}
+{"text":"объясни простыми словами здоровый сон","intent":"general_chat","slots":{}}
+{"text":"дай список приложений без пояснений","intent":"list_applications","slots":{}}
+{"text":"нужно запустить browser","intent":"open_application","slots":{"application":"browser"}}
+{"text":"я передумал прямо сейчас","intent":"cancel","slots":{}}
+{"text":"объясни простыми словами машинное обучение","intent":"general_chat","slots":{}}
+{"text":"расскажи про фильмы","intent":"general_chat","slots":{}}
+{"text":"создай напоминание на 2 минут забрать документы","intent":"set_reminder","slots":{"duration":"2","reminder_text":"забрать документы"}}
+{"text":"мне нужно знать текущее время одним предложением","intent":"get_current_time","slots":{}}
+{"text":"через 25 минут скажи мне позвонить другу","intent":"set_reminder","slots":{"duration":"25","reminder_text":"позвонить другу"}}
+{"text":"мне нужно знать текущее время в моём часовом поясе","intent":"get_current_time","slots":{}}
+{"text":"через 3 минут скажи мне поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"3","reminder_text":"поставить телефон на зарядку"}}
+{"text":"давай поговорим про почему дискорд иногда не открывается","intent":"general_chat","slots":{}}
+{"text":"бла бла бла","intent":"unknown","slots":{}}
+{"text":"отмени запуск дискорда пока не нужно","intent":"cancel","slots":{}}
+{"text":"я передумал немедленно","intent":"cancel","slots":{}}
+{"text":"хочу узнать сколько времени и ответь голосом","intent":"get_current_time","slots":{}}
+{"text":"через несколько минут пожалуйста","intent":"unknown","slots":{}}
+{"text":"давай откроем блекнот","intent":"open_application","slots":{"application":"блекнот"}}
+{"text":"можешь кратко описать правильное питание","intent":"general_chat","slots":{}}
+{"text":"на 60 минут поставь напоминание проверить чайник","intent":"set_reminder","slots":{"duration":"60","reminder_text":"проверить чайник"}}
+{"text":"через 12 минут скажи мне покормить кота","intent":"set_reminder","slots":{"duration":"12","reminder_text":"покормить кота"}}
+{"text":"включи нужное приложение","intent":"unknown","slots":{}}
+{"text":"мне нужно знать текущее время","intent":"get_current_time","slots":{}}
+{"text":"помоги разобраться в теме нейронные сети","intent":"general_chat","slots":{}}
+{"text":"что доступно из программ джарвис","intent":"list_applications","slots":{}}
+{"text":"через 7 минут скажи мне начать встречу","intent":"set_reminder","slots":{"duration":"7","reminder_text":"начать встречу"}}
+{"text":"сбрось текущее действие это ошибка","intent":"cancel","slots":{}}
+{"text":"пожалуйста уточни который час пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"объясни простыми словами голосовые ассистенты","intent":"general_chat","slots":{}}
+{"text":"через 10 минут скажи мне достать бельё","intent":"set_reminder","slots":{"duration":"10","reminder_text":"достать бельё"}}
+{"text":"помоги разобраться в теме историю компьютеров","intent":"general_chat","slots":{}}
+{"text":"джарвис скажи время сейчас на компьютере","intent":"get_current_time","slots":{}}
+{"text":"пожалуйста напомни через 60 минут забрать документы","intent":"set_reminder","slots":{"duration":"60","reminder_text":"забрать документы"}}
+{"text":"пожалуйста запусти дискод","intent":"open_application","slots":{"application":"дискод"}}
+{"text":"расскажи про локальные модели","intent":"general_chat","slots":{}}
+{"text":"передумал запускать программу пожалуйста","intent":"cancel","slots":{}}
+{"text":"покажи browser","intent":"open_application","slots":{"application":"browser"}}
+{"text":"не дай забыть через 15 минут достать бельё","intent":"set_reminder","slots":{"duration":"15","reminder_text":"достать бельё"}}
+{"text":"джарвис запусти пэйнт","intent":"open_application","slots":{"application":"пэйнт"}}
+{"text":"назови поддерживаемые приложения прямо сейчас","intent":"list_applications","slots":{}}
+{"text":"я передумал я передумал","intent":"cancel","slots":{}}
+{"text":"хочу узнать больше про нейронные сети","intent":"general_chat","slots":{}}
+{"text":"ну что-нибудь такое","intent":"unknown","slots":{}}
+{"text":"сделай это","intent":"unknown","slots":{}}
+{"text":"спустя 3 минут напомни мне ответить коллеге","intent":"set_reminder","slots":{"duration":"3","reminder_text":"ответить коллеге"}}
+{"text":"не дай забыть через 20 минут забрать документы","intent":"set_reminder","slots":{"duration":"20","reminder_text":"забрать документы"}}
+{"text":"прерви эту операцию пока не нужно","intent":"cancel","slots":{}}
+{"text":"спустя 5 минут напомни мне проверить загрузку","intent":"set_reminder","slots":{"duration":"5","reminder_text":"проверить загрузку"}}
+{"text":"давай поговорим про локальные модели","intent":"general_chat","slots":{}}
+{"text":"спустя 12 минут напомни мне покормить кота","intent":"set_reminder","slots":{"duration":"12","reminder_text":"покормить кота"}}
+{"text":"мне нужно открыть task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"спустя 7 минут напомни мне встать и размяться","intent":"set_reminder","slots":{"duration":"7","reminder_text":"встать и размяться"}}
+{"text":"давай поговорим про погоду и климат","intent":"general_chat","slots":{}}
+{"text":"не запускай браузер пока не нужно","intent":"cancel","slots":{}}
+{"text":"можешь кратко описать здоровый сон","intent":"general_chat","slots":{}}
+{"text":"останови выполнение это ошибка","intent":"cancel","slots":{}}
+{"text":"покажи варианты для запуска прямо сейчас","intent":"list_applications","slots":{}}
+{"text":"хочу открыть браузер","intent":"open_application","slots":{"application":"браузер"}}
+{"text":"назови точное время на системных часах","intent":"get_current_time","slots":{}}
+{"text":"расскажи про видеокарты","intent":"general_chat","slots":{}}
+{"text":"назови точное время без даты","intent":"get_current_time","slots":{}}
+{"text":"помоги разобраться в теме машинное обучение","intent":"general_chat","slots":{}}
+{"text":"что из программ можно запустить коротко","intent":"list_applications","slots":{}}
+{"text":"джарвис скажи время сейчас точно","intent":"get_current_time","slots":{}}
+{"text":"зайди в блокноты","intent":"open_application","slots":{"application":"блокноты"}}
+{"text":"проверь что сейчас на часах","intent":"get_current_time","slots":{}}
+{"text":"нет не открывай приложение я передумал","intent":"cancel","slots":{}}
+{"text":"эм напомни","intent":"unknown","slots":{}}
+{"text":"покажи варианты для запуска в белом списке","intent":"list_applications","slots":{}}
+{"text":"назови точное время точно","intent":"get_current_time","slots":{}}
+{"text":"джарвис через 60 минут напомни начать встречу","intent":"set_reminder","slots":{"duration":"60","reminder_text":"начать встречу"}}
+{"text":"остановись без подтверждения","intent":"cancel","slots":{}}
+{"text":"создай напоминание на 3 минут проверить чайник","intent":"set_reminder","slots":{"duration":"3","reminder_text":"проверить чайник"}}
+{"text":"пожалуйста напомни через 12 минут сделать короткий перерыв","intent":"set_reminder","slots":{"duration":"12","reminder_text":"сделать короткий перерыв"}}
+{"text":"кажется бла бла бла","intent":"unknown","slots":{}}
+{"text":"дай список приложений прямо сейчас","intent":"list_applications","slots":{}}
+{"text":"почему важно понимать правильное питание","intent":"general_chat","slots":{}}
+{"text":"можешь кратко описать компьютерные игры","intent":"general_chat","slots":{}}
+{"text":"стоп не запускай paint","intent":"cancel","slots":{}}
+{"text":"эм запусти","intent":"unknown","slots":{}}
+{"text":"джарвис через 7 минут напомни проверить чайник","intent":"set_reminder","slots":{"duration":"7","reminder_text":"проверить чайник"}}
+{"text":"покажи список разрешённых программ в белом списке","intent":"list_applications","slots":{}}
+{"text":"покажи время на данный момент коротко","intent":"get_current_time","slots":{}}
+{"text":"можешь запустить task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"короче напомни","intent":"unknown","slots":{}}
+{"text":"можешь кратко описать нейронные сети","intent":"general_chat","slots":{}}
+{"text":"не открывай дискорд это ошибка","intent":"cancel","slots":{}}
+{"text":"покажи варианты для запуска одним списком","intent":"list_applications","slots":{}}
+{"text":"давай запустим браузер","intent":"open_application","slots":{"application":"браузер"}}
+{"text":"пожалуйста уточни который час сейчас","intent":"get_current_time","slots":{}}
+{"text":"давай поговорим про разницу между файлами и папками","intent":"general_chat","slots":{}}
+{"text":"отмени запуск дискорда джарвис","intent":"cancel","slots":{}}
+{"text":"давай поговорим про назначение калькулятора","intent":"general_chat","slots":{}}
+{"text":"какой софт ты можешь включить одним списком","intent":"list_applications","slots":{}}
+{"text":"ничего не запускай это ошибка","intent":"cancel","slots":{}}
+{"text":"короче сделай это","intent":"unknown","slots":{}}
+{"text":"вроде там потом","intent":"unknown","slots":{}}
+{"text":"кажется неразборчивые слова","intent":"unknown","slots":{}}
+{"text":"стоп не надо открывать браузер это ошибка","intent":"cancel","slots":{}}
+{"text":"что доступно из программ без пояснений","intent":"list_applications","slots":{}}
+{"text":"перейди в проводник","intent":"open_application","slots":{"application":"проводник"}}
+{"text":"эм выполни штуку","intent":"unknown","slots":{}}
+{"text":"какая-то команда пожалуйста","intent":"unknown","slots":{}}
+{"text":"нет не открывай приложение джарвис","intent":"cancel","slots":{}}
+{"text":"какие приложения ты можешь открыть для запуска","intent":"list_applications","slots":{}}
+{"text":"помоги разобраться в теме музыку","intent":"general_chat","slots":{}}
+{"text":"что-нибудь такое пожалуйста","intent":"unknown","slots":{}}
+{"text":"какой софт ты можешь включить без пояснений","intent":"list_applications","slots":{}}
+{"text":"джарвис через 2 минут напомни проверить чайник","intent":"set_reminder","slots":{"duration":"2","reminder_text":"проверить чайник"}}
+{"text":"проверь что сейчас на часах сейчас","intent":"get_current_time","slots":{}}
+{"text":"создай напоминание на 3 минут закрыть окно","intent":"set_reminder","slots":{"duration":"3","reminder_text":"закрыть окно"}}
+{"text":"объясни как работает калькулятор","intent":"general_chat","slots":{}}
+{"text":"хочу узнать сколько времени без даты","intent":"get_current_time","slots":{}}
+{"text":"перечисли свой список программ полностью","intent":"list_applications","slots":{}}
+{"text":"пожалуйста уточни который час джарвис","intent":"get_current_time","slots":{}}
+{"text":"запусти calc","intent":"open_application","slots":{"application":"calc"}}
+{"text":"не дай забыть через 1 минут проверить чайник","intent":"set_reminder","slots":{"duration":"1","reminder_text":"проверить чайник"}}
+{"text":"расскажи про роботы","intent":"general_chat","slots":{}}
+{"text":"закрой вот это","intent":"unknown","slots":{}}
+{"text":"запусти программу интернет","intent":"open_application","slots":{"application":"интернет"}}
+{"text":"давай откроем файлы","intent":"open_application","slots":{"application":"файлы"}}
+{"text":"что ты умеешь открывать на моём компьютере","intent":"list_applications","slots":{}}
+{"text":"открой пожалуйста калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
+{"text":"джарвис выполни штуку","intent":"unknown","slots":{}}
+{"text":"помоги разобраться в теме видеокарты","intent":"general_chat","slots":{}}
+{"text":"помоги разобраться в теме операционные системы","intent":"general_chat","slots":{}}
+{"text":"хочу узнать больше про безопасность данных","intent":"general_chat","slots":{}}
+{"text":"какие программы тебе доступны на моём компьютере","intent":"list_applications","slots":{}}
+{"text":"какой софт ты можешь включить в белом списке","intent":"list_applications","slots":{}}
+{"text":"ну приложение без названия","intent":"unknown","slots":{}}
+{"text":"открой калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
+{"text":"пожалуйста уточни который час коротко","intent":"get_current_time","slots":{}}
+{"text":"помоги разобраться в теме локальные модели","intent":"general_chat","slots":{}}
+{"text":"ничего не запускай","intent":"cancel","slots":{}}
+{"text":"какие приложения ты можешь открыть коротко","intent":"list_applications","slots":{}}
+{"text":"потом сделай как вчера пожалуйста","intent":"unknown","slots":{}}
+{"text":"назови поддерживаемые приложения в белом списке","intent":"list_applications","slots":{}}
+{"text":"дай список приложений на моём компьютере","intent":"list_applications","slots":{}}
+{"text":"перечисли доступные приложения прямо сейчас","intent":"list_applications","slots":{}}
+{"text":"можешь запустить дискод","intent":"open_application","slots":{"application":"дискод"}}
+{"text":"хочу узнать сколько времени без объяснений","intent":"get_current_time","slots":{}}
+{"text":"джарвис скажи время сейчас коротко","intent":"get_current_time","slots":{}}
+{"text":"можешь кратко описать изучение английского","intent":"general_chat","slots":{}}
+{"text":"открой","intent":"unknown","slots":{}}
+{"text":"через 3 минут скажи мне встать и размяться","intent":"set_reminder","slots":{"duration":"3","reminder_text":"встать и размяться"}}
+{"text":"кажется какая-то команда","intent":"unknown","slots":{}}
+{"text":"кажется выполни штуку","intent":"unknown","slots":{}}
+{"text":"хочу узнать больше про компьютерные игры","intent":"general_chat","slots":{}}
+{"text":"перейди в файлы","intent":"open_application","slots":{"application":"файлы"}}
+{"text":"отмена немедленно","intent":"cancel","slots":{}}
+{"text":"вроде через несколько минут","intent":"unknown","slots":{}}
+{"text":"поставь напоминание через 25 минут проверить загрузку","intent":"set_reminder","slots":{"duration":"25","reminder_text":"проверить загрузку"}}
+{"text":"покажи время на данный момент в моём часовом поясе","intent":"get_current_time","slots":{}}
+{"text":"создай напоминание на 3 минут ответить коллеге","intent":"set_reminder","slots":{"duration":"3","reminder_text":"ответить коллеге"}}
+{"text":"хочу узнать сколько времени пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"давай откроем пэйнт","intent":"open_application","slots":{"application":"пэйнт"}}
+{"text":"хочу узнать больше про историю компьютеров","intent":"general_chat","slots":{}}
+{"text":"запусти мне calc","intent":"open_application","slots":{"application":"calc"}}
+{"text":"посмотри сколько времени на часах и ответь голосом","intent":"get_current_time","slots":{}}
+{"text":"что ты думаешь про программирование","intent":"general_chat","slots":{}}
+{"text":"покажи блекнот","intent":"open_application","slots":{"application":"блекнот"}}
+{"text":"джарвис ну вот это","intent":"unknown","slots":{}}
+{"text":"пожалуйста запусти file explorer","intent":"open_application","slots":{"application":"file explorer"}}
+{"text":"перечисли свой список программ в белом списке","intent":"list_applications","slots":{}}
+{"text":"перечисли доступные приложения по категориям","intent":"list_applications","slots":{}}
+{"text":"поставь напоминание через 25 минут начать встречу","intent":"set_reminder","slots":{"duration":"25","reminder_text":"начать встречу"}}
+{"text":"назови точное время","intent":"get_current_time","slots":{}}
+{"text":"мне нужно открыть calc","intent":"open_application","slots":{"application":"calc"}}
+{"text":"не открывай дискорд немедленно","intent":"cancel","slots":{}}
+{"text":"хочу узнать сколько времени по местному времени","intent":"get_current_time","slots":{}}
+{"text":"объясни простыми словами нейронные сети","intent":"general_chat","slots":{}}
+{"text":"пожалуйста уточни который час","intent":"get_current_time","slots":{}}
 {"text":"я передумал без подтверждения","intent":"cancel","slots":{}}
+{"text":"можешь сказать который час на компьютере","intent":"get_current_time","slots":{}}
+{"text":"ну выполни штуку","intent":"unknown","slots":{}}
+{"text":"джарвис там потом","intent":"unknown","slots":{}}
+{"text":"почему важно понимать музыку","intent":"general_chat","slots":{}}
+{"text":"создай напоминание на 5 минут проверить почту","intent":"set_reminder","slots":{"duration":"5","reminder_text":"проверить почту"}}
+{"text":"напомни через 45 минут покормить кота","intent":"set_reminder","slots":{"duration":"45","reminder_text":"покормить кота"}}
+{"text":"какие программы тебе доступны пожалуйста","intent":"list_applications","slots":{}}
+{"text":"расскажи про операционные системы","intent":"general_chat","slots":{}}
+{"text":"хочу узнать сколько времени","intent":"get_current_time","slots":{}}
+{"text":"я передумал пожалуйста","intent":"cancel","slots":{}}
+{"text":"создай напоминание на 12 минут проверить загрузку","intent":"set_reminder","slots":{"duration":"12","reminder_text":"проверить загрузку"}}
+{"text":"давай поговорим про видеокарты","intent":"general_chat","slots":{}}
+{"text":"поставь напоминание через 45 минут ответить коллеге","intent":"set_reminder","slots":{"duration":"45","reminder_text":"ответить коллеге"}}
+{"text":"хочу открыть интернет","intent":"open_application","slots":{"application":"интернет"}}
+{"text":"эм открой","intent":"unknown","slots":{}}
+{"text":"создай напоминание на 5 минут проверить чайник","intent":"set_reminder","slots":{"duration":"5","reminder_text":"проверить чайник"}}
+{"text":"помоги разобраться в теме работу процессора","intent":"general_chat","slots":{}}
+{"text":"какие программы тебе доступны по категориям","intent":"list_applications","slots":{}}
+{"text":"запусти пожалуйста браузер","intent":"open_application","slots":{"application":"браузер"}}
+{"text":"напомни через 3 минут покормить кота","intent":"set_reminder","slots":{"duration":"3","reminder_text":"покормить кота"}}
+{"text":"запусти мне browser","intent":"open_application","slots":{"application":"browser"}}
+{"text":"назови точное время одним предложением","intent":"get_current_time","slots":{}}
+{"text":"напомни через 12 минут достать бельё","intent":"set_reminder","slots":{"duration":"12","reminder_text":"достать бельё"}}
+{"text":"launch калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
+{"text":"короче через несколько минут","intent":"unknown","slots":{}}
+{"text":"включи пожалуйста файлы","intent":"open_application","slots":{"application":"файлы"}}
+{"text":"покажи список разрешённых программ прямо сейчас","intent":"list_applications","slots":{}}
+{"text":"скажи который сейчас час точно","intent":"get_current_time","slots":{}}
+{"text":"эээ ммм","intent":"unknown","slots":{}}
+{"text":"джарвис неразборчивые слова","intent":"unknown","slots":{}}
+{"text":"какой софт ты можешь включить которые доступны","intent":"list_applications","slots":{}}
+{"text":"на 15 минут поставь напоминание выпить воды","intent":"set_reminder","slots":{"duration":"15","reminder_text":"выпить воды"}}
+{"text":"джарвис через 45 минут напомни встать и размяться","intent":"set_reminder","slots":{"duration":"45","reminder_text":"встать и размяться"}}
+{"text":"джарвис через 3 минут напомни начать встречу","intent":"set_reminder","slots":{"duration":"3","reminder_text":"начать встречу"}}
+{"text":"отмени запуск дискорда прямо сейчас","intent":"cancel","slots":{}}
+{"text":"ничего не запускай без подтверждения","intent":"cancel","slots":{}}
+{"text":"джарвис через 12 минут напомни сделать короткий перерыв","intent":"set_reminder","slots":{"duration":"12","reminder_text":"сделать короткий перерыв"}}
+{"text":"через 20 минут скажи мне проверить чайник","intent":"set_reminder","slots":{"duration":"20","reminder_text":"проверить чайник"}}
+{"text":"не дай забыть через 30 минут забрать документы","intent":"set_reminder","slots":{"duration":"30","reminder_text":"забрать документы"}}
+{"text":"джарвис потом сделай как вчера","intent":"unknown","slots":{}}
+{"text":"перечисли доступные приложения голосом","intent":"list_applications","slots":{}}
+{"text":"объясни простыми словами почему дискорд иногда не открывается","intent":"general_chat","slots":{}}
+{"text":"расскажи про работу процессора","intent":"general_chat","slots":{}}
+{"text":"ничего не запускай джарвис","intent":"cancel","slots":{}}
+{"text":"джарвис через 60 минут напомни забрать документы","intent":"set_reminder","slots":{"duration":"60","reminder_text":"забрать документы"}}
+{"text":"спустя 25 минут напомни мне позвонить другу","intent":"set_reminder","slots":{"duration":"25","reminder_text":"позвонить другу"}}
+{"text":"почему важно понимать как выбрать браузер по умолчанию","intent":"general_chat","slots":{}}
+{"text":"open file explorer","intent":"open_application","slots":{"application":"file explorer"}}
+{"text":"покажи блокноты","intent":"open_application","slots":{"application":"блокноты"}}
+{"text":"перечисли доступные приложения одним списком","intent":"list_applications","slots":{}}
+{"text":"джарвис эээ ммм","intent":"unknown","slots":{}}
+{"text":"отставить команду немедленно","intent":"cancel","slots":{}}
+{"text":"включи пожалуйста диспетчер задач","intent":"open_application","slots":{"application":"диспетчер задач"}}
+{"text":"перечисли доступные приложения полностью","intent":"list_applications","slots":{}}
+{"text":"покажи список разрешённых программ","intent":"list_applications","slots":{}}
+{"text":"мне нужно знать текущее время без объяснений","intent":"get_current_time","slots":{}}
+{"text":"кажется запусти","intent":"unknown","slots":{}}
+{"text":"объясни простыми словами музыку","intent":"general_chat","slots":{}}
+{"text":"спустя 7 минут напомни мне проверить чайник","intent":"set_reminder","slots":{"duration":"7","reminder_text":"проверить чайник"}}
+{"text":"джарвис через 20 минут напомни закрыть окно","intent":"set_reminder","slots":{"duration":"20","reminder_text":"закрыть окно"}}
+{"text":"джарвис один два три","intent":"unknown","slots":{}}
+{"text":"на 45 минут поставь напоминание ответить коллеге","intent":"set_reminder","slots":{"duration":"45","reminder_text":"ответить коллеге"}}
+{"text":"можешь запустить discord","intent":"open_application","slots":{"application":"discord"}}
+{"text":"хочу узнать больше про как выбрать браузер по умолчанию","intent":"general_chat","slots":{}}
+{"text":"можешь кратко описать безопасность данных","intent":"general_chat","slots":{}}
+{"text":"кажется туда и обратно","intent":"unknown","slots":{}}
+{"text":"пожалуйста уточни который час одним предложением","intent":"get_current_time","slots":{}}
+{"text":"покажи варианты для запуска джарвис","intent":"list_applications","slots":{}}
+{"text":"что из программ можно запустить по категориям","intent":"list_applications","slots":{}}
+{"text":"сообщи текущее время на компьютере","intent":"get_current_time","slots":{}}
+{"text":"почему важно понимать локальные модели","intent":"general_chat","slots":{}}
+{"text":"хочу узнать больше про видеокарты","intent":"general_chat","slots":{}}
+{"text":"на 1 минут поставь напоминание выпить воды","intent":"set_reminder","slots":{"duration":"1","reminder_text":"выпить воды"}}
+{"text":"мне нужно знать текущее время джарвис","intent":"get_current_time","slots":{}}
+{"text":"остановись и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"почему приложения могут закрываться сами","intent":"general_chat","slots":{}}
+{"text":"спустя 1 минут напомни мне ответить коллеге","intent":"set_reminder","slots":{"duration":"1","reminder_text":"ответить коллеге"}}
+{"text":"пожалуйста напомни через 25 минут проверить чайник","intent":"set_reminder","slots":{"duration":"25","reminder_text":"проверить чайник"}}
+{"text":"спустя 45 минут напомни мне поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"45","reminder_text":"поставить телефон на зарядку"}}
+{"text":"сбрось текущее действие","intent":"cancel","slots":{}}
+{"text":"поставь напоминание через 20 минут забрать документы","intent":"set_reminder","slots":{"duration":"20","reminder_text":"забрать документы"}}
+{"text":"перечисли доступные приложения без пояснений","intent":"list_applications","slots":{}}
+{"text":"покажи время на данный момент по местному времени","intent":"get_current_time","slots":{}}
+{"text":"можешь запустить блекнот","intent":"open_application","slots":{"application":"блекнот"}}
+{"text":"прерви запуск проводника","intent":"cancel","slots":{}}
+{"text":"джарвис какая-то команда","intent":"unknown","slots":{}}
+{"text":"отмени запуск дискорда это ошибка","intent":"cancel","slots":{}}
+{"text":"джарвис открой блакнот","intent":"open_application","slots":{"application":"блакнот"}}
+{"text":"на 10 минут поставь напоминание поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"10","reminder_text":"поставить телефон на зарядку"}}
+{"text":"джарвис через 7 минут напомни достать бельё","intent":"set_reminder","slots":{"duration":"7","reminder_text":"достать бельё"}}
+{"text":"через 3 минут скажи мне проверить загрузку","intent":"set_reminder","slots":{"duration":"3","reminder_text":"проверить загрузку"}}
+{"text":"не запускай браузер это ошибка","intent":"cancel","slots":{}}
+{"text":"дай список приложений для запуска","intent":"list_applications","slots":{}}
+{"text":"сообщи текущее время без объяснений","intent":"get_current_time","slots":{}}
+{"text":"объясни простыми словами погоду и климат","intent":"general_chat","slots":{}}
+{"text":"джарвис запусти файлы","intent":"open_application","slots":{"application":"файлы"}}
+{"text":"кажется действие без деталей","intent":"unknown","slots":{}}
+{"text":"вроде потом сделай как вчера","intent":"unknown","slots":{}}
+{"text":"можешь запустить интернет","intent":"open_application","slots":{"application":"интернет"}}
+{"text":"продолжай туда пожалуйста","intent":"unknown","slots":{}}
+{"text":"покажи список разрешённых программ на моём компьютере","intent":"list_applications","slots":{}}
+{"text":"что из программ можно запустить для запуска","intent":"list_applications","slots":{}}
+{"text":"скажи который сейчас час без объяснений","intent":"get_current_time","slots":{}}
+{"text":"сбрось текущее действие без подтверждения","intent":"cancel","slots":{}}
+{"text":"открой приложение black note","intent":"open_application","slots":{"application":"black note"}}
+{"text":"эм включи эту самую","intent":"unknown","slots":{}}
+{"text":"почему важно понимать операционные системы","intent":"general_chat","slots":{}}
+{"text":"покажи варианты для запуска пожалуйста","intent":"list_applications","slots":{}}
+{"text":"покажи время на данный момент одним предложением","intent":"get_current_time","slots":{}}
+{"text":"посмотри сколько времени на часах коротко","intent":"get_current_time","slots":{}}
+{"text":"ну напомни","intent":"unknown","slots":{}}
+{"text":"джарвис открой дискод","intent":"open_application","slots":{"application":"дискод"}}
+{"text":"я передумал пока не нужно","intent":"cancel","slots":{}}
+{"text":"передумал запускать программу это ошибка","intent":"cancel","slots":{}}
+{"text":"отмени запуск дискорда я передумал","intent":"cancel","slots":{}}
+{"text":"можешь кратко описать машинное обучение","intent":"general_chat","slots":{}}
+{"text":"отмени текущую команду без подтверждения","intent":"cancel","slots":{}}
+{"text":"можешь кратко описать роботы","intent":"general_chat","slots":{}}
+{"text":"давай поговорим про компьютерные игры","intent":"general_chat","slots":{}}
+{"text":"что из программ можно запустить без пояснений","intent":"list_applications","slots":{}}
+{"text":"перечисли доступные приложения пожалуйста","intent":"list_applications","slots":{}}
+{"text":"эм сделай это","intent":"unknown","slots":{}}
+{"text":"скажи который сейчас час джарвис","intent":"get_current_time","slots":{}}
+{"text":"что ты думаешь про безопасность данных","intent":"general_chat","slots":{}}
+{"text":"что из программ можно запустить пожалуйста","intent":"list_applications","slots":{}}
+{"text":"поставь напоминание через 60 минут проверить чайник","intent":"set_reminder","slots":{"duration":"60","reminder_text":"проверить чайник"}}
+{"text":"расскажи как устроен браузер","intent":"general_chat","slots":{}}
+{"text":"что из программ можно запустить","intent":"list_applications","slots":{}}
+{"text":"пожалуйста открой диспетчер задач","intent":"open_application","slots":{"application":"диспетчер задач"}}
+{"text":"какой софт ты можешь включить по категориям","intent":"list_applications","slots":{}}
+{"text":"создай напоминание на 7 минут начать встречу","intent":"set_reminder","slots":{"duration":"7","reminder_text":"начать встречу"}}
+{"text":"спустя 30 минут напомни мне начать встречу","intent":"set_reminder","slots":{"duration":"30","reminder_text":"начать встречу"}}
+{"text":"что доступно из программ прямо сейчас","intent":"list_applications","slots":{}}
+{"text":"какие приложения ты можешь открыть одним списком","intent":"list_applications","slots":{}}
+{"text":"на 25 минут поставь напоминание отправить отчёт","intent":"set_reminder","slots":{"duration":"25","reminder_text":"отправить отчёт"}}
+{"text":"включи пожалуйста браузер","intent":"open_application","slots":{"application":"браузер"}}
+{"text":"через 30 минут скажи мне выключить духовку","intent":"set_reminder","slots":{"duration":"30","reminder_text":"выключить духовку"}}
+{"text":"ну ну вот это","intent":"unknown","slots":{}}
+{"text":"мне сейчас нужен блокноты","intent":"open_application","slots":{"application":"блокноты"}}
+{"text":"отмена пока не нужно","intent":"cancel","slots":{}}
+{"text":"через 5 минут скажи мне сделать короткий перерыв","intent":"set_reminder","slots":{"duration":"5","reminder_text":"сделать короткий перерыв"}}
+{"text":"запусти программу discord","intent":"open_application","slots":{"application":"discord"}}
+{"text":"расскажи про назначение калькулятора","intent":"general_chat","slots":{}}
+{"text":"назови точное время пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"подскажи сколько сейчас времени по местному времени","intent":"get_current_time","slots":{}}
+{"text":"назови поддерживаемые приложения по категориям","intent":"list_applications","slots":{}}
+{"text":"прекрати выполнение команды","intent":"cancel","slots":{}}
+{"text":"назови точное время сейчас","intent":"get_current_time","slots":{}}
+{"text":"нет не открывай приложение пока не нужно","intent":"cancel","slots":{}}
+{"text":"короче включи эту самую","intent":"unknown","slots":{}}
+{"text":"назови точное время коротко","intent":"get_current_time","slots":{}}
+{"text":"отставить команду без подтверждения","intent":"cancel","slots":{}}
+{"text":"стоп не надо открывать браузер и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"ну команда без объекта","intent":"unknown","slots":{}}
+{"text":"какие приложения ты можешь открыть без пояснений","intent":"list_applications","slots":{}}
+{"text":"мне сейчас нужен файлы","intent":"open_application","slots":{"application":"файлы"}}
+{"text":"сообщи текущее время одним предложением","intent":"get_current_time","slots":{}}
+{"text":"объясни простыми словами космос","intent":"general_chat","slots":{}}
+{"text":"назови поддерживаемые приложения которые доступны","intent":"list_applications","slots":{}}
+{"text":"назови поддерживаемые приложения джарвис","intent":"list_applications","slots":{}}
+{"text":"открой интернет","intent":"open_application","slots":{"application":"интернет"}}
+{"text":"джарвис приложение без названия","intent":"unknown","slots":{}}
+{"text":"расскажи про историю компьютеров","intent":"general_chat","slots":{}}
+{"text":"какой софт ты можешь включить джарвис","intent":"list_applications","slots":{}}
+{"text":"кажется ну вот это","intent":"unknown","slots":{}}
+{"text":"что делать если paint не запускается","intent":"general_chat","slots":{}}
+{"text":"пожалуйста напомни через 1 минут позвонить другу","intent":"set_reminder","slots":{"duration":"1","reminder_text":"позвонить другу"}}
+{"text":"спустя 12 минут напомни мне выпить воды","intent":"set_reminder","slots":{"duration":"12","reminder_text":"выпить воды"}}
+{"text":"покажи время на данный момент джарвис","intent":"get_current_time","slots":{}}
+{"text":"можешь кратко описать фильмы","intent":"general_chat","slots":{}}
+{"text":"останови выполнение я передумал","intent":"cancel","slots":{}}
+{"text":"мне нужно знать текущее время сейчас","intent":"get_current_time","slots":{}}
+{"text":"можешь кратко описать историю компьютеров","intent":"general_chat","slots":{}}
+{"text":"проверь что сейчас на часах на системных часах","intent":"get_current_time","slots":{}}
+{"text":"не дай забыть через 25 минут проверить чайник","intent":"set_reminder","slots":{"duration":"25","reminder_text":"проверить чайник"}}
+{"text":"что ты умеешь открывать голосом","intent":"list_applications","slots":{}}
+{"text":"короче эээ ммм","intent":"unknown","slots":{}}
+{"text":"отмена пожалуйста","intent":"cancel","slots":{}}
+{"text":"открой browser","intent":"open_application","slots":{"application":"browser"}}
+{"text":"проверь что сейчас на часах и ответь голосом","intent":"get_current_time","slots":{}}
+{"text":"почему дискорд иногда не открывается","intent":"general_chat","slots":{}}
+{"text":"перейди в калькулятор","intent":"open_application","slots":{"application":"калькулятор"}}
+{"text":"отмени запуск дискорда","intent":"cancel","slots":{}}
+{"text":"кажется через несколько минут","intent":"unknown","slots":{}}
+{"text":"назови точное время в моём часовом поясе","intent":"get_current_time","slots":{}}
+{"text":"почему важно понимать здоровый сон","intent":"general_chat","slots":{}}
+{"text":"какие программы тебе доступны полностью","intent":"list_applications","slots":{}}
+{"text":"остановись я передумал","intent":"cancel","slots":{}}
+{"text":"пожалуйста открой браузер","intent":"open_application","slots":{"application":"браузер"}}
+{"text":"что ты думаешь про интернет","intent":"general_chat","slots":{}}
+{"text":"мне нужно знать текущее время по местному времени","intent":"get_current_time","slots":{}}
+{"text":"почему важно понимать машинное обучение","intent":"general_chat","slots":{}}
+{"text":"покажи время на данный момент сейчас","intent":"get_current_time","slots":{}}
+{"text":"что доступно из программ голосом","intent":"list_applications","slots":{}}
+{"text":"можешь кратко описать назначение калькулятора","intent":"general_chat","slots":{}}
+{"text":"проверь что сейчас на часах джарвис","intent":"get_current_time","slots":{}}
+{"text":"хочу узнать сколько времени на компьютере","intent":"get_current_time","slots":{}}
+{"text":"почему важно понимать программирование","intent":"general_chat","slots":{}}
+{"text":"через 12 минут скажи мне закрыть окно","intent":"set_reminder","slots":{"duration":"12","reminder_text":"закрыть окно"}}
+{"text":"напомни через 20 минут закрыть окно","intent":"set_reminder","slots":{"duration":"20","reminder_text":"закрыть окно"}}
+{"text":"открой приложение task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"эм через несколько минут","intent":"unknown","slots":{}}
+{"text":"пожалуйста открой пэйнт","intent":"open_application","slots":{"application":"пэйнт"}}
+{"text":"открой task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"на 2 минут поставь напоминание проверить почту","intent":"set_reminder","slots":{"duration":"2","reminder_text":"проверить почту"}}
+{"text":"назови поддерживаемые приложения коротко","intent":"list_applications","slots":{}}
+{"text":"помоги разобраться в теме интернет","intent":"general_chat","slots":{}}
+{"text":"давай запустим file explorer","intent":"open_application","slots":{"application":"file explorer"}}
+{"text":"открой мне file explorer","intent":"open_application","slots":{"application":"file explorer"}}
+{"text":"открой мне пайнт","intent":"open_application","slots":{"application":"пайнт"}}
+{"text":"давай поговорим про роботы","intent":"general_chat","slots":{}}
+{"text":"можешь кратко описать как выбрать браузер по умолчанию","intent":"general_chat","slots":{}}
+{"text":"короче ну вот это","intent":"unknown","slots":{}}
+{"text":"создай напоминание на 12 минут поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"12","reminder_text":"поставить телефон на зарядку"}}
+{"text":"джарвис через 15 минут напомни достать бельё","intent":"set_reminder","slots":{"duration":"15","reminder_text":"достать бельё"}}
+{"text":"пожалуйста уточни который час на компьютере","intent":"get_current_time","slots":{}}
+{"text":"подскажи сколько сейчас времени без даты","intent":"get_current_time","slots":{}}
+{"text":"перечисли доступные приложения джарвис","intent":"list_applications","slots":{}}
+{"text":"не запускай браузер и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"мне нужно знать текущее время пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"покажи файлы","intent":"open_application","slots":{"application":"файлы"}}
+{"text":"спустя 10 минут напомни мне проверить почту","intent":"set_reminder","slots":{"duration":"10","reminder_text":"проверить почту"}}
+{"text":"сбрось текущее действие я передумал","intent":"cancel","slots":{}}
+{"text":"можешь кратко описать программирование","intent":"general_chat","slots":{}}
+{"text":"что ты думаешь про операционные системы","intent":"general_chat","slots":{}}
+{"text":"что доступно из программ в белом списке","intent":"list_applications","slots":{}}
+{"text":"короче запусти","intent":"unknown","slots":{}}
+{"text":"мне сейчас нужен paint","intent":"open_application","slots":{"application":"paint"}}
+{"text":"отмени открытие браузера","intent":"cancel","slots":{}}
+{"text":"пожалуйста напомни через 5 минут достать бельё","intent":"set_reminder","slots":{"duration":"5","reminder_text":"достать бельё"}}
+{"text":"можно ли обучить голосового ассистента","intent":"general_chat","slots":{}}
+{"text":"ну запусти","intent":"unknown","slots":{}}
+{"text":"передумал запускать программу немедленно","intent":"cancel","slots":{}}
+{"text":"включи пожалуйста паинт","intent":"open_application","slots":{"application":"паинт"}}
+{"text":"выполни штуку","intent":"unknown","slots":{}}
+{"text":"мне нужно открыть пейнт","intent":"open_application","slots":{"application":"пейнт"}}
+{"text":"пожалуйста напомни через 15 минут покормить кота","intent":"set_reminder","slots":{"duration":"15","reminder_text":"покормить кота"}}
+{"text":"что означает отмена операции","intent":"general_chat","slots":{}}
+{"text":"перечисли свой список программ прямо сейчас","intent":"list_applications","slots":{}}
+{"text":"спустя 7 минут напомни мне отправить отчёт","intent":"set_reminder","slots":{"duration":"7","reminder_text":"отправить отчёт"}}
+{"text":"поставь напоминание через 25 минут отправить отчёт","intent":"set_reminder","slots":{"duration":"25","reminder_text":"отправить отчёт"}}
+{"text":"мне нужно знать текущее время и ответь голосом","intent":"get_current_time","slots":{}}
+{"text":"запусти notepad","intent":"open_application","slots":{"application":"notepad"}}
+{"text":"вроде что-нибудь такое","intent":"unknown","slots":{}}
+{"text":"открой правый пожалуйста","intent":"unknown","slots":{}}
+{"text":"пожалуйста уточни который час и ответь голосом","intent":"get_current_time","slots":{}}
+{"text":"давай поговорим про изучение английского","intent":"general_chat","slots":{}}
+{"text":"короче открой правый","intent":"unknown","slots":{}}
+{"text":"можешь сказать который час сейчас","intent":"get_current_time","slots":{}}
+{"text":"отставить напоминание","intent":"cancel","slots":{}}
+{"text":"запусти browser","intent":"open_application","slots":{"application":"browser"}}
+{"text":"назови поддерживаемые приложения без лишнего текста","intent":"list_applications","slots":{}}
+{"text":"я передумал и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"запусти","intent":"unknown","slots":{}}
+{"text":"покажи время на данный момент пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"можешь запустить paint","intent":"open_application","slots":{"application":"paint"}}
+{"text":"хочу открыть explorer","intent":"open_application","slots":{"application":"explorer"}}
+{"text":"вроде какая-то команда","intent":"unknown","slots":{}}
+{"text":"покажи дисорд","intent":"open_application","slots":{"application":"дисорд"}}
+{"text":"покажи время на данный момент и ответь голосом","intent":"get_current_time","slots":{}}
+{"text":"не надо это делать джарвис","intent":"cancel","slots":{}}
+{"text":"покажи список разрешённых программ без лишнего текста","intent":"list_applications","slots":{}}
+{"text":"через 60 минут напомни выключить духовку","intent":"set_reminder","slots":{"duration":"60","reminder_text":"выключить духовку"}}
+{"text":"помоги разобраться в теме изучение английского","intent":"general_chat","slots":{}}
+{"text":"давай поговорим про интернет","intent":"general_chat","slots":{}}
+{"text":"скажи который сейчас час без даты","intent":"get_current_time","slots":{}}
+{"text":"открой паинт","intent":"open_application","slots":{"application":"паинт"}}
+{"text":"подскажи сколько сейчас времени в моём часовом поясе","intent":"get_current_time","slots":{}}
+{"text":"через несколько минут","intent":"unknown","slots":{}}
+{"text":"открой мне discord","intent":"open_application","slots":{"application":"discord"}}
+{"text":"потом продолжим это самое","intent":"unknown","slots":{}}
+{"text":"отставить команду это ошибка","intent":"cancel","slots":{}}
+{"text":"нет не открывай приложение прямо сейчас","intent":"cancel","slots":{}}
+{"text":"расскажи про музыку","intent":"general_chat","slots":{}}
+{"text":"джарвис открой правый","intent":"unknown","slots":{}}
+{"text":"на 1 минут поставь напоминание забрать документы","intent":"set_reminder","slots":{"duration":"1","reminder_text":"забрать документы"}}
+{"text":"что ты умеешь открывать для запуска","intent":"list_applications","slots":{}}
+{"text":"мне сейчас нужен паинт","intent":"open_application","slots":{"application":"паинт"}}
+{"text":"через 25 минут скажи мне выпить воды","intent":"set_reminder","slots":{"duration":"25","reminder_text":"выпить воды"}}
+{"text":"не запускай браузер прямо сейчас","intent":"cancel","slots":{}}
+{"text":"через 12 минут напомни сделать короткий перерыв","intent":"set_reminder","slots":{"duration":"12","reminder_text":"сделать короткий перерыв"}}
+{"text":"стоп не надо открывать браузер прямо сейчас","intent":"cancel","slots":{}}
+{"text":"давай поговорим про голосовые ассистенты","intent":"general_chat","slots":{}}
+{"text":"джарвис запусти паинт","intent":"open_application","slots":{"application":"паинт"}}
+{"text":"сообщи текущее время по местному времени","intent":"get_current_time","slots":{}}
+{"text":"ничего не запускай и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"прекрати выполнение команды и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"создай напоминание на 3 минут отправить отчёт","intent":"set_reminder","slots":{"duration":"3","reminder_text":"отправить отчёт"}}
+{"text":"как нейросеть выбирает команду","intent":"general_chat","slots":{}}
+{"text":"проверь что сейчас на часах на компьютере","intent":"get_current_time","slots":{}}
+{"text":"почему важно понимать безопасность данных","intent":"general_chat","slots":{}}
+{"text":"через 12 минут скажи мне проверить загрузку","intent":"set_reminder","slots":{"duration":"12","reminder_text":"проверить загрузку"}}
+{"text":"хочу узнать сколько времени в моём часовом поясе","intent":"get_current_time","slots":{}}
+{"text":"запусти калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
+{"text":"вернись в ожидание ничего не делай","intent":"cancel","slots":{}}
+{"text":"что ты думаешь про изучение английского","intent":"general_chat","slots":{}}
+{"text":"покажи список разрешённых программ пожалуйста","intent":"list_applications","slots":{}}
+{"text":"можешь кратко описать локальные модели","intent":"general_chat","slots":{}}
+{"text":"можешь кратко описать космос","intent":"general_chat","slots":{}}
+{"text":"спустя 15 минут напомни мне проверить чайник","intent":"set_reminder","slots":{"duration":"15","reminder_text":"проверить чайник"}}
+{"text":"неразборчивые слова пожалуйста","intent":"unknown","slots":{}}
+{"text":"что ты умеешь открывать пожалуйста","intent":"list_applications","slots":{}}
+{"text":"посмотри сколько времени на часах одним предложением","intent":"get_current_time","slots":{}}
+{"text":"прерви эту операцию пожалуйста","intent":"cancel","slots":{}}
+{"text":"подскажи сколько сейчас времени одним предложением","intent":"get_current_time","slots":{}}
+{"text":"эм какая-то команда","intent":"unknown","slots":{}}
+{"text":"помоги разобраться в теме разницу между файлами и папками","intent":"general_chat","slots":{}}
+{"text":"короче один два три","intent":"unknown","slots":{}}
+{"text":"что ты умеешь открывать в белом списке","intent":"list_applications","slots":{}}
+{"text":"запусти пожалуйста файлы","intent":"open_application","slots":{"application":"файлы"}}
+{"text":"помоги разобраться в теме погоду и климат","intent":"general_chat","slots":{}}
+{"text":"вроде напомни","intent":"unknown","slots":{}}
+{"text":"напомни через 3 минут достать бельё","intent":"set_reminder","slots":{"duration":"3","reminder_text":"достать бельё"}}
+{"text":"браузер или что-то другое","intent":"unknown","slots":{}}
+{"text":"можешь сказать который час джарвис","intent":"get_current_time","slots":{}}
+{"text":"назови поддерживаемые приложения на моём компьютере","intent":"list_applications","slots":{}}
+{"text":"спустя 5 минут напомни мне поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"5","reminder_text":"поставить телефон на зарядку"}}
+{"text":"расскажи про как выбрать браузер по умолчанию","intent":"general_chat","slots":{}}
+{"text":"эм что-нибудь такое","intent":"unknown","slots":{}}
+{"text":"спустя 20 минут напомни мне покормить кота","intent":"set_reminder","slots":{"duration":"20","reminder_text":"покормить кота"}}
+{"text":"дай список приложений голосом","intent":"list_applications","slots":{}}
+{"text":"что ты думаешь про работу процессора","intent":"general_chat","slots":{}}
+{"text":"ну туда и обратно","intent":"unknown","slots":{}}
+{"text":"какие программы тебе доступны которые доступны","intent":"list_applications","slots":{}}
+{"text":"сообщи текущее время для меня","intent":"get_current_time","slots":{}}
+{"text":"покажи варианты для запуска для запуска","intent":"list_applications","slots":{}}
+{"text":"джарвис через 7 минут напомни проверить почту","intent":"set_reminder","slots":{"duration":"7","reminder_text":"проверить почту"}}
+{"text":"перечисли доступные приложения","intent":"list_applications","slots":{}}
+{"text":"джарвис напомни","intent":"unknown","slots":{}}
+{"text":"давай запустим task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"через 2 минут напомни покормить кота","intent":"set_reminder","slots":{"duration":"2","reminder_text":"покормить кота"}}
+{"text":"эм ну вот это","intent":"unknown","slots":{}}
+{"text":"дай список приложений","intent":"list_applications","slots":{}}
+{"text":"запусти пожалуйста discord","intent":"open_application","slots":{"application":"discord"}}
+{"text":"покажи список разрешённых программ по категориям","intent":"list_applications","slots":{}}
+{"text":"дай список приложений пожалуйста","intent":"list_applications","slots":{}}
+{"text":"какой софт ты можешь включить полностью","intent":"list_applications","slots":{}}
+{"text":"скажи который сейчас час одним предложением","intent":"get_current_time","slots":{}}
+{"text":"можешь сказать который час без объяснений","intent":"get_current_time","slots":{}}
+{"text":"спустя 25 минут напомни мне выпить воды","intent":"set_reminder","slots":{"duration":"25","reminder_text":"выпить воды"}}
+{"text":"спустя 10 минут напомни мне забрать документы","intent":"set_reminder","slots":{"duration":"10","reminder_text":"забрать документы"}}
+{"text":"что ты думаешь про фильмы","intent":"general_chat","slots":{}}
+{"text":"напомни через 30 минут проверить чайник","intent":"set_reminder","slots":{"duration":"30","reminder_text":"проверить чайник"}}
+{"text":"отмени текущую команду я передумал","intent":"cancel","slots":{}}
+{"text":"джарвис через 45 минут напомни проверить чайник","intent":"set_reminder","slots":{"duration":"45","reminder_text":"проверить чайник"}}
+{"text":"джарвис открой пеинт","intent":"open_application","slots":{"application":"пеинт"}}
+{"text":"мне нужно открыть black note","intent":"open_application","slots":{"application":"black note"}}
+{"text":"давай поговорим про безопасность данных","intent":"general_chat","slots":{}}
+{"text":"почему важно понимать фильмы","intent":"general_chat","slots":{}}
+{"text":"пожалуйста напомни через 7 минут забрать документы","intent":"set_reminder","slots":{"duration":"7","reminder_text":"забрать документы"}}
+{"text":"джарвис запусти дисорд","intent":"open_application","slots":{"application":"дисорд"}}
+{"text":"зачем нужен диспетчер задач","intent":"general_chat","slots":{}}
+{"text":"зайди в проводник","intent":"open_application","slots":{"application":"проводник"}}
+{"text":"что доступно из программ пожалуйста","intent":"list_applications","slots":{}}
+{"text":"пожалуйста уточни который час без объяснений","intent":"get_current_time","slots":{}}
+{"text":"запусти мне калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
+{"text":"открой приложение калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
+{"text":"запусти мне","intent":"unknown","slots":{}}
+{"text":"можешь кратко описать интернет","intent":"general_chat","slots":{}}
+{"text":"через десять минут","intent":"unknown","slots":{}}
+{"text":"джарвис скажи время сейчас и ответь голосом","intent":"get_current_time","slots":{}}
+{"text":"джарвис продолжай туда","intent":"unknown","slots":{}}
+{"text":"джарвис скажи время сейчас в моём часовом поясе","intent":"get_current_time","slots":{}}
+{"text":"перечисли свой список программ без лишнего текста","intent":"list_applications","slots":{}}
+{"text":"останови выполнение и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"нет не открывай приложение пожалуйста","intent":"cancel","slots":{}}
+{"text":"поставь напоминание через 10 минут покормить кота","intent":"set_reminder","slots":{"duration":"10","reminder_text":"покормить кота"}}
+{"text":"скажи который сейчас час пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"сбрось текущее действие прямо сейчас","intent":"cancel","slots":{}}
+{"text":"отмени запуск дискорда немедленно","intent":"cancel","slots":{}}
+{"text":"открой black note","intent":"open_application","slots":{"application":"black note"}}
+{"text":"можешь сказать который час точно","intent":"get_current_time","slots":{}}
+{"text":"скажи который сейчас час на системных часах","intent":"get_current_time","slots":{}}
+{"text":"какие приложения ты можешь открыть пожалуйста","intent":"list_applications","slots":{}}
+{"text":"хочу узнать сколько времени точно","intent":"get_current_time","slots":{}}
+{"text":"хочу узнать больше про почему дискорд иногда не открывается","intent":"general_chat","slots":{}}
+{"text":"на 7 минут поставь напоминание отправить отчёт","intent":"set_reminder","slots":{"duration":"7","reminder_text":"отправить отчёт"}}
+{"text":"хочу узнать больше про музыку","intent":"general_chat","slots":{}}
+{"text":"назови точное время на компьютере","intent":"get_current_time","slots":{}}
+{"text":"нужно запустить файлы","intent":"open_application","slots":{"application":"файлы"}}
+{"text":"что ты думаешь про назначение калькулятора","intent":"general_chat","slots":{}}
+{"text":"объясни простыми словами роботы","intent":"general_chat","slots":{}}
+{"text":"прерви эту операцию и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"через 1 минут напомни покормить кота","intent":"set_reminder","slots":{"duration":"1","reminder_text":"покормить кота"}}
+{"text":"давай поговорим про фильмы","intent":"general_chat","slots":{}}
+{"text":"пожалуйста открой browser","intent":"open_application","slots":{"application":"browser"}}
+{"text":"через 2 минут скажи мне отправить отчёт","intent":"set_reminder","slots":{"duration":"2","reminder_text":"отправить отчёт"}}
+{"text":"пожалуйста напомни через 60 минут выпить воды","intent":"set_reminder","slots":{"duration":"60","reminder_text":"выпить воды"}}
+{"text":"не дай забыть через 25 минут сделать короткий перерыв","intent":"set_reminder","slots":{"duration":"25","reminder_text":"сделать короткий перерыв"}}
+{"text":"включи task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"короче действие без деталей","intent":"unknown","slots":{}}
+{"text":"что из программ можно запустить прямо сейчас","intent":"list_applications","slots":{}}
+{"text":"спустя 2 минут напомни мне забрать документы","intent":"set_reminder","slots":{"duration":"2","reminder_text":"забрать документы"}}
+{"text":"назови точное время без объяснений","intent":"get_current_time","slots":{}}
+{"text":"ну открой","intent":"unknown","slots":{}}
+{"text":"стоп джарвис пока не нужно","intent":"cancel","slots":{}}
+{"text":"покажи время на данный момент без объяснений","intent":"get_current_time","slots":{}}
+{"text":"джарвис открой","intent":"unknown","slots":{}}
+{"text":"там потом пожалуйста","intent":"unknown","slots":{}}
+{"text":"сбрось текущее действие немедленно","intent":"cancel","slots":{}}
+{"text":"можешь запустить проводник","intent":"open_application","slots":{"application":"проводник"}}
+{"text":"назови точное время по местному времени","intent":"get_current_time","slots":{}}
+{"text":"прекрати выполнение команды немедленно","intent":"cancel","slots":{}}
+{"text":"запусти блекнот","intent":"open_application","slots":{"application":"блекнот"}}
+{"text":"перейди в task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"эм неразборчивые слова","intent":"unknown","slots":{}}
+{"text":"хочу узнать больше про программирование","intent":"general_chat","slots":{}}
+{"text":"кажется эээ ммм","intent":"unknown","slots":{}}
+{"text":"не открывай дискорд без подтверждения","intent":"cancel","slots":{}}
+{"text":"открой мне интернет","intent":"open_application","slots":{"application":"интернет"}}
+{"text":"давай откроем calc","intent":"open_application","slots":{"application":"calc"}}
+{"text":"на 2 минут поставь напоминание достать бельё","intent":"set_reminder","slots":{"duration":"2","reminder_text":"достать бельё"}}
+{"text":"посмотри сколько времени на часах для меня","intent":"get_current_time","slots":{}}
+{"text":"покажи время на данный момент без даты","intent":"get_current_time","slots":{}}
+{"text":"запусти task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"хочу узнать больше про изучение английского","intent":"general_chat","slots":{}}
+{"text":"передумал запускать программу без подтверждения","intent":"cancel","slots":{}}
+{"text":"какие приложения ты можешь открыть без лишнего текста","intent":"list_applications","slots":{}}
+{"text":"подскажи сколько сейчас времени сейчас","intent":"get_current_time","slots":{}}
+{"text":"покажи варианты для запуска коротко","intent":"list_applications","slots":{}}
+{"text":"хочу узнать сколько времени сейчас","intent":"get_current_time","slots":{}}
+{"text":"давай поговорим про историю компьютеров","intent":"general_chat","slots":{}}
+{"text":"остановись это ошибка","intent":"cancel","slots":{}}
+{"text":"скажи который сейчас час сейчас","intent":"get_current_time","slots":{}}
+{"text":"короче непонятный шум","intent":"unknown","slots":{}}
+{"text":"нет не открывай приложение без подтверждения","intent":"cancel","slots":{}}
+{"text":"посмотри сколько времени на часах на системных часах","intent":"get_current_time","slots":{}}
+{"text":"включи пожалуйста browser","intent":"open_application","slots":{"application":"browser"}}
+{"text":"ну непонятный шум","intent":"unknown","slots":{}}
+{"text":"джарвис туда и обратно","intent":"unknown","slots":{}}
+{"text":"короче туда и обратно","intent":"unknown","slots":{}}
+{"text":"как безопасно закрывать программы","intent":"general_chat","slots":{}}
+{"text":"напомни про","intent":"unknown","slots":{}}
+{"text":"дай список приложений джарвис","intent":"list_applications","slots":{}}
+{"text":"перечисли свой список программ без пояснений","intent":"list_applications","slots":{}}
+{"text":"напомни через 60 минут ответить коллеге","intent":"set_reminder","slots":{"duration":"60","reminder_text":"ответить коллеге"}}
+{"text":"какой софт ты можешь включить голосом","intent":"list_applications","slots":{}}
+{"text":"расскажи про правильное питание","intent":"general_chat","slots":{}}
+{"text":"не надо это делать и вернись в ожидание","intent":"cancel","slots":{}}
+{"text":"давай поговорим про музыку","intent":"general_chat","slots":{}}
+{"text":"подскажи сколько сейчас времени точно","intent":"get_current_time","slots":{}}
+{"text":"что из программ можно запустить джарвис","intent":"list_applications","slots":{}}
+{"text":"перечисли доступные приложения на моём компьютере","intent":"list_applications","slots":{}}
+{"text":"что ты умеешь открывать без пояснений","intent":"list_applications","slots":{}}
+{"text":"отмени текущую команду прямо сейчас","intent":"cancel","slots":{}}
+{"text":"объясни простыми словами операционные системы","intent":"general_chat","slots":{}}
+{"text":"сообщи текущее время коротко","intent":"get_current_time","slots":{}}
+{"text":"включи пожалуйста калькуляторы","intent":"open_application","slots":{"application":"калькуляторы"}}
+{"text":"скажи который сейчас час по местному времени","intent":"get_current_time","slots":{}}
+{"text":"через 3 минут скажи мне позвонить другу","intent":"set_reminder","slots":{"duration":"3","reminder_text":"позвонить другу"}}
+{"text":"сбрось текущее действие джарвис","intent":"cancel","slots":{}}
+{"text":"прекрати выполнение команды я передумал","intent":"cancel","slots":{}}
+{"text":"проверь что сейчас на часах в моём часовом поясе","intent":"get_current_time","slots":{}}
+{"text":"помоги разобраться в теме безопасность данных","intent":"general_chat","slots":{}}
+{"text":"помоги разобраться в теме здоровый сон","intent":"general_chat","slots":{}}
+{"text":"какой софт ты можешь включить прямо сейчас","intent":"list_applications","slots":{}}
+{"text":"открой блекнот","intent":"open_application","slots":{"application":"блекнот"}}
+{"text":"пожалуйста напомни через 5 минут поставить телефон на зарядку","intent":"set_reminder","slots":{"duration":"5","reminder_text":"поставить телефон на зарядку"}}
+{"text":"включи calc","intent":"open_application","slots":{"application":"calc"}}
+{"text":"какой софт ты можешь включить для запуска","intent":"list_applications","slots":{}}
+{"text":"джарвис скажи время сейчас на системных часах","intent":"get_current_time","slots":{}}
+{"text":"передумал запускать программу пока не нужно","intent":"cancel","slots":{}}
+{"text":"назови поддерживаемые приложения пожалуйста","intent":"list_applications","slots":{}}
+{"text":"открой мне calc","intent":"open_application","slots":{"application":"calc"}}
+{"text":"запусти мне paint","intent":"open_application","slots":{"application":"paint"}}
+{"text":"что ты думаешь про космос","intent":"general_chat","slots":{}}
+{"text":"напомни пожалуйста","intent":"unknown","slots":{}}
+{"text":"там потом","intent":"unknown","slots":{}}
+{"text":"перечисли свой список программ","intent":"list_applications","slots":{}}
+{"text":"перечисли доступные приложения для запуска","intent":"list_applications","slots":{}}
+{"text":"короче выполни штуку","intent":"unknown","slots":{}}
+{"text":"не открывай дискорд","intent":"cancel","slots":{}}
+{"text":"эм продолжай туда","intent":"unknown","slots":{}}
+{"text":"подскажи сколько сейчас времени коротко","intent":"get_current_time","slots":{}}
+{"text":"вроде непонятный шум","intent":"unknown","slots":{}}
+{"text":"открой правый","intent":"unknown","slots":{}}
+{"text":"короче неразборчивые слова","intent":"unknown","slots":{}}
+{"text":"посмотри сколько времени на часах пожалуйста","intent":"get_current_time","slots":{}}
+{"text":"нужно запустить task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"прекрати выполнение команды пожалуйста","intent":"cancel","slots":{}}
+{"text":"что доступно из программ по категориям","intent":"list_applications","slots":{}}
+{"text":"перейди в диспетчер задач","intent":"open_application","slots":{"application":"диспетчер задач"}}
+{"text":"назови поддерживаемые приложения голосом","intent":"list_applications","slots":{}}
+{"text":"покажи список разрешённых программ одним списком","intent":"list_applications","slots":{}}
+{"text":"открой дискод","intent":"open_application","slots":{"application":"дискод"}}
+{"text":"хочу узнать больше про машинное обучение","intent":"general_chat","slots":{}}
+{"text":"покажи список разрешённых программ для запуска","intent":"list_applications","slots":{}}
+{"text":"кажется не знаю","intent":"unknown","slots":{}}
+{"text":"джарвис открой calc","intent":"open_application","slots":{"application":"calc"}}
+{"text":"ну продолжай туда","intent":"unknown","slots":{}}
+{"text":"спустя 2 минут напомни мне ответить коллеге","intent":"set_reminder","slots":{"duration":"2","reminder_text":"ответить коллеге"}}
+{"text":"запусти мне дисорд","intent":"open_application","slots":{"application":"дисорд"}}
+{"text":"какие программы тебе доступны коротко","intent":"list_applications","slots":{}}
+{"text":"что из программ можно запустить одним списком","intent":"list_applications","slots":{}}
+{"text":"launch браузер","intent":"open_application","slots":{"application":"браузер"}}
+{"text":"нужно запустить блекнот","intent":"open_application","slots":{"application":"блекнот"}}
+{"text":"хочу открыть file explorer","intent":"open_application","slots":{"application":"file explorer"}}
+{"text":"включи пожалуйста пеинт","intent":"open_application","slots":{"application":"пеинт"}}
+{"text":"открой мне task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"пожалуйста уточни который час на системных часах","intent":"get_current_time","slots":{}}
+{"text":"давай откроем task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"стоп джарвис без подтверждения","intent":"cancel","slots":{}}
+{"text":"что ты умеешь открывать которые доступны","intent":"list_applications","slots":{}}
+{"text":"пожалуйста запусти task manager","intent":"open_application","slots":{"application":"task manager"}}
+{"text":"короче какая-то команда","intent":"unknown","slots":{}}
+{"text":"что из программ можно запустить на моём компьютере","intent":"list_applications","slots":{}}
+{"text":"покажи время на данный момент на системных часах","intent":"get_current_time","slots":{}}
+{"text":"launch пэйнт","intent":"open_application","slots":{"application":"пэйнт"}}
+{"text":"перечисли свой список программ джарвис","intent":"list_applications","slots":{}}
+{"text":"на 25 минут поставь напоминание проверить чайник","intent":"set_reminder","slots":{"duration":"25","reminder_text":"проверить чайник"}}
+{"text":"вроде включи эту самую","intent":"unknown","slots":{}}
+{"text":"хочу узнать больше про интернет","intent":"general_chat","slots":{}}
+{"text":"не запускай браузер","intent":"cancel","slots":{}}
+{"text":"кажется открой правый","intent":"unknown","slots":{}}

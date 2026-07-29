@@ -15,17 +15,18 @@ PyTorch используется только как вычислительны�
 
 1. проверяет JSONL, отсутствие пересечения train/validation, два holdout и CUDA;
 2. измеряет baseline только на development-наборах, не раскрывая holdout;
-3. запускает 24 коротких конфигурации `augmented/curriculum/standard` с одним
-   и тем же seed, чтобы сравнение параметров было честным;
-4. оставляет три лучших конфигурации и повторяет каждую на пяти seed с полным
+3. запускает 24 целевых `augmented`-конфигурации вокруг лучшего семейства
+   прошлого поиска с одним seed, чтобы сравнение параметров было честным;
+4. оставляет четыре лучших конфигурации и повторяет каждую на пяти seed с полным
    бюджетом эпох; неустойчивый «везучий» запуск не становится победителем;
 5. использует символьный токенизатор, поэтому новые слова не превращаются в
    один бесполезный `<unk>`;
 6. балансирует не только intents, но и долю старого/нового корпуса, не позволяя
    новым шаблонам вытеснить старые навыки;
 7. добавляет иерархический route-loss и штраф за слоты, несовместимые с intent;
-8. применяет AMP, TF32, gradient clipping, label smoothing, калибровку и early
-   stopping по общей оценке intent, slots и полной semantic frame;
+8. применяет AMP, TF32, gradient clipping, label smoothing, warmup + cosine
+   decay, EMA весов, калибровку и stability-aware early stopping по macro-F1,
+   worst-class recall, slots и полной semantic frame;
 9. проверяет intent macro-F1, worst recall, F1 каждого slot, hallucination rate,
    semantic-frame exact match, end-to-end accuracy, ECE и CPU latency;
    neural BIO-метрики считаются отдельно до regex fallback, поэтому guardrails
@@ -68,9 +69,9 @@ gpu= NVIDIA GeForce RTX 3090
 
 ## 2. Подготовка данных
 
-В репозитории уже подготовлен сбалансированный датасет v2:
+В репозитории уже подготовлен сбалансированный датасет v3:
 
-- `train.jsonl`: 840 примеров, по 120 на каждый intent;
+- `train.jsonl`: 1120 примеров, по 160 на каждый intent;
 - `validation.jsonl`: 210 примеров, по 30 на каждый intent;
 - `evaluation_holdout.jsonl`: 105 примеров, по 15 на каждый intent;
 - `ml/nlu/holdout_v2.jsonl`: второй замороженный holdout из 49 фраз.
@@ -178,10 +179,10 @@ SHA-256.
 оставить `batch_size: 256`. Если возникает CUDA OOM, уменьшайте до 128/64; если
 GPU почти пуст и данных стало много — увеличивайте до 512.
 
-Не закрывайте PowerShell. Первый этап обучает 24 коротких trial; второй — три
+Не закрывайте PowerShell. Первый этап обучает 24 коротких trial; второй — четыре
 финалиста на seed `17, 43, 101, 211, 307`. Каждая эпоха печатает loss, общий
-manager score, intent F1, slot F1, semantic-frame exact match и hallucination
-rate. Early stopping завершает бесполезные эпохи автоматически.
+manager score, intent F1, worst recall, slot F1, semantic-frame exact match и
+hallucination rate. Early stopping завершает бесполезные эпохи автоматически.
 
 ## 6. Результаты
 
@@ -274,8 +275,8 @@ python main.py --text "какие приложения ты можешь отк�
 - `search.trials`: число конфигураций первого этапа;
 - `search.top_k`: сколько конфигураций проходят в дорогую проверку;
 - `search.confirmation_seeds`: независимые повторы финалистов;
-- `search.space`: диапазоны learning rate, доли корпуса, размеров сети и весов
-  route/slot/slot-consistency losses;
+- `search.space`: диапазоны learning rate, warmup, cosine minimum, EMA decay,
+  доли корпуса, размеров сети и весов route/slot/slot-consistency losses;
 - `search.phase_one_patience` и `confirmation_patience`: сколько эпох ждать
   улучшения общей development-метрики;
 - `selection.min_custom_macro_f1_improvement`: прирост на новых командах;

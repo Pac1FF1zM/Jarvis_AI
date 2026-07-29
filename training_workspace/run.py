@@ -167,17 +167,21 @@ def _development_score(
     custom = benchmarks["custom_validation"]
     regression = benchmarks["legacy_regression"]
     intent = _harmonic_mean(custom["intent_macro_f1"], regression["intent_macro_f1"])
+    worst_recall = _harmonic_mean(
+        custom["worst_intent_recall"], regression["worst_intent_recall"]
+    )
     raw_slot = float(metrics["custom_validation_slot_entity_f1"])
     raw_frame = float(metrics["custom_validation_semantic_frame_exact_match"])
     raw_command = float(metrics["custom_validation_end_to_end_command_accuracy"])
     raw_hallucination = float(metrics["custom_validation_slot_hallucination_rate"])
     score = (
-        0.40 * intent
+        0.35 * intent
+        + 0.15 * worst_recall
         + 0.20 * raw_slot
-        + 0.15 * raw_frame
-        + 0.10 * raw_command
-        + 0.10 * custom["semantic_frame_exact_match"]
-        + 0.05 * custom["end_to_end_command_accuracy"]
+        + 0.13 * raw_frame
+        + 0.07 * raw_command
+        + 0.07 * custom["semantic_frame_exact_match"]
+        + 0.03 * custom["end_to_end_command_accuracy"]
     )
     return (
         score
@@ -360,6 +364,9 @@ def run(
             "--patience", str(experiment.get("patience", 12)),
             "--seed", str(experiment.get("seed", 17)),
             "--label-smoothing", str(experiment.get("label_smoothing", 0.04)),
+            "--warmup-epochs", str(experiment.get("warmup_epochs", 5)),
+            "--min-lr-ratio", str(experiment.get("min_lr_ratio", 0.10)),
+            "--ema-decay", str(experiment.get("ema_decay", 0.995)),
         ]
         print(f"\n=== EXPERIMENT {name} ===", flush=True)
         subprocess.run(command, cwd=REPO_ROOT, check=True)

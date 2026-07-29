@@ -83,6 +83,19 @@ def generate_phase_one(search: dict[str, Any]) -> list[dict[str, Any]]:
             "label_smoothing": _uniform(
                 rng, list(space.get("label_smoothing", [0.0, 0.06])), "label_smoothing"
             ),
+            "warmup_epochs": int(
+                _choice(
+                    rng,
+                    list(space.get("warmup_epochs", [3, 5, 7])),
+                    "warmup_epochs",
+                )
+            ),
+            "min_lr_ratio": _uniform(
+                rng, list(space.get("min_lr_ratio", [0.05, 0.20])), "min_lr_ratio"
+            ),
+            "ema_decay": _uniform(
+                rng, list(space.get("ema_decay", [0.992, 0.998])), "ema_decay"
+            ),
             "max_length": int(search.get("max_length", 128)),
             "seed": training_seed,
         }

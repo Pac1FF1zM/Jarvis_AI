@@ -10,7 +10,9 @@ No pretrained model, embedding, tokenizer, or external dataset is used.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
+import math
 import platform
 import time
 from collections import Counter
@@ -155,17 +157,59 @@ def _slot_consistency_loss(
 def _manager_validation_score(
     custom_metrics: dict[str, object], legacy_metrics: dict[str, object]
 ) -> float:
-    """Joint score used only on development data for early stopping."""
+    """Joint score used only on development data for stability-aware stopping."""
     intent_score = _balanced_score(
         float(custom_metrics["intent_macro_f1"]),
         float(legacy_metrics["intent_macro_f1"]),
     )
-    score = (
-        0.55 * intent_score
-        + 0.25 * float(custom_metrics["slot_entity_f1"])
-        + 0.20 * float(custom_metrics["semantic_frame_exact_match"])
+    worst_recall = _balanced_score(
+        float(custom_metrics["worst_intent_recall"]),
+        float(legacy_metrics["worst_intent_recall"]),
     )
-    return score - 0.25 * float(custom_metrics["slot_hallucination_rate"])
+    score = (
+        0.45 * intent_score
+        + 0.20 * worst_recall
+        + 0.20 * float(custom_metrics["slot_entity_f1"])
+        + 0.15 * float(custom_metrics["semantic_frame_exact_match"])
+    )
+    return score - 0.20 * float(custom_metrics["slot_hallucination_rate"])
+
+
+def _learning_rate_multiplier(
+    epoch: int,
+    *,
+    epochs: int,
+    warmup_epochs: int,
+    min_lr_ratio: float,
+) -> float:
+    """Linear warmup followed by cosine decay, evaluated once per epoch."""
+    if epochs < 1:
+        raise ValueError("epochs must be positive")
+    if not 0 <= warmup_epochs < epochs:
+        raise ValueError("warmup_epochs must be between 0 and epochs - 1")
+    if not 0.0 <= min_lr_ratio <= 1.0:
+        raise ValueError("min_lr_ratio must be between 0 and 1")
+    if not 1 <= epoch <= epochs:
+        raise ValueError("epoch must be between 1 and epochs")
+    if warmup_epochs and epoch <= warmup_epochs:
+        return epoch / warmup_epochs
+    decay_steps = epochs - warmup_epochs
+    progress = (epoch - warmup_epochs - 1) / max(decay_steps - 1, 1)
+    cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
+    return min_lr_ratio + (1.0 - min_lr_ratio) * cosine
+
+
+def _update_ema(ema_model: nn.Module, model: nn.Module, decay: float) -> None:
+    """Update evaluation weights without retaining the training graph."""
+    with torch.no_grad():
+        for ema_parameter, parameter in zip(
+            ema_model.parameters(), model.parameters(), strict=True
+        ):
+            ema_parameter.mul_(decay).add_(parameter.detach(), alpha=1.0 - decay)
+        for ema_buffer, buffer in zip(
+            ema_model.buffers(), model.buffers(), strict=True
+        ):
+            ema_buffer.copy_(buffer.detach())
 
 
 def _model_and_tokenizer(args: argparse.Namespace, texts: list[str]):
@@ -189,6 +233,8 @@ def _model_and_tokenizer(args: argparse.Namespace, texts: list[str]):
 
 def train_manager(args: argparse.Namespace) -> dict[str, Any]:
     set_seed(args.seed)
+    if not 0.0 <= args.ema_decay < 1.0:
+        raise ValueError("ema_decay must be between 0 (inclusive) and 1 (exclusive)")
     if args.device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA requested but PyTorch cannot see an NVIDIA GPU")
     device = torch.device(args.device)
@@ -209,6 +255,9 @@ def train_manager(args: argparse.Namespace) -> dict[str, Any]:
     tokenizer_texts = list(iter_text(base_augmented + custom_train))
     model, tokenizer, model_config = _model_and_tokenizer(args, tokenizer_texts)
     model.to(device)
+    ema_model = copy.deepcopy(model).to(device)
+    ema_model.requires_grad_(False)
+    ema_model.eval()
 
     custom_validation_loader = DataLoader(
         NLUDataset(custom_validation, tokenizer),
@@ -240,6 +289,7 @@ def train_manager(args: argparse.Namespace) -> dict[str, Any]:
     slot_loss = nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX, weight=slot_weights)
     amp_enabled = bool(args.amp and device.type == "cuda")
     scaler = _make_grad_scaler(amp_enabled)
+    ema_updates = 0
 
     best_score = float("-inf")
     best_epoch = 0
@@ -249,6 +299,14 @@ def train_manager(args: argparse.Namespace) -> dict[str, Any]:
     started = time.perf_counter()
 
     for epoch in range(1, args.epochs + 1):
+        learning_rate = args.learning_rate * _learning_rate_multiplier(
+            epoch,
+            epochs=args.epochs,
+            warmup_epochs=args.warmup_epochs,
+            min_lr_ratio=args.min_lr_ratio,
+        )
+        for parameter_group in optimizer.param_groups:
+            parameter_group["lr"] = learning_rate
         if args.method == "standard":
             epoch_base = base_clean
             custom_fraction = args.custom_fraction
@@ -300,19 +358,28 @@ def train_manager(args: argparse.Namespace) -> dict[str, Any]:
             nn.utils.clip_grad_norm_(model.parameters(), args.gradient_clip)
             scaler.step(optimizer)
             scaler.update()
+            ema_updates += 1
+            ema_decay = min(
+                args.ema_decay,
+                (1.0 + ema_updates) / (10.0 + ema_updates),
+            )
+            _update_ema(ema_model, model, ema_decay)
             running_loss += float(loss.detach())
             batches += 1
 
-        custom_metrics = _accuracy(model, custom_validation_loader, device)
-        legacy_metrics = _accuracy(model, legacy_validation_loader, device)
+        custom_metrics = _accuracy(ema_model, custom_validation_loader, device)
+        legacy_metrics = _accuracy(ema_model, legacy_validation_loader, device)
         score = _manager_validation_score(custom_metrics, legacy_metrics)
         history.append(
             {
                 "epoch": float(epoch),
+                "learning_rate": learning_rate,
                 "loss": running_loss / max(batches, 1),
                 "balanced_score": score,
                 "custom_macro_f1": custom_metrics["intent_macro_f1"],
                 "legacy_macro_f1": legacy_metrics["intent_macro_f1"],
+                "custom_worst_recall": custom_metrics["worst_intent_recall"],
+                "legacy_worst_recall": legacy_metrics["worst_intent_recall"],
                 "custom_slot_f1": custom_metrics["slot_entity_f1"],
                 "custom_frame_exact": custom_metrics["semantic_frame_exact_match"],
                 "custom_slot_hallucination": custom_metrics["slot_hallucination_rate"],
@@ -322,6 +389,8 @@ def train_manager(args: argparse.Namespace) -> dict[str, Any]:
             f"epoch={epoch:03d} loss={history[-1]['loss']:.4f} "
             f"score={score:.4f} custom_f1={custom_metrics['intent_macro_f1']:.4f} "
             f"legacy_f1={legacy_metrics['intent_macro_f1']:.4f} "
+            f"worst={custom_metrics['worst_intent_recall']:.4f}/"
+            f"{legacy_metrics['worst_intent_recall']:.4f} "
             f"slot_f1={custom_metrics['slot_entity_f1']:.4f} "
             f"frame={custom_metrics['semantic_frame_exact_match']:.4f} "
             f"hallucination={custom_metrics['slot_hallucination_rate']:.4f}",
@@ -332,7 +401,7 @@ def train_manager(args: argparse.Namespace) -> dict[str, Any]:
             best_epoch = epoch
             best_state = {
                 name: tensor.detach().cpu().clone()
-                for name, tensor in model.state_dict().items()
+                for name, tensor in ema_model.state_dict().items()
             }
             epochs_without_improvement = 0
         else:
@@ -383,6 +452,9 @@ def train_manager(args: argparse.Namespace) -> dict[str, Any]:
         "route_loss_weight": args.route_loss_weight,
         "slot_loss_weight": args.slot_loss_weight,
         "slot_consistency_weight": args.slot_consistency_weight,
+        "warmup_epochs": args.warmup_epochs,
+        "min_lr_ratio": args.min_lr_ratio,
+        "ema_decay": args.ema_decay,
         "custom_fraction": args.custom_fraction,
         "device": str(device),
         "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else None,
@@ -435,6 +507,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--slot-consistency-weight", type=float, default=0.3)
     parser.add_argument("--route-loss-weight", type=float, default=0.35)
     parser.add_argument("--label-smoothing", type=float, default=0.04)
+    parser.add_argument("--warmup-epochs", type=int, default=5)
+    parser.add_argument("--min-lr-ratio", type=float, default=0.10)
+    parser.add_argument("--ema-decay", type=float, default=0.995)
     parser.add_argument("--gradient-clip", type=float, default=1.0)
     parser.add_argument("--custom-fraction", type=float, default=0.4)
     parser.add_argument("--curriculum-start-fraction", type=float, default=0.2)

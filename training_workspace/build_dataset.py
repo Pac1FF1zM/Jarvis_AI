@@ -21,7 +21,7 @@ from ml.nlu.schema import INTENTS
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
-TARGETS = {"train": 120, "validation": 30, "evaluation_holdout": 15}
+TARGETS = {"train": 160, "validation": 30, "evaluation_holdout": 15}
 SEEDS = {"train": 1701, "validation": 2903, "evaluation_holdout": 4307}
 
 APPLICATIONS = {
@@ -47,6 +47,8 @@ OPEN_TEMPLATES = {
         "хочу открыть {application}", "мне нужно открыть {application}",
         "нужно запустить {application}", "можешь запустить {application}",
         "open {application}", "launch {application}",
+        "перейди в {application}", "покажи {application}",
+        "мне сейчас нужен {application}", "зайди в {application}",
     ),
     "validation": (
         "будь добр открой {application}", "можно запустить {application}",
@@ -142,7 +144,7 @@ TIME_PARTS = {
 }
 
 TIME_ENDINGS = {
-    "train": ("", " пожалуйста", " джарвис", " на компьютере", " по местному времени", " без даты", " точно", " сейчас", " для меня", " одним предложением", " и ответь голосом"),
+    "train": ("", " пожалуйста", " джарвис", " на компьютере", " по местному времени", " без даты", " точно", " сейчас", " для меня", " одним предложением", " и ответь голосом", " коротко", " без объяснений", " на системных часах", " в моём часовом поясе"),
     "validation": ("", " пожалуйста", " в моём часовом поясе", " без объяснений", " на системных часах", " джарвис"),
     "evaluation_holdout": ("", " пожалуйста", " именно сейчас", " коротко", " на этом компьютере"),
 }
@@ -169,7 +171,7 @@ LIST_PARTS = {
 }
 
 LIST_ENDINGS = {
-    "train": ("", " пожалуйста", " джарвис", " на моём компьютере", " прямо сейчас", " для запуска", " коротко", " полностью", " без лишнего текста", " голосом", " одним списком"),
+    "train": ("", " пожалуйста", " джарвис", " на моём компьютере", " прямо сейчас", " для запуска", " коротко", " полностью", " без лишнего текста", " голосом", " одним списком", " которые доступны", " без пояснений", " в белом списке", " по категориям"),
     "validation": ("", " пожалуйста", " целиком", " на данный момент", " джарвис", " для меня"),
     "evaluation_holdout": ("", " пожалуйста", " без пояснений", " сейчас", " одним ответом"),
 }
@@ -181,6 +183,8 @@ CANCEL_PARTS = {
         "сбрось текущее действие", "прекрати выполнение команды",
         "стоп джарвис", "отставить команду", "не открывай дискорд",
         "не запускай браузер", "остановись", "отмена",
+        "нет не открывай приложение", "передумал запускать программу",
+        "стоп не надо открывать браузер", "отмени запуск дискорда",
     ),
     "validation": (
         "прерви всё что сейчас делаешь", "сними последнюю команду",
@@ -262,9 +266,97 @@ UNKNOWN_FRAGMENTS = {
 }
 
 UNKNOWN_WRAPPERS = {
-    "train": ("{fragment}", "эм {fragment}", "джарвис {fragment}", "ну {fragment}", "{fragment} пожалуйста", "кажется {fragment}"),
+    "train": ("{fragment}", "эм {fragment}", "джарвис {fragment}", "ну {fragment}", "{fragment} пожалуйста", "кажется {fragment}", "вроде {fragment}", "короче {fragment}"),
     "validation": ("{fragment}", "ээ {fragment}", "в общем {fragment}", "{fragment} наверное"),
     "evaluation_holdout": ("{fragment}", "мм {fragment}", "короче {fragment}"),
+}
+
+# These near-boundary utterances are always included instead of merely being
+# left to random sampling. They teach the manager that mentioning an app or a
+# command is not the same as requesting that action, and that incomplete
+# requests must be rejected safely.
+HARD_BOUNDARIES = {
+    "train": {
+        "cancel": (
+            "нет я передумал открывать дискорд",
+            "не надо запускать калькулятор",
+            "отмени открытие браузера",
+            "стоп не запускай paint",
+            "я ошибся не открывай блокнот",
+            "прерви запуск проводника",
+            "отставить напоминание",
+            "не выполняй предыдущую команду",
+            "останови то что сейчас запускается",
+            "вернись в ожидание ничего не делай",
+            "нет не это прекрати",
+            "заканчивай выполнение команды",
+        ),
+        "general_chat": (
+            "почему дискорд иногда не открывается",
+            "расскажи как устроен браузер",
+            "объясни как работает калькулятор",
+            "что делать если paint не запускается",
+            "как работают напоминания в компьютере",
+            "почему приложения могут закрываться сами",
+            "чем браузер отличается от проводника",
+            "как безопасно закрывать программы",
+            "что означает отмена операции",
+            "зачем нужен диспетчер задач",
+            "можно ли обучить голосового ассистента",
+            "как нейросеть выбирает команду",
+        ),
+        "unknown": (
+            "открой пожалуйста",
+            "запусти мне",
+            "закрой вот это",
+            "через десять минут",
+            "напомни про",
+            "поставь напоминание когда-нибудь",
+            "браузер или что-то другое",
+            "дискорд наверное",
+            "сделай команду",
+            "включи нужное приложение",
+            "нет я имел в виду другое",
+            "потом продолжим это самое",
+        ),
+    },
+    "validation": {
+        "cancel": (
+            "нет не запускай дискорд",
+            "передумал открывать браузер",
+            "останови запуск приложения",
+            "отмени прошлое действие",
+        ),
+        "general_chat": (
+            "почему калькулятор может не открыться",
+            "объясни зачем нужен браузер",
+            "как программа понимает команду отмены",
+            "расскажи о системных напоминаниях",
+        ),
+        "unknown": (
+            "открой мне это",
+            "напомни потом",
+            "запусти нужное",
+            "я хотел другую команду",
+        ),
+    },
+    "evaluation_holdout": {
+        "cancel": (
+            "стоп я не хочу открывать paint",
+            "отмени запуск той программы",
+            "не продолжай прошлую команду",
+        ),
+        "general_chat": (
+            "как браузер запускает сайты",
+            "почему напоминание может не сработать",
+            "что происходит при закрытии приложения",
+        ),
+        "unknown": (
+            "включи мне какое-нибудь",
+            "напомни об этом позже",
+            "открой ту самую программу",
+        ),
+    },
 }
 
 
@@ -274,6 +366,13 @@ def _clean(text: str) -> str:
 
 def _record(text: str, intent: str, slots: dict[str, str] | None = None) -> dict[str, Any]:
     return {"text": _clean(text), "intent": intent, "slots": slots or {}}
+
+
+def _required_boundary_candidates(split: str, intent: str) -> list[dict[str, Any]]:
+    return [
+        _record(text, intent)
+        for text in HARD_BOUNDARIES.get(split, {}).get(intent, ())
+    ]
 
 
 def _simple_candidates(split: str) -> dict[str, list[dict[str, Any]]]:
@@ -403,12 +502,19 @@ def build() -> dict[str, list[dict[str, Any]]]:
                     forbidden=forbidden,
                 )
             else:
+                required = _required_boundary_candidates(split, intent)
                 selected = _select(
-                    by_intent[intent],
-                    count=TARGETS[split],
-                    seed=seed,
+                    required,
+                    count=len(required),
+                    seed=seed + 10_000,
                     forbidden=forbidden,
                 )
+                selected.extend(_select(
+                    by_intent[intent],
+                    count=TARGETS[split] - len(required),
+                    seed=seed,
+                    forbidden=forbidden,
+                ))
             records.extend(selected)
         random.Random(SEEDS[split]).shuffle(records)
         result[split] = records
@@ -427,7 +533,7 @@ def write_dataset() -> dict[str, Any]:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     splits = build()
     manifest: dict[str, Any] = {
-        "version": 2,
+        "version": 3,
         "generator": "training_workspace.build_dataset",
         "external_sources": False,
         "splits": {},

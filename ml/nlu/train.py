@@ -131,13 +131,25 @@ def _accuracy(model: nn.Module, loader: DataLoader, device: torch.device) -> dic
                     counts["fp"] += int((~expected_type & predicted_type).sum())
                     counts["fn"] += int((expected_type & ~predicted_type).sum())
     f1_values: list[float] = []
+    recall_values: list[float] = []
+    per_intent: dict[str, dict[str, float | int]] = {}
     for label_id in range(len(INTENTS)):
         tp = int(confusion[label_id, label_id])
         fp = int(confusion[:, label_id].sum()) - tp
         fn = int(confusion[label_id, :].sum()) - tp
+        support = tp + fn
         precision = tp / max(tp + fp, 1)
-        recall = tp / max(tp + fn, 1)
-        f1_values.append(2 * precision * recall / max(precision + recall, 1e-12))
+        recall = tp / max(support, 1)
+        f1 = 2 * precision * recall / max(precision + recall, 1e-12)
+        f1_values.append(f1)
+        if support:
+            recall_values.append(recall)
+        per_intent[INTENTS[label_id]] = {
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "support": support,
+        }
     entity_precision = true_positive / max(true_positive + false_positive, 1)
     entity_recall = true_positive / max(true_positive + false_negative, 1)
     per_slot = {}
@@ -151,6 +163,8 @@ def _accuracy(model: nn.Module, loader: DataLoader, device: torch.device) -> dic
     return {
         "intent_accuracy": intent_correct / max(intent_total, 1),
         "intent_macro_f1": sum(f1_values) / len(f1_values),
+        "worst_intent_recall": min(recall_values, default=0.0),
+        "per_intent": per_intent,
         "slot_token_accuracy": slot_correct / max(slot_total, 1),
         "slot_entity_f1": 2 * entity_precision * entity_recall / max(
             entity_precision + entity_recall, 1e-12

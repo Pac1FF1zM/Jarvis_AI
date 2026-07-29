@@ -1,6 +1,7 @@
 """Regression tests for the portable NLU fine-tuning workspace."""
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from collections import Counter
@@ -18,8 +19,20 @@ from ml.nlu.metrics import semantic_frame_metrics
 from ml.nlu.schema import INTENTS, NLUResult, SLOT_LABELS
 from ml.nlu.tokenizer import WordTokenizer
 from ml.nlu.finetune import _restore_with_expanded_vocabulary
-from ml.nlu.manager_train import _route_logits, _route_targets, _slot_consistency_loss
-from training_workspace.build_dataset import APPLICATIONS, TARGETS, build
+from ml.nlu.manager_train import (
+    _learning_rate_multiplier,
+    _manager_validation_score,
+    _route_logits,
+    _route_targets,
+    _slot_consistency_loss,
+    _update_ema,
+)
+from training_workspace.build_dataset import (
+    APPLICATIONS,
+    HARD_BOUNDARIES,
+    TARGETS,
+    build,
+)
 from training_workspace.nlu_search import confirmation_experiments, generate_phase_one
 from training_workspace.run import _development_score, run
 
@@ -88,9 +101,9 @@ def test_workspace_default_config_passes_check_only():
     config = Path(__file__).resolve().parents[1] / "training_workspace" / "config.yaml"
     report = run(config, check_only=True)
     assert report["status"] == "configuration_ok"
-    assert report["data"]["train_examples"] == 840
+    assert report["data"]["train_examples"] == 1120
     assert report["data"]["validation_examples"] == 210
-    assert set(report["data"]["train_intents"].values()) == {120}
+    assert set(report["data"]["train_intents"].values()) == {160}
     assert set(report["data"]["validation_intents"].values()) == {30}
     assert report["data"]["evaluation_holdout_examples"] == 105
     assert report["data"]["final_holdout_examples"] == 49
@@ -146,6 +159,17 @@ def test_train_open_application_examples_cover_allowlist_evenly():
     assert max(counts.values()) - min(counts.values()) <= 1
 
 
+def test_hard_boundary_examples_are_pinned_to_every_generated_split():
+    generated = build()
+    for split, by_intent in HARD_BOUNDARIES.items():
+        actual = {
+            (record["intent"], record["text"].casefold())
+            for record in generated[split]
+        }
+        for intent, texts in by_intent.items():
+            assert all((intent, text.casefold()) in actual for text in texts)
+
+
 def test_dataset_manifest_hashes_match_canonical_files():
     data_dir = Path(__file__).resolve().parents[1] / "training_workspace" / "data"
     manifest = json.loads((data_dir / "dataset_manifest.json").read_text(encoding="utf-8"))
@@ -191,6 +215,45 @@ def test_slot_consistency_loss_penalises_intent_illegal_slots():
     assert legal_loss < illegal_loss
     assert illegal.grad is not None
     assert torch.isfinite(illegal.grad).all()
+
+
+def test_manager_score_penalises_a_weakest_intent_at_equal_macro_f1():
+    common = {
+        "intent_macro_f1": 0.95,
+        "slot_entity_f1": 0.82,
+        "semantic_frame_exact_match": 0.80,
+        "slot_hallucination_rate": 0.01,
+    }
+    stable = {**common, "worst_intent_recall": 0.90}
+    unstable = {**common, "worst_intent_recall": 0.60}
+
+    assert _manager_validation_score(stable, stable) > _manager_validation_score(
+        unstable, stable
+    )
+
+
+def test_warmup_cosine_schedule_and_ema_are_deterministic():
+    multipliers = [
+        _learning_rate_multiplier(
+            epoch, epochs=10, warmup_epochs=2, min_lr_ratio=0.1
+        )
+        for epoch in range(1, 11)
+    ]
+    assert multipliers[:2] == [0.5, 1.0]
+    assert multipliers[2] == pytest.approx(1.0)
+    assert multipliers[-1] == pytest.approx(0.1)
+    assert all(left >= right for left, right in zip(multipliers[2:], multipliers[3:]))
+
+    model = torch.nn.Linear(2, 1)
+    ema_model = copy.deepcopy(model)
+    with torch.no_grad():
+        model.weight.fill_(1.0)
+        model.bias.fill_(1.0)
+        ema_model.weight.zero_()
+        ema_model.bias.zero_()
+    _update_ema(ema_model, model, 0.5)
+    assert torch.equal(ema_model.weight, torch.full_like(ema_model.weight, 0.5))
+    assert torch.equal(ema_model.bias, torch.full_like(ema_model.bias, 0.5))
 
 
 def test_semantic_metrics_detect_exact_frames_and_slot_hallucination():
@@ -298,18 +361,26 @@ def test_two_stage_search_is_reproducible_and_seed_fair():
     }
     assert len(confirmation) == 6
     assert {item["seed"] for item in confirmation} == {17, 43, 101}
+    assert all(
+        {"warmup_epochs", "min_lr_ratio", "ema_decay"} <= item.keys()
+        for item in first
+    )
 
 
 def test_development_score_distinguishes_raw_neural_slot_quality():
     benchmarks = {
         "custom_validation": {
             "intent_macro_f1": 0.95,
+            "worst_intent_recall": 0.85,
             "semantic_frame_exact_match": 0.85,
             "end_to_end_command_accuracy": 0.85,
             "slot_hallucination_rate": 0.0,
             "expected_calibration_error": 0.02,
         },
-        "legacy_regression": {"intent_macro_f1": 0.95},
+        "legacy_regression": {
+            "intent_macro_f1": 0.95,
+            "worst_intent_recall": 0.85,
+        },
     }
     weak = {
         "custom_validation_slot_entity_f1": 0.50,
@@ -419,6 +490,8 @@ def test_workspace_uses_char_manager_experiments_and_strict_export_gates():
     assert all(experiment["architecture"] == "char_cnn" for experiment in experiments)
     assert search["enabled"] is True
     assert search["trials"] >= 20
+    assert search["space"]["method"] == ["augmented"]
+    assert "ema_decay" in search["space"]
     assert len(search["confirmation_seeds"]) >= 5
     assert len({experiment["seed"] for experiment in experiments}) == 1
     assert selection["max_legacy_macro_f1_drop"] == 0.0

@@ -1,21 +1,21 @@
 {
-  "version": 2,
+  "version": 3,
   "generator": "training_workspace.build_dataset",
   "external_sources": false,
   "splits": {
     "train": {
       "file": "train.jsonl",
-      "examples": 840,
+      "examples": 1120,
       "intents": {
-        "cancel": 120,
-        "general_chat": 120,
-        "get_current_time": 120,
-        "list_applications": 120,
-        "open_application": 120,
-        "set_reminder": 120,
-        "unknown": 120
+        "cancel": 160,
+        "general_chat": 160,
+        "get_current_time": 160,
+        "list_applications": 160,
+        "open_application": 160,
+        "set_reminder": 160,
+        "unknown": 160
       },
-      "sha256": "be56501d1e3f5175af1a18a9f5ab47277813a2766bce2e5cd02bb1dd04863dea"
+      "sha256": "300410db8c005076b9da52d4dfcfa8a316b755a5e559bfd29b9b5cecea91c1ae"
     },
     "validation": {
       "file": "validation.jsonl",
@@ -29,7 +29,7 @@
         "set_reminder": 30,
         "unknown": 30
       },
-      "sha256": "2e3190b03d2fc362a01a6616a176d13fe63e4b0a62d34333468e86cacf67999c"
+      "sha256": "454352a0acf07111f0695556256227b87558651ca9bdff62c8874ce6b221435f"
     },
     "evaluation_holdout": {
       "file": "evaluation_holdout.jsonl",
@@ -43,7 +43,7 @@
         "set_reminder": 15,
         "unknown": 15
       },
-      "sha256": "876ee4e1387c497c8ae6d7b83c5a02589fb8a6a5acba95dbe578ea555f93ff85"
+      "sha256": "f874a5e87b9a4d80824e6ccccf59ed575ebfed0d9f8361f8416379075f9921ca"
     }
   }
 }

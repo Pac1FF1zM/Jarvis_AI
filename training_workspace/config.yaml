@@ -16,35 +16,38 @@ data:
   # Older frozen set, never used while designing the new manager experiments.
   final_holdout: ../ml/nlu/holdout_v2.jsonl
 
-# Two-stage search: 24 short, directly comparable trials use the same seed.
-# Only the best three configurations receive the full epoch budget and are
-# repeated on five seeds. Neither holdout is opened during either stage.
+# Stability search v2: stay near the strongest search_08 family while testing
+# regularisation that reduces seed variance. All phase-one trials share a seed;
+# finalists must still pass the unchanged gates on four of five seeds.
 search:
   enabled: true
   search_seed: 20260729
   trials: 24
   phase_one_seed: 17
-  phase_one_epochs: 28
-  phase_one_patience: 6
-  top_k: 3
+  phase_one_epochs: 40
+  phase_one_patience: 10
+  top_k: 4
   confirmation_seeds: [17, 43, 101, 211, 307]
-  confirmation_epochs: 70
-  confirmation_patience: 12
+  confirmation_epochs: 80
+  confirmation_patience: 16
   min_passing_seeds: 4
   max_length: 128
   space:
-    method: [standard, augmented, curriculum]
-    batch_size: [128, 256, 512]
-    learning_rate: [0.0004, 0.0015]
-    weight_decay: [0.00003, 0.0003]
-    custom_fraction: [0.30, 0.60]
-    curriculum_start_fraction: [0.15, 0.30]
-    route_loss_weight: [0.20, 0.45]
-    slot_loss_weight: [0.60, 1.60]
-    slot_consistency_weight: [0.10, 0.80]
-    embedding_dim: [48, 64, 96]
-    hidden_dim: [64, 96, 128]
-    label_smoothing: [0.0, 0.06]
+    method: [augmented]
+    batch_size: [128, 256]
+    learning_rate: [0.00085, 0.00135]
+    weight_decay: [0.00008, 0.00022]
+    custom_fraction: [0.47, 0.56]
+    curriculum_start_fraction: [0.18, 0.22]
+    route_loss_weight: [0.25, 0.34]
+    slot_loss_weight: [1.05, 1.45]
+    slot_consistency_weight: [0.14, 0.38]
+    embedding_dim: [64, 96]
+    hidden_dim: [112, 128, 160]
+    label_smoothing: [0.01, 0.035]
+    warmup_epochs: [3, 5, 7]
+    min_lr_ratio: [0.05, 0.20]
+    ema_decay: [0.992, 0.998]
 
 # Fallback hand-authored experiments used only when search.enabled is false.
 experiments:
@@ -62,6 +65,9 @@ experiments:
     slot_consistency_weight: 0.3
     patience: 12
     label_smoothing: 0.04
+    warmup_epochs: 5
+    min_lr_ratio: 0.10
+    ema_decay: 0.995
     seed: 17
 
   - name: manager_augmented
@@ -77,6 +83,9 @@ experiments:
     slot_consistency_weight: 0.4
     patience: 12
     label_smoothing: 0.04
+    warmup_epochs: 5
+    min_lr_ratio: 0.10
+    ema_decay: 0.995
     seed: 17
 
   - name: manager_standard
@@ -92,6 +101,9 @@ experiments:
     slot_consistency_weight: 0.3
     patience: 12
     label_smoothing: 0.04
+    warmup_epochs: 5
+    min_lr_ratio: 0.10
+    ema_decay: 0.995
     seed: 17
 
 benchmark:
