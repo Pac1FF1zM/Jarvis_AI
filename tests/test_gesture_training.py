@@ -53,6 +53,56 @@ def test_ipn_import_uses_official_splits_and_writes_auditable_manifest(tmp_path)
     assert report["videos_per_split"] == {"train": 1, "validation": 1, "test": 1}
 
 
+def test_ipn_import_reads_google_drive_text_annotations_without_subject_leakage(
+    tmp_path,
+):
+    videos = tmp_path / "videos"
+    annotations = tmp_path / "annotations"
+    videos.mkdir()
+    annotations.mkdir()
+    class_index = "\n".join(
+        f"{index} {label}" for index, label in enumerate(IPN_LABELS, 1)
+    )
+    (annotations / "classIdx.txt").write_text(class_index, encoding="utf-8")
+
+    train_rows = []
+    for subject in range(1, 6):
+        name = f"1CM42_{subject}_R_#{subject}"
+        (videos / f"{name}.mp4").write_bytes(b"not decoded by import")
+        train_rows.append(f"./frames/{name} {subject} 1 12")
+    test_rows = []
+    for subject in range(6, 8):
+        name = f"1CM42_{subject}_R_#{subject}"
+        (videos / f"{name}.mp4").write_bytes(b"not decoded by import")
+        test_rows.append(f"./frames/{name} {subject} 2 15")
+    (annotations / "Annot_TrainList.txt").write_text(
+        "\n".join(train_rows), encoding="utf-8"
+    )
+    (annotations / "Annot_TestList.txt").write_text(
+        "\n".join(test_rows), encoding="utf-8"
+    )
+
+    records = import_ipn_segments(videos, annotations)
+    repeated = import_ipn_segments(videos, annotations)
+
+    def subjects(split):
+        return {
+            "_".join(
+                record.video_id.replace("\\", "/").split("/")[-1].split("_")[:2]
+            )
+            for record in records
+            if record.split == split
+        }
+
+    assert records == repeated
+    assert {record.split for record in records} == {"train", "validation", "test"}
+    assert subjects("train").isdisjoint(subjects("validation"))
+    assert subjects("train").isdisjoint(subjects("test"))
+    assert subjects("validation").isdisjoint(subjects("test"))
+    assert len(subjects("validation")) == 1
+    assert len(subjects("test")) == 2
+
+
 def test_audit_rejects_video_leakage_and_temporal_sampler_is_bounded(tmp_path):
     video = tmp_path / "shared.mp4"
     records = [_segment(video, "train", "D0X", "same"), _segment(video, "test", "G01", "same")]

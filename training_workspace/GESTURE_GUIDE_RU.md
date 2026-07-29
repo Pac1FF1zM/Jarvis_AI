@@ -10,7 +10,8 @@
 С официальной страницы IPN Hand скачайте только:
 
 - **MP4 videos** — пять файлов `videos01.tgz`…`videos05.tgz`, всего 4.6 ГБ;
-- **Annotations** — небольшой архив с JSON-разметкой.
+- **Annotations** — небольшая папка с `Annot_TrainList.txt`,
+  `Annot_TestList.txt` и `classIdx.txt`.
 
 Не нужны `Video frames`, `Optical flow frames` и `Hand segmentation frames`.
 Не извлекайте MP4 в JPEG: набор из кадров заметно больше исходных видео.
@@ -38,7 +39,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 ## Распаковка и импорт
 
 Создайте, например, папку `D:\JarvisGesture\ipn\videos`. Распакуйте туда
-каждый `.tgz`, чтобы внутри в итоге лежали `.mp4`. Разметку распакуйте в
+каждый `.tgz`, чтобы внутри в итоге лежали `.mp4`. Разметку скачайте или распакуйте в
 `D:\JarvisGesture\ipn\annotations`.
 
 Создайте проверенный manifest:
@@ -49,10 +50,12 @@ Set-ExecutionPolicy -Scope Process Bypass
   -Annotations "D:\JarvisGesture\ipn\annotations"
 ```
 
-Скрипт найдёт официальный ActivityNet-style JSON, сопоставит все сегменты с
-MP4 и откажется создавать manifest при неизвестной метке или отсутствующем
-видео. В `training_workspace/gesture_data/` появится только маленький JSONL;
-сами видео в Git не добавляются.
+Скрипт напрямую читает официальный Google Drive формат `.txt`, сопоставляет
+все сегменты с MP4 и отказывается создавать manifest при неизвестной метке
+или отсутствующем видео. Официальный test остаётся закрытым test, а внутренняя
+validation детерминированно выделяется из train по людям — один человек не
+попадает одновременно в эти части. В `training_workspace/gesture_data/`
+появится только маленький JSONL; сами видео в Git не добавляются.
 
 ## Проверка до обучения
 

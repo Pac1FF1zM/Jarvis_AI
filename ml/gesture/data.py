@@ -1,6 +1,7 @@
 """Leak-resistant MP4 clip loading and IPN annotation import."""
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 from dataclasses import asdict, dataclass
@@ -54,7 +55,7 @@ def _split_name(value: str) -> str:
     return aliases[value]
 
 
-def _find_annotation_file(annotations_dir: Path) -> Path:
+def _find_annotation_file(annotations_dir: Path) -> Path | None:
     candidates = sorted(annotations_dir.rglob("*.json"))
     for candidate in candidates:
         try:
@@ -63,10 +64,122 @@ def _find_annotation_file(annotations_dir: Path) -> Path:
             continue
         if isinstance(payload, dict) and {"labels", "database"} <= set(payload):
             return candidate
-    raise FileNotFoundError(
-        "IPN annotation JSON was not found. Extract the official Annotations archive "
-        "and point --annotations-dir to its extracted folder."
+    return None
+
+
+def _find_named_file(root: Path, name: str) -> Path | None:
+    expected = name.casefold()
+    return next(
+        (
+            path
+            for path in root.rglob("*")
+            if path.is_file() and path.name.casefold() == expected
+        ),
+        None,
     )
+
+
+def _ipn_subject_id(annotation_key: str) -> str:
+    """Return the official subject identity encoded in an IPN video name."""
+    basename = Path(annotation_key.replace("\\", "/").split("^")[0]).stem
+    parts = basename.split("_")
+    if len(parts) < 2:
+        raise ValueError(f"Cannot derive an IPN subject from {annotation_key!r}")
+    return "_".join(parts[:2])
+
+
+def _internal_validation_subjects(keys: Iterable[str]) -> set[str]:
+    """Reserve 20% of official training subjects without touching official test."""
+    subjects = sorted({_ipn_subject_id(key) for key in keys})
+    if len(subjects) < 2:
+        raise ValueError("Official IPN training annotations need at least two subjects")
+    count = max(1, min(len(subjects) - 1, round(len(subjects) * 0.20)))
+    ranked = sorted(
+        subjects,
+        key=lambda subject: hashlib.sha256(
+            f"jarvis-ipn-validation-v1:{subject}".encode("utf-8")
+        ).digest(),
+    )
+    return set(ranked[:count])
+
+
+def _read_class_index(path: Path) -> dict[int, str]:
+    labels: dict[int, str] = {}
+    for line_number, line in enumerate(
+        path.read_text(encoding="utf-8-sig").splitlines(), 1
+    ):
+        if not line.strip():
+            continue
+        parts = line.split()
+        if len(parts) != 2:
+            raise ValueError(f"Invalid class index at {path}:{line_number}: {line!r}")
+        index, label = int(parts[0]), validate_label(parts[1])
+        if index in labels:
+            raise ValueError(f"Duplicate class index {index} in {path}")
+        labels[index] = label
+    if set(labels.values()) != set(IPN_LABELS):
+        raise ValueError(
+            f"IPN class index labels differ from expected labels: {sorted(labels.values())}"
+        )
+    return labels
+
+
+def _read_official_rows(path: Path) -> list[tuple[str, int, int, int]]:
+    rows: list[tuple[str, int, int, int]] = []
+    for line_number, line in enumerate(
+        path.read_text(encoding="utf-8-sig").splitlines(), 1
+    ):
+        if not line.strip():
+            continue
+        parts = line.split()
+        if len(parts) != 4:
+            raise ValueError(f"Invalid IPN annotation at {path}:{line_number}: {line!r}")
+        key, class_index, start_frame, end_frame = parts
+        rows.append((key, int(class_index), int(start_frame), int(end_frame)))
+    if not rows:
+        raise ValueError(f"No IPN annotations found in {path}")
+    return rows
+
+
+def _import_official_text_annotations(
+    video_root: Path,
+    class_index_path: Path,
+    train_path: Path,
+    test_path: Path,
+) -> list[GestureSegment]:
+    labels = _read_class_index(class_index_path)
+    train_rows = _read_official_rows(train_path)
+    test_rows = _read_official_rows(test_path)
+    validation_subjects = _internal_validation_subjects(row[0] for row in train_rows)
+    records: list[GestureSegment] = []
+    resolved_videos: dict[str, Path] = {}
+    for source_split, rows in (("training", train_rows), ("test", test_rows)):
+        for key, class_index, start_frame, end_frame in rows:
+            if class_index not in labels:
+                raise ValueError(f"Unknown IPN class index {class_index} in {key!r}")
+            split = "test"
+            if source_split == "training":
+                split = (
+                    "validation"
+                    if _ipn_subject_id(key) in validation_subjects
+                    else "train"
+                )
+            video_id = key.split("^")[0]
+            video = resolved_videos.get(video_id)
+            if video is None:
+                video = _resolve_video(video_root, video_id)
+                resolved_videos[video_id] = video
+            records.append(
+                GestureSegment(
+                    video=str(video.resolve()),
+                    label=labels[class_index],
+                    start_frame=start_frame,
+                    end_frame=end_frame,
+                    split=split,
+                    video_id=video_id,
+                )
+            )
+    return records
 
 
 def _resolve_video(video_root: Path, annotation_key: str) -> Path:
@@ -88,20 +201,38 @@ def _resolve_video(video_root: Path, annotation_key: str) -> Path:
 
 
 def import_ipn_segments(video_root: Path, annotations_dir: Path) -> list[GestureSegment]:
-    """Read the official IPN ActivityNet-style JSON without importing its code."""
+    """Read the official Google Drive text files or ActivityNet-style JSON."""
+    class_index = _find_named_file(annotations_dir, "classIdx.txt")
+    train_list = _find_named_file(annotations_dir, "Annot_TrainList.txt")
+    test_list = _find_named_file(annotations_dir, "Annot_TestList.txt")
+    if class_index and train_list and test_list:
+        return _import_official_text_annotations(
+            video_root, class_index, train_list, test_list
+        )
+
     annotation_file = _find_annotation_file(annotations_dir)
+    if annotation_file is None:
+        raise FileNotFoundError(
+            "Official IPN annotations were not found. Expected classIdx.txt plus "
+            "Annot_TrainList.txt and Annot_TestList.txt, or an ActivityNet-style JSON."
+        )
     payload = json.loads(annotation_file.read_text(encoding="utf-8-sig"))
     labels = tuple(payload["labels"])
     unexpected = set(labels) - set(IPN_LABELS)
     if unexpected:
         raise ValueError(f"Annotation contains unknown labels: {sorted(unexpected)}")
     records: list[GestureSegment] = []
+    resolved_videos: dict[str, Path] = {}
     for key, value in payload["database"].items():
         annotation = value.get("annotations", {})
         label = annotation.get("label")
         if label is None:
             continue
-        video = _resolve_video(video_root, key)
+        video_id = key.split("^")[0]
+        video = resolved_videos.get(video_id)
+        if video is None:
+            video = _resolve_video(video_root, video_id)
+            resolved_videos[video_id] = video
         records.append(
             GestureSegment(
                 video=str(video.resolve()),
@@ -109,7 +240,7 @@ def import_ipn_segments(video_root: Path, annotations_dir: Path) -> list[Gesture
                 start_frame=int(annotation["start_frame"]),
                 end_frame=int(annotation["end_frame"]),
                 split=_split_name(str(value["subset"])),
-                video_id=key.split("^")[0],
+                video_id=video_id,
             )
         )
     if not records:
