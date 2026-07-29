@@ -183,21 +183,29 @@ def _import_official_text_annotations(
 
 
 def _resolve_video(video_root: Path, annotation_key: str) -> Path:
-    """Locate a downloaded MP4 without relying on a particular archive layout."""
+    """Locate a downloaded AVI/MP4 without relying on an archive layout."""
     name = annotation_key.split("^")[0].replace("\\", "/")
-    direct_candidates = [video_root / name, video_root / f"{name}.mp4"]
+    supported_extensions = (".avi", ".mp4")
+    direct_candidates = [video_root / name]
+    if not Path(name).suffix:
+        direct_candidates.extend(video_root / f"{name}{ext}" for ext in supported_extensions)
     for candidate in direct_candidates:
         if candidate.is_file():
             return candidate
-    basename = Path(name).name
-    if not basename.lower().endswith(".mp4"):
-        basename += ".mp4"
-    matches = list(video_root.rglob(basename))
+    source = Path(name)
+    basenames = (
+        (source.name,)
+        if source.suffix
+        else tuple(f"{source.name}{ext}" for ext in supported_extensions)
+    )
+    matches = [match for basename in basenames for match in video_root.rglob(basename)]
     if len(matches) == 1:
         return matches[0]
     if not matches:
-        raise FileNotFoundError(f"MP4 for annotation {annotation_key!r} was not found under {video_root}")
-    raise ValueError(f"Several MP4 files match {annotation_key!r}: {matches[:3]}")
+        raise FileNotFoundError(
+            f"AVI/MP4 for annotation {annotation_key!r} was not found under {video_root}"
+        )
+    raise ValueError(f"Several video files match {annotation_key!r}: {matches[:3]}")
 
 
 def import_ipn_segments(video_root: Path, annotations_dir: Path) -> list[GestureSegment]:

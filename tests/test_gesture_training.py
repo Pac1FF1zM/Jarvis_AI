@@ -68,7 +68,7 @@ def test_ipn_import_reads_google_drive_text_annotations_without_subject_leakage(
     train_rows = []
     for subject in range(1, 6):
         name = f"1CM42_{subject}_R_#{subject}"
-        (videos / f"{name}.mp4").write_bytes(b"not decoded by import")
+        (videos / f"{name}.avi").write_bytes(b"not decoded by import")
         train_rows.append(f"./frames/{name} {subject} 1 12")
     test_rows = []
     for subject in range(6, 8):
