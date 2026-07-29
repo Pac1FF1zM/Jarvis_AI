@@ -22,6 +22,7 @@ from ml.nlu.finetune import _restore_with_expanded_vocabulary
 from ml.nlu.manager_train import (
     _learning_rate_multiplier,
     _manager_validation_score,
+    _no_slot_false_positive_loss,
     _route_logits,
     _route_targets,
     _slot_consistency_loss,
@@ -217,6 +218,32 @@ def test_slot_consistency_loss_penalises_intent_illegal_slots():
     assert torch.isfinite(illegal.grad).all()
 
 
+def test_no_slot_loss_targets_the_worst_false_positive_token():
+    targets = torch.zeros((2, 3), dtype=torch.long)
+    intents = torch.tensor(
+        [INTENTS.index("general_chat"), INTENTS.index("open_application")]
+    )
+    clean = torch.full((2, 3, len(SLOT_LABELS)), -4.0, requires_grad=True)
+    hallucinated = torch.full(
+        (2, 3, len(SLOT_LABELS)), -4.0, requires_grad=True
+    )
+    with torch.no_grad():
+        clean[:, :, SLOT_LABELS.index("O")] = 4.0
+        hallucinated[:, :, SLOT_LABELS.index("O")] = 4.0
+        hallucinated[0, 1, SLOT_LABELS.index("O")] = -4.0
+        hallucinated[0, 1, SLOT_LABELS.index("B-application")] = 4.0
+
+    clean_loss = _no_slot_false_positive_loss(clean, intents, targets)
+    hallucinated_loss = _no_slot_false_positive_loss(
+        hallucinated, intents, targets
+    )
+    hallucinated_loss.backward()
+
+    assert clean_loss < hallucinated_loss
+    assert hallucinated.grad is not None
+    assert torch.isfinite(hallucinated.grad).all()
+
+
 def test_manager_score_penalises_a_weakest_intent_at_equal_macro_f1():
     common = {
         "intent_macro_f1": 0.95,
@@ -362,7 +389,14 @@ def test_two_stage_search_is_reproducible_and_seed_fair():
     assert len(confirmation) == 6
     assert {item["seed"] for item in confirmation} == {17, 43, 101}
     assert all(
-        {"warmup_epochs", "min_lr_ratio", "ema_decay"} <= item.keys()
+        {
+            "warmup_epochs",
+            "min_lr_ratio",
+            "ema_decay",
+            "slot_o_weight",
+            "no_slot_loss_weight",
+        }
+        <= item.keys()
         for item in first
     )
 
@@ -397,6 +431,36 @@ def test_development_score_distinguishes_raw_neural_slot_quality():
 
     assert _development_score(benchmarks, strong) > _development_score(
         benchmarks, weak
+    )
+
+
+def test_development_score_penalises_raw_hallucination_above_gate():
+    benchmarks = {
+        "custom_validation": {
+            "intent_macro_f1": 0.96,
+            "worst_intent_recall": 0.90,
+            "semantic_frame_exact_match": 0.85,
+            "end_to_end_command_accuracy": 0.85,
+            "slot_hallucination_rate": 0.0,
+            "expected_calibration_error": 0.02,
+        },
+        "legacy_regression": {
+            "intent_macro_f1": 0.96,
+            "worst_intent_recall": 0.90,
+        },
+    }
+    common = {
+        "custom_validation_slot_entity_f1": 0.80,
+        "custom_validation_semantic_frame_exact_match": 0.65,
+        "custom_validation_end_to_end_command_accuracy": 0.70,
+    }
+
+    assert _development_score(
+        benchmarks,
+        {**common, "custom_validation_slot_hallucination_rate": 0.19},
+    ) > _development_score(
+        benchmarks,
+        {**common, "custom_validation_slot_hallucination_rate": 0.21},
     )
 
 
@@ -491,7 +555,10 @@ def test_workspace_uses_char_manager_experiments_and_strict_export_gates():
     assert search["enabled"] is True
     assert search["trials"] >= 20
     assert search["space"]["method"] == ["augmented"]
+    assert search["phase_one_seed"] == 43
     assert "ema_decay" in search["space"]
+    assert "slot_o_weight" in search["space"]
+    assert "no_slot_loss_weight" in search["space"]
     assert len(search["confirmation_seeds"]) >= 5
     assert len({experiment["seed"] for experiment in experiments}) == 1
     assert selection["max_legacy_macro_f1_drop"] == 0.0

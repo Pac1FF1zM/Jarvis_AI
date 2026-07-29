@@ -154,6 +154,32 @@ def _slot_consistency_loss(
     return -torch.log1p(-illegal_mass[valid].clamp(max=1.0 - 1e-6)).mean()
 
 
+def _no_slot_false_positive_loss(
+    slot_logits: torch.Tensor,
+    intent_targets: torch.Tensor,
+    slot_targets: torch.Tensor,
+) -> torch.Tensor:
+    """Penalise the most entity-like token in every no-slot utterance.
+
+    The quality gate is frame-level: one hallucinated token makes the whole
+    utterance fail. Optimising the worst token mirrors that behavior more
+    closely than another corpus-wide token average.
+    """
+    no_slot_intents = torch.tensor(
+        [not INTENT_SLOTS[intent] for intent in INTENTS],
+        dtype=torch.bool,
+        device=slot_logits.device,
+    )
+    selected_rows = no_slot_intents[intent_targets]
+    if not bool(selected_rows.any()):
+        return slot_logits.sum() * 0.0
+    probabilities = torch.softmax(slot_logits[selected_rows], dim=-1)
+    entity_mass = 1.0 - probabilities[..., 0]
+    valid = slot_targets[selected_rows] != IGNORE_INDEX
+    worst_token_mass = entity_mass.masked_fill(~valid, 0.0).amax(dim=1)
+    return -torch.log1p(-worst_token_mass.clamp(max=1.0 - 1e-6)).mean()
+
+
 def _manager_validation_score(
     custom_metrics: dict[str, object], legacy_metrics: dict[str, object]
 ) -> float:
@@ -172,7 +198,12 @@ def _manager_validation_score(
         + 0.20 * float(custom_metrics["slot_entity_f1"])
         + 0.15 * float(custom_metrics["semantic_frame_exact_match"])
     )
-    return score - 0.20 * float(custom_metrics["slot_hallucination_rate"])
+    hallucination = float(custom_metrics["slot_hallucination_rate"])
+    return (
+        score
+        - 0.20 * hallucination
+        - 0.30 * max(hallucination - 0.20, 0.0)
+    )
 
 
 def _learning_rate_multiplier(
@@ -233,6 +264,10 @@ def _model_and_tokenizer(args: argparse.Namespace, texts: list[str]):
 
 def train_manager(args: argparse.Namespace) -> dict[str, Any]:
     set_seed(args.seed)
+    if args.slot_o_weight <= 0.0:
+        raise ValueError("slot_o_weight must be positive")
+    if args.no_slot_loss_weight < 0.0:
+        raise ValueError("no_slot_loss_weight must not be negative")
     if not 0.0 <= args.ema_decay < 1.0:
         raise ValueError("ema_decay must be between 0 (inclusive) and 1 (exclusive)")
     if args.device == "cuda" and not torch.cuda.is_available():
@@ -285,7 +320,9 @@ def train_manager(args: argparse.Namespace) -> dict[str, Any]:
     )
     intent_loss = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
     route_loss = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
-    slot_weights = torch.tensor((0.2, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0), device=device)
+    slot_weights = torch.tensor(
+        (args.slot_o_weight, 2.0, 1.0, 2.0, 1.0, 2.0, 1.0), device=device
+    )
     slot_loss = nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX, weight=slot_weights)
     amp_enabled = bool(args.amp and device.type == "cuda")
     scaler = _make_grad_scaler(amp_enabled)
@@ -351,6 +388,9 @@ def train_manager(args: argparse.Namespace) -> dict[str, Any]:
                     slot_logits.reshape(-1, len(SLOT_LABELS)), slots.reshape(-1)
                 )
                 loss = loss + args.slot_consistency_weight * _slot_consistency_loss(
+                    slot_logits, intents, slots
+                )
+                loss = loss + args.no_slot_loss_weight * _no_slot_false_positive_loss(
                     slot_logits, intents, slots
                 )
             scaler.scale(loss).backward()
@@ -451,7 +491,9 @@ def train_manager(args: argparse.Namespace) -> dict[str, Any]:
         "manager_routes": [route for route, _intents in ROUTES],
         "route_loss_weight": args.route_loss_weight,
         "slot_loss_weight": args.slot_loss_weight,
+        "slot_o_weight": args.slot_o_weight,
         "slot_consistency_weight": args.slot_consistency_weight,
+        "no_slot_loss_weight": args.no_slot_loss_weight,
         "warmup_epochs": args.warmup_epochs,
         "min_lr_ratio": args.min_lr_ratio,
         "ema_decay": args.ema_decay,
@@ -504,7 +546,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hidden-dim", type=int, default=64)
     parser.add_argument("--max-length", type=int, default=128)
     parser.add_argument("--slot-loss-weight", type=float, default=0.6)
+    parser.add_argument("--slot-o-weight", type=float, default=0.26)
     parser.add_argument("--slot-consistency-weight", type=float, default=0.3)
+    parser.add_argument("--no-slot-loss-weight", type=float, default=0.10)
     parser.add_argument("--route-loss-weight", type=float, default=0.35)
     parser.add_argument("--label-smoothing", type=float, default=0.04)
     parser.add_argument("--warmup-epochs", type=int, default=5)

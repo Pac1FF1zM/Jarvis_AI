@@ -185,7 +185,8 @@ def _development_score(
     )
     return (
         score
-        - 0.10 * raw_hallucination
+        - 0.15 * raw_hallucination
+        - 0.20 * max(raw_hallucination - 0.20, 0.0)
         - 0.10 * custom["slot_hallucination_rate"]
         - 0.10 * custom["expected_calibration_error"]
     )
@@ -355,8 +356,12 @@ def run(
             ),
             "--route-loss-weight", str(experiment.get("route_loss_weight", 0.35)),
             "--slot-loss-weight", str(experiment.get("slot_loss_weight", 0.6)),
+            "--slot-o-weight", str(experiment.get("slot_o_weight", 0.26)),
             "--slot-consistency-weight", str(
                 experiment.get("slot_consistency_weight", 0.3)
+            ),
+            "--no-slot-loss-weight", str(
+                experiment.get("no_slot_loss_weight", 0.10)
             ),
             "--embedding-dim", str(experiment.get("embedding_dim", 48)),
             "--hidden-dim", str(experiment.get("hidden_dim", 64)),

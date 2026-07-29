@@ -16,35 +16,37 @@ data:
   # Older frozen set, never used while designing the new manager experiments.
   final_holdout: ../ml/nlu/holdout_v2.jsonl
 
-# Stability search v2: stay near the strongest search_08 family while testing
-# regularisation that reduces seed variance. All phase-one trials share a seed;
-# finalists must still pass the unchanged gates on four of five seeds.
+# Stability search v3: target the raw slot hallucination exposed by v2 and use
+# seed 43 (a weak v2 seed) during phase one. Finalists must still pass the
+# unchanged gates on four of five seeds.
 search:
   enabled: true
   search_seed: 20260729
   trials: 24
-  phase_one_seed: 17
-  phase_one_epochs: 40
-  phase_one_patience: 10
+  phase_one_seed: 43
+  phase_one_epochs: 50
+  phase_one_patience: 16
   top_k: 4
   confirmation_seeds: [17, 43, 101, 211, 307]
   confirmation_epochs: 80
-  confirmation_patience: 16
+  confirmation_patience: 20
   min_passing_seeds: 4
   max_length: 128
   space:
     method: [augmented]
     batch_size: [128, 256]
-    learning_rate: [0.00085, 0.00135]
-    weight_decay: [0.00008, 0.00022]
-    custom_fraction: [0.47, 0.56]
+    learning_rate: [0.00095, 0.00130]
+    weight_decay: [0.00012, 0.00022]
+    custom_fraction: [0.49, 0.55]
     curriculum_start_fraction: [0.18, 0.22]
-    route_loss_weight: [0.25, 0.34]
-    slot_loss_weight: [1.05, 1.45]
-    slot_consistency_weight: [0.14, 0.38]
-    embedding_dim: [64, 96]
-    hidden_dim: [112, 128, 160]
-    label_smoothing: [0.01, 0.035]
+    route_loss_weight: [0.27, 0.36]
+    slot_loss_weight: [1.25, 1.55]
+    slot_o_weight: [0.22, 0.36]
+    slot_consistency_weight: [0.16, 0.34]
+    no_slot_loss_weight: [0.05, 0.30]
+    embedding_dim: [64]
+    hidden_dim: [128, 160]
+    label_smoothing: [0.005, 0.03]
     warmup_epochs: [3, 5, 7]
     min_lr_ratio: [0.05, 0.20]
     ema_decay: [0.992, 0.998]
@@ -62,7 +64,9 @@ experiments:
     curriculum_start_fraction: 0.20
     route_loss_weight: 0.35
     slot_loss_weight: 0.9
+    slot_o_weight: 0.26
     slot_consistency_weight: 0.3
+    no_slot_loss_weight: 0.10
     patience: 12
     label_smoothing: 0.04
     warmup_epochs: 5
@@ -80,7 +84,9 @@ experiments:
     custom_fraction: 0.40
     route_loss_weight: 0.40
     slot_loss_weight: 1.1
+    slot_o_weight: 0.26
     slot_consistency_weight: 0.4
+    no_slot_loss_weight: 0.10
     patience: 12
     label_smoothing: 0.04
     warmup_epochs: 5
@@ -98,7 +104,9 @@ experiments:
     custom_fraction: 0.35
     route_loss_weight: 0.30
     slot_loss_weight: 0.8
+    slot_o_weight: 0.26
     slot_consistency_weight: 0.3
+    no_slot_loss_weight: 0.10
     patience: 12
     label_smoothing: 0.04
     warmup_epochs: 5

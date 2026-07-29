@@ -23,7 +23,8 @@ PyTorch используется только как вычислительны�
    один бесполезный `<unk>`;
 6. балансирует не только intents, но и долю старого/нового корпуса, не позволяя
    новым шаблонам вытеснить старые навыки;
-7. добавляет иерархический route-loss и штраф за слоты, несовместимые с intent;
+7. добавляет иерархический route-loss, штраф за слоты, несовместимые с intent,
+   и frame-level no-slot loss против хотя бы одного ложного аргумента;
 8. применяет AMP, TF32, gradient clipping, label smoothing, warmup + cosine
    decay, EMA весов, калибровку и stability-aware early stopping по macro-F1,
    worst-class recall, slots и полной semantic frame;
@@ -276,7 +277,8 @@ python main.py --text "какие приложения ты можешь отк�
 - `search.top_k`: сколько конфигураций проходят в дорогую проверку;
 - `search.confirmation_seeds`: независимые повторы финалистов;
 - `search.space`: диапазоны learning rate, warmup, cosine minimum, EMA decay,
-  доли корпуса, размеров сети и весов route/slot/slot-consistency losses;
+  доли корпуса, размеров сети, веса класса `O` и весов
+  route/slot/slot-consistency/no-slot losses;
 - `search.phase_one_patience` и `confirmation_patience`: сколько эпох ждать
   улучшения общей development-метрики;
 - `selection.min_custom_macro_f1_improvement`: прирост на новых командах;

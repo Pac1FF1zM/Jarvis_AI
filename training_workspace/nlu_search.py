@@ -69,10 +69,18 @@ def generate_phase_one(search: dict[str, Any]) -> list[dict[str, Any]]:
             "slot_loss_weight": _uniform(
                 rng, list(space.get("slot_loss_weight", [0.60, 1.60])), "slot_loss_weight"
             ),
+            "slot_o_weight": _uniform(
+                rng, list(space.get("slot_o_weight", [0.22, 0.36])), "slot_o_weight"
+            ),
             "slot_consistency_weight": _uniform(
                 rng,
                 list(space.get("slot_consistency_weight", [0.10, 0.80])),
                 "slot_consistency_weight",
+            ),
+            "no_slot_loss_weight": _uniform(
+                rng,
+                list(space.get("no_slot_loss_weight", [0.05, 0.30])),
+                "no_slot_loss_weight",
             ),
             "embedding_dim": int(
                 _choice(rng, list(space.get("embedding_dim", [48, 64, 96])), "embedding_dim")
