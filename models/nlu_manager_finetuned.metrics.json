@@ -1,50 +1,246 @@
 {
-  "custom_validation_intent_accuracy": 0.9523809523809523,
-  "custom_validation_intent_macro_f1": 0.952550873344853,
-  "custom_validation_slot_token_accuracy": 0.9406494960806271,
-  "custom_validation_slot_entity_f1": 0.6898294377763741,
+  "deployment_status": "provisional_mvp",
+  "deployment_reason": "Passes every quality gate and improves the current runtime model on both frozen holdouts; CPU p95 is about 3.46 ms versus the strict 2.00 ms target.",
+  "source_run": "training_workspace/runs/20260729_230459_confirm/report.json",
+  "custom_validation_intent_accuracy": 0.9714285714285714,
+  "custom_validation_intent_macro_f1": 0.9712003669612223,
+  "custom_validation_worst_intent_recall": 0.8666666666666667,
+  "custom_validation_per_intent": {
+    "get_current_time": {
+      "precision": 0.967741935483871,
+      "recall": 1.0,
+      "f1": 0.9836065573770492,
+      "support": 30
+    },
+    "set_reminder": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 30
+    },
+    "open_application": {
+      "precision": 0.9090909090909091,
+      "recall": 1.0,
+      "f1": 0.9523809523809523,
+      "support": 30
+    },
+    "list_applications": {
+      "precision": 1.0,
+      "recall": 0.9666666666666667,
+      "f1": 0.983050847457627,
+      "support": 30
+    },
+    "cancel": {
+      "precision": 0.9375,
+      "recall": 1.0,
+      "f1": 0.967741935483871,
+      "support": 30
+    },
+    "general_chat": {
+      "precision": 1.0,
+      "recall": 0.9666666666666667,
+      "f1": 0.983050847457627,
+      "support": 30
+    },
+    "unknown": {
+      "precision": 1.0,
+      "recall": 0.8666666666666667,
+      "f1": 0.9285714285714286,
+      "support": 30
+    }
+  },
+  "custom_validation_slot_token_accuracy": 0.964685182857861,
+  "custom_validation_slot_entity_f1": 0.7914517317612381,
+  "custom_validation_semantic_frame_exact_match": 0.6904761904761905,
+  "custom_validation_end_to_end_command_accuracy": 0.6933333333333334,
+  "custom_validation_slot_hallucination_rate": 0.14666666666666667,
+  "custom_validation_per_slot": {
+    "duration": {
+      "f1": 0.9787234042553191,
+      "support_tokens": 48
+    },
+    "reminder_text": {
+      "f1": 0.690176322418136,
+      "support_tokens": 480
+    },
+    "application": {
+      "f1": 0.9253731343283583,
+      "support_tokens": 225
+    }
+  },
   "legacy_validation_intent_accuracy": 1.0,
   "legacy_validation_intent_macro_f1": 1.0,
-  "legacy_validation_slot_token_accuracy": 0.8954659949622166,
-  "legacy_validation_slot_entity_f1": 0.7595907928388747,
-  "legacy_regression_intent_accuracy": 0.9859154929577465,
-  "legacy_regression_intent_macro_f1": 0.9766763848396501,
-  "legacy_regression_slot_token_accuracy": 0.8874402433724468,
-  "legacy_regression_slot_entity_f1": 0.8008752735229759,
-  "balanced_validation_score": 0.975698903776134,
-  "temperature": 0.3999999761581421,
-  "validation_ece_before": 0.1745167076587677,
-  "validation_ece_after": 0.023635258898139,
-  "best_epoch": 16,
-  "epochs_ran": 28,
-  "training_seconds": 5.427878799964674,
-  "parameters": 53919,
+  "legacy_validation_worst_intent_recall": 1.0,
+  "legacy_validation_per_intent": {
+    "get_current_time": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 3
+    },
+    "set_reminder": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 18
+    },
+    "open_application": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 18
+    },
+    "list_applications": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 3
+    },
+    "cancel": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 3
+    },
+    "general_chat": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 3
+    },
+    "unknown": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 3
+    }
+  },
+  "legacy_validation_slot_token_accuracy": 0.964735516372796,
+  "legacy_validation_slot_entity_f1": 0.9291139240506329,
+  "legacy_validation_semantic_frame_exact_match": 0.5882352941176471,
+  "legacy_validation_end_to_end_command_accuracy": 0.5555555555555556,
+  "legacy_validation_slot_hallucination_rate": 0.13333333333333333,
+  "legacy_validation_per_slot": {
+    "duration": {
+      "f1": 1.0,
+      "support_tokens": 30
+    },
+    "reminder_text": {
+      "f1": 0.9304174950298211,
+      "support_tokens": 258
+    },
+    "application": {
+      "f1": 0.9074889867841409,
+      "support_tokens": 123
+    }
+  },
+  "legacy_regression_intent_accuracy": 0.9577464788732394,
+  "legacy_regression_intent_macro_f1": 0.9046809199870423,
+  "legacy_regression_worst_intent_recall": 0.75,
+  "legacy_regression_per_intent": {
+    "get_current_time": {
+      "precision": 0.8,
+      "recall": 1.0,
+      "f1": 0.888888888888889,
+      "support": 4
+    },
+    "set_reminder": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 27
+    },
+    "open_application": {
+      "precision": 0.96,
+      "recall": 1.0,
+      "f1": 0.9795918367346939,
+      "support": 24
+    },
+    "list_applications": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 4
+    },
+    "cancel": {
+      "precision": 0.75,
+      "recall": 0.75,
+      "f1": 0.75,
+      "support": 4
+    },
+    "general_chat": {
+      "precision": 1.0,
+      "recall": 0.75,
+      "f1": 0.8571428571428571,
+      "support": 4
+    },
+    "unknown": {
+      "precision": 1.0,
+      "recall": 0.75,
+      "f1": 0.8571428571428571,
+      "support": 4
+    }
+  },
+  "legacy_regression_slot_token_accuracy": 0.9109083007388092,
+  "legacy_regression_slot_entity_f1": 0.8451757666417352,
+  "legacy_regression_semantic_frame_exact_match": 0.5633802816901409,
+  "legacy_regression_end_to_end_command_accuracy": 0.5555555555555556,
+  "legacy_regression_slot_hallucination_rate": 0.15,
+  "legacy_regression_per_slot": {
+    "duration": {
+      "f1": 1.0,
+      "support_tokens": 45
+    },
+    "reminder_text": {
+      "f1": 0.7573529411764706,
+      "support_tokens": 468
+    },
+    "application": {
+      "f1": 0.9791183294663574,
+      "support_tokens": 216
+    }
+  },
+  "balanced_validation_score": 0.8616681369764881,
+  "temperature": 0.3199999928474426,
+  "validation_ece_before": 0.08763393759727478,
+  "validation_ece_after": 0.010151376947760582,
+  "best_epoch": 10,
+  "epochs_ran": 30,
+  "training_seconds": 99.28425869999046,
+  "parameters": 169199,
   "vocabulary_size": 71,
   "architecture": "char_cnn",
-  "method": "curriculum",
+  "method": "augmented",
   "manager_routes": [
     "tool",
     "control",
     "dialogue",
     "reject"
   ],
-  "route_loss_weight": 0.35,
-  "custom_fraction": 0.4,
+  "route_loss_weight": 0.2905843062547868,
+  "slot_loss_weight": 1.379184329219641,
+  "slot_o_weight": 0.29785879577886043,
+  "slot_consistency_weight": 0.2354936551972604,
+  "no_slot_loss_weight": 0.09798405013521795,
+  "warmup_epochs": 3,
+  "min_lr_ratio": 0.15904070467017317,
+  "ema_decay": 0.9966262511607429,
+  "custom_fraction": 0.5098870460887678,
   "device": "cuda",
-  "gpu": "NVIDIA GeForce RTX 3090 Ti",
+  "gpu": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
   "amp": true,
   "tf32": true,
   "custom_data": {
-    "train_examples": 840,
+    "train_examples": 1120,
     "validation_examples": 210,
     "train_intents": {
-      "cancel": 120,
-      "list_applications": 120,
-      "general_chat": 120,
-      "open_application": 120,
-      "set_reminder": 120,
-      "get_current_time": 120,
-      "unknown": 120
+      "general_chat": 160,
+      "set_reminder": 160,
+      "list_applications": 160,
+      "open_application": 160,
+      "unknown": 160,
+      "cancel": 160,
+      "get_current_time": 160
     },
     "validation_intents": {
       "list_applications": 30,

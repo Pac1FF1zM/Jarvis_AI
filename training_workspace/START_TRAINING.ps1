@@ -1,7 +1,8 @@
 param(
     [switch]$CheckOnly,
     [string]$Config = "",
-    [string]$ReevaluateRun = ""
+    [string]$ReevaluateRun = "",
+    [string]$ConfirmFromRun = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,6 +22,9 @@ if ($CheckOnly) {
 }
 if ($ReevaluateRun) {
     $arguments += @("--reevaluate-run", $ReevaluateRun)
+}
+if ($ConfirmFromRun) {
+    $arguments += @("--confirm-from-run", $ConfirmFromRun)
 }
 Push-Location $repo
 try {

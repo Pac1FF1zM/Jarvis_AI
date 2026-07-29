@@ -35,7 +35,12 @@ from training_workspace.build_dataset import (
     build,
 )
 from training_workspace.nlu_search import confirmation_experiments, generate_phase_one
-from training_workspace.run import _development_score, run
+from training_workspace.run import (
+    _benchmark_with_stable_latency,
+    _development_score,
+    _rank_phase_results,
+    run,
+)
 
 
 def test_custom_jsonl_builds_slot_spans(tmp_path: Path):
@@ -464,6 +469,61 @@ def test_development_score_penalises_raw_hallucination_above_gate():
     )
 
 
+def test_phase_ranking_prefers_hard_gate_feasibility_over_scalar_score():
+    def result(name: str, *, score: float, raw_slot: float) -> dict:
+        return {
+            "name": name,
+            "selection_score": score,
+            "metrics": {
+                "custom_validation_slot_entity_f1": raw_slot,
+                "custom_validation_semantic_frame_exact_match": 0.65,
+                "custom_validation_slot_hallucination_rate": 0.10,
+            },
+            "benchmarks": {
+                "custom_validation": {"latency_ms_p95": 1.5}
+            },
+        }
+
+    selected, failures = _rank_phase_results(
+        [
+            result("high_score_but_invalid", score=0.90, raw_slot=0.76),
+            result("feasible", score=0.82, raw_slot=0.79),
+        ],
+        {
+            "min_raw_slot_entity_f1": 0.78,
+            "min_raw_semantic_frame_exact_match": 0.60,
+            "max_raw_slot_hallucination_rate": 0.20,
+            "max_p95_latency_ms": 2.0,
+        },
+        top_k=1,
+    )
+
+    assert selected[0]["name"] == "feasible"
+    assert failures["feasible"] == []
+    assert failures["high_score_but_invalid"] == ["raw_slot_entity_f1"]
+
+
+def test_stable_latency_uses_median_p95(monkeypatch):
+    measured = iter(
+        [
+            {"latency_ms_median": 1.0, "latency_ms_p95": 4.0},
+            {"latency_ms_median": 1.1, "latency_ms_p95": 1.8},
+            {"latency_ms_median": 1.2, "latency_ms_p95": 2.2},
+        ]
+    )
+    monkeypatch.setattr(
+        "training_workspace.run.benchmark", lambda *_args, **_kwargs: next(measured)
+    )
+
+    result = _benchmark_with_stable_latency(
+        Path("unused.pt"), [], latency_trials=3, device="cpu", warmup=0, repetitions=1
+    )
+
+    assert result["latency_ms_median"] == 1.1
+    assert result["latency_ms_p95"] == 2.2
+    assert result["latency_trials"]["p95_ms"] == [4.0, 1.8, 2.2]
+
+
 def test_reevaluation_reuses_checkpoints_without_training(tmp_path: Path, monkeypatch):
     root = Path(__file__).resolve().parents[1]
     base = tmp_path / "base.pt"
@@ -522,6 +582,7 @@ def test_reevaluation_reuses_checkpoints_without_training(tmp_path: Path, monkey
         "semantic_frame_exact_match": 0.8,
         "end_to_end_command_accuracy": 0.8,
         "expected_calibration_error": 0.02,
+        "latency_ms_median": 0.4,
         "latency_ms_p95": 0.5,
     }
     monkeypatch.setattr("training_workspace.run.benchmark", lambda *a, **k: measured)
@@ -536,6 +597,121 @@ def test_reevaluation_reuses_checkpoints_without_training(tmp_path: Path, monkey
     assert report["reevaluation"]["training_performed"] is False
     assert report["reevaluation"]["checkpoints_reused"] == 1
     assert report["selection"]["status"] == "rejected"
+
+
+def test_selective_confirmation_skips_phase_training_and_uses_feasible_candidate(
+    tmp_path: Path, monkeypatch
+):
+    root = Path(__file__).resolve().parents[1]
+    base = tmp_path / "base.pt"
+    base.write_bytes(b"baseline")
+    metrics = {
+        "custom_validation_slot_entity_f1": 0.80,
+        "custom_validation_semantic_frame_exact_match": 0.65,
+        "custom_validation_end_to_end_command_accuracy": 0.70,
+        "custom_validation_slot_hallucination_rate": 0.10,
+    }
+    measured = {
+        "intent_accuracy": 0.9,
+        "intent_macro_f1": 0.9,
+        "worst_intent_recall": 0.8,
+        "slot_entity_f1": 0.8,
+        "slot_hallucination_rate": 0.0,
+        "semantic_frame_exact_match": 0.8,
+        "end_to_end_command_accuracy": 0.8,
+        "expected_calibration_error": 0.02,
+        "latency_ms_median": 0.4,
+        "latency_ms_p95": 0.5,
+    }
+
+    def phase_result(name: str, raw_slot: float, score: float) -> dict:
+        return {
+            "name": name,
+            "config": {
+                "name": name,
+                "trainer": "manager",
+                "architecture": "char_cnn",
+                "method": "augmented",
+                "seed": 43,
+            },
+            "metrics": {**metrics, "custom_validation_slot_entity_f1": raw_slot},
+            "benchmarks": {"custom_validation": measured},
+            "selection_score": score,
+        }
+
+    source_report = tmp_path / "source_report.json"
+    source_report.write_text(
+        json.dumps(
+            {
+                "search": {
+                    "phase_one_seed": 43,
+                    "phase_one": [
+                        phase_result("invalid_high_score", 0.75, 0.95),
+                        phase_result("feasible", 0.80, 0.85),
+                    ],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = {
+        "base_checkpoint": str(base),
+        "training_device": "cpu",
+        "require_cuda": False,
+        "runs_dir": str(tmp_path / "runs"),
+        "export_dir": str(tmp_path / "export"),
+        "data": {
+            "train": str(root / "training_workspace/data/train.jsonl"),
+            "validation": str(root / "training_workspace/data/validation.jsonl"),
+            "evaluation_holdout": str(
+                root / "training_workspace/data/evaluation_holdout.jsonl"
+            ),
+            "final_holdout": str(root / "ml/nlu/holdout_v2.jsonl"),
+        },
+        "search": {
+            "enabled": True,
+            "trials": 2,
+            "top_k": 1,
+            "confirmation_seeds": [17, 43, 101],
+            "confirmation_epochs": 1,
+            "confirmation_patience": 1,
+        },
+        "benchmark": {
+            "device": "cpu",
+            "warmup": 0,
+            "repetitions": 1,
+            "latency_trials": 1,
+        },
+        "selection": {
+            "min_custom_macro_f1_improvement": 1.0,
+            "min_raw_slot_entity_f1": 0.78,
+            "min_raw_semantic_frame_exact_match": 0.60,
+            "max_raw_slot_hallucination_rate": 0.20,
+            "max_p95_latency_ms": 2.0,
+        },
+    }
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    monkeypatch.setattr("training_workspace.run.benchmark", lambda *a, **k: measured)
+    trained: list[str] = []
+
+    def fake_training(command, **_kwargs):
+        output = Path(command[command.index("--output") + 1])
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"checkpoint")
+        output.with_suffix(".metrics.json").write_text(
+            json.dumps(metrics), encoding="utf-8"
+        )
+        trained.append(output.stem)
+
+    monkeypatch.setattr("training_workspace.run.subprocess.run", fake_training)
+
+    report = run(config_path, confirm_from_run=source_report)
+
+    assert report["search"]["method"] == "selective_confirmation_feasible_first"
+    assert report["search"]["finalists"] == ["feasible"]
+    assert len(trained) == 3
+    assert {item["candidate"] for item in report["experiments"]} == {"feasible"}
 
 
 def test_workspace_uses_char_manager_experiments_and_strict_export_gates():
@@ -594,3 +770,5 @@ def test_start_script_exposes_checkpoint_reevaluation_mode():
 
     assert "ReevaluateRun" in script
     assert "--reevaluate-run" in script
+    assert "ConfirmFromRun" in script
+    assert "--confirm-from-run" in script

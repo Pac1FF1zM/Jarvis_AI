@@ -120,6 +120,8 @@ benchmark:
   device: cpu
   warmup: 30
   repetitions: 500
+  # Median of repeated p95 trials resists transient Windows scheduler spikes.
+  latency_trials: 3
 
 selection:
   # A fast model is useless if it forgets old commands or overfits templates.

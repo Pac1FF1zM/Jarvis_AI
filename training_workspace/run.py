@@ -120,6 +120,34 @@ def benchmark(
     }
 
 
+def _benchmark_with_stable_latency(
+    checkpoint: Path,
+    examples: list[Any],
+    *,
+    latency_trials: int,
+    **benchmark_kwargs: Any,
+) -> dict[str, Any]:
+    """Use median p95 across repeated trials to reduce Windows scheduler noise."""
+    if latency_trials < 1:
+        raise ValueError("benchmark.latency_trials must be positive")
+    trials = [
+        benchmark(checkpoint, examples, **benchmark_kwargs)
+        for _ in range(latency_trials)
+    ]
+    result = dict(trials[0])
+    medians = [float(item["latency_ms_median"]) for item in trials]
+    p95_values = [float(item["latency_ms_p95"]) for item in trials]
+    result["latency_ms_median"] = statistics.median(medians)
+    result["latency_ms_p95"] = statistics.median(p95_values)
+    result["latency_trials"] = {
+        "count": latency_trials,
+        "aggregation": "median",
+        "median_ms": medians,
+        "p95_ms": p95_values,
+    }
+    return result
+
+
 def _load_intent_only_jsonl(path: Path) -> list[Example]:
     """Load a frozen intent holdout without exposing its slots to training."""
     examples: list[Example] = []
@@ -192,6 +220,53 @@ def _development_score(
     )
 
 
+def _phase_gate_failures(
+    result: dict[str, Any], selection: dict[str, Any]
+) -> list[str]:
+    """Return hard model constraints that phase-one ranking may not hide."""
+    metrics = result["metrics"]
+    custom = result["benchmarks"]["custom_validation"]
+    failures: list[str] = []
+    if metrics["custom_validation_slot_entity_f1"] < float(
+        selection.get("min_raw_slot_entity_f1", 0.0)
+    ):
+        failures.append("raw_slot_entity_f1")
+    if metrics["custom_validation_semantic_frame_exact_match"] < float(
+        selection.get("min_raw_semantic_frame_exact_match", 0.0)
+    ):
+        failures.append("raw_semantic_frame_exact_match")
+    if metrics["custom_validation_slot_hallucination_rate"] > float(
+        selection.get("max_raw_slot_hallucination_rate", 1.0)
+    ):
+        failures.append("raw_slot_hallucination_rate")
+    if custom["latency_ms_p95"] > float(
+        selection.get("max_p95_latency_ms", float("inf"))
+    ):
+        failures.append("latency_p95")
+    return failures
+
+
+def _rank_phase_results(
+    results: list[dict[str, Any]],
+    selection: dict[str, Any],
+    *,
+    top_k: int,
+) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
+    """Prefer feasible candidates, then use score only inside the same tier."""
+    failures = {
+        str(item["name"]): _phase_gate_failures(item, selection) for item in results
+    }
+    ranked = sorted(
+        results,
+        key=lambda item: (
+            len(failures[str(item["name"])]),
+            -float(item["selection_score"]),
+            float(item["benchmarks"]["custom_validation"]["latency_ms_p95"]),
+        ),
+    )
+    return ranked[:top_k], failures
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -223,7 +298,10 @@ def run(
     *,
     check_only: bool = False,
     reevaluate_run: Path | None = None,
+    confirm_from_run: Path | None = None,
 ) -> dict[str, Any]:
+    if reevaluate_run is not None and confirm_from_run is not None:
+        raise ValueError("reevaluate_run and confirm_from_run are mutually exclusive")
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     environment = _environment(bool(raw.get("require_cuda", True)) and not check_only)
     base_checkpoint = _resolve(raw["base_checkpoint"], config_path)
@@ -273,6 +351,7 @@ def run(
         }
     )
     search = raw.get("search") or {}
+    selection = raw.get("selection") or {}
     search_enabled = bool(search.get("enabled", False))
     phase_one_experiments = (
         generate_phase_one(search) if search_enabled else list(raw.get("experiments") or [])
@@ -309,7 +388,11 @@ def run(
     # An old checkpoint may remain for forensic comparison, but it cannot be
     # copied after a new failed run because every run invalidates approval.
     approval_path.unlink(missing_ok=True)
-    suffix = "_reeval" if reevaluate_run is not None else ""
+    suffix = (
+        "_reeval"
+        if reevaluate_run is not None
+        else "_confirm" if confirm_from_run is not None else ""
+    )
     run_dir = run_root / (datetime.now().strftime("%Y%m%d_%H%M%S") + suffix)
     run_dir.mkdir(parents=True, exist_ok=False)
     training_path = train_path
@@ -320,13 +403,19 @@ def run(
     benchmark_device = str(benchmark_cfg.get("device", "cpu"))
     warmup = int(benchmark_cfg.get("warmup", 20))
     repetitions = int(benchmark_cfg.get("repetitions", 300))
+    latency_trials = int(benchmark_cfg.get("latency_trials", 1))
     benchmark_kwargs = {
         "device": benchmark_device,
         "warmup": warmup,
         "repetitions": repetitions,
     }
     baseline = {
-        "custom_validation": benchmark(base_checkpoint, custom_validation, **benchmark_kwargs),
+        "custom_validation": _benchmark_with_stable_latency(
+            base_checkpoint,
+            custom_validation,
+            latency_trials=latency_trials,
+            **benchmark_kwargs,
+        ),
         "legacy_validation": benchmark(base_checkpoint, legacy_validation, **benchmark_kwargs),
         "legacy_regression": benchmark(base_checkpoint, legacy_regression, **benchmark_kwargs),
     }
@@ -377,7 +466,12 @@ def run(
         subprocess.run(command, cwd=REPO_ROOT, check=True)
         metrics = json.loads(output.with_suffix(".metrics.json").read_text(encoding="utf-8"))
         measured = {
-            "custom_validation": benchmark(output, custom_validation, **benchmark_kwargs),
+            "custom_validation": _benchmark_with_stable_latency(
+                output,
+                custom_validation,
+                latency_trials=latency_trials,
+                **benchmark_kwargs,
+            ),
             "legacy_validation": benchmark(output, legacy_validation, **benchmark_kwargs),
             "legacy_regression": benchmark(output, legacy_regression, **benchmark_kwargs),
         }
@@ -412,8 +506,11 @@ def run(
                 checkpoint.with_suffix(".metrics.json").read_text(encoding="utf-8")
             )
             measured = {
-                "custom_validation": benchmark(
-                    checkpoint, custom_validation, **benchmark_kwargs
+                "custom_validation": _benchmark_with_stable_latency(
+                    checkpoint,
+                    custom_validation,
+                    latency_trials=latency_trials,
+                    **benchmark_kwargs,
                 ),
                 "legacy_validation": benchmark(
                     checkpoint, legacy_validation, **benchmark_kwargs
@@ -460,21 +557,51 @@ def run(
             "checkpoints_reused": len(phase_one_results) + len(results),
             "training_performed": False,
         }
+    elif confirm_from_run is not None:
+        source_path = confirm_from_run.resolve()
+        source_report = json.loads(source_path.read_text(encoding="utf-8-sig"))
+        if "holdouts" in source_report:
+            raise ValueError(
+                "refusing selective confirmation from a run whose holdout was opened"
+            )
+        phase_one_results = list(source_report.get("search", {}).get("phase_one", []))
+        if not phase_one_results:
+            raise ValueError("source report contains no phase-one results")
+        top_k = int(search.get("top_k", 3))
+        selected_phase, phase_gate_failures = _rank_phase_results(
+            phase_one_results, selection, top_k=top_k
+        )
+        finalists = [dict(item["config"]) for item in selected_phase]
+        confirmation_specs = confirmation_experiments(finalists, search)
+        results = []
+        for experiment in confirmation_specs:
+            result = execute_experiment(experiment)
+            result["candidate"] = experiment["candidate"]
+            result["seed"] = experiment["seed"]
+            results.append(result)
+        search_report = {
+            "method": "selective_confirmation_feasible_first",
+            "source_report": str(source_path),
+            "phase_one_seed": source_report.get("search", {}).get(
+                "phase_one_seed", int(search.get("phase_one_seed", 17))
+            ),
+            "phase_one": phase_one_results,
+            "phase_gate_failures": phase_gate_failures,
+            "finalists": [str(item["name"]) for item in selected_phase],
+            "confirmation_seeds": list(
+                search.get("confirmation_seeds", [17, 43, 101, 211, 307])
+            ),
+        }
     else:
         phase_one_results = [execute_experiment(item) for item in phase_one_experiments]
         if search_enabled:
             top_k = int(search.get("top_k", 3))
             if not 1 <= top_k <= len(phase_one_results):
                 raise ValueError("search.top_k must be between 1 and search.trials")
-            ranked = sorted(
-                phase_one_results,
-                key=lambda item: (
-                    item["selection_score"],
-                    -item["benchmarks"]["custom_validation"]["latency_ms_p95"],
-                ),
-                reverse=True,
+            selected_phase, phase_gate_failures = _rank_phase_results(
+                phase_one_results, selection, top_k=top_k
             )
-            finalist_names = {item["name"] for item in ranked[:top_k]}
+            finalist_names = {item["name"] for item in selected_phase}
             finalists = [
                 item for item in phase_one_experiments if item["name"] in finalist_names
             ]
@@ -489,6 +616,7 @@ def run(
                 "method": "two_stage_successive_halving",
                 "phase_one_seed": int(search.get("phase_one_seed", 17)),
                 "phase_one": phase_one_results,
+                "phase_gate_failures": phase_gate_failures,
                 "finalists": sorted(finalist_names),
                 "confirmation_seeds": list(
                     search.get("confirmation_seeds", [17, 43, 101, 211, 307])
@@ -496,7 +624,6 @@ def run(
             }
         else:
             results = phase_one_results
-    selection = raw.get("selection") or {}
     min_custom_improvement = float(
         selection.get("min_custom_macro_f1_improvement", 0.05)
     )
@@ -741,16 +868,23 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="training_workspace/config.yaml")
     parser.add_argument("--check-only", action="store_true")
-    parser.add_argument(
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
         "--reevaluate-run",
         type=Path,
         help="Re-score checkpoints from an unopened report without training",
+    )
+    modes.add_argument(
+        "--confirm-from-run",
+        type=Path,
+        help="Reuse phase-one results and train only feasible-first finalists",
     )
     args = parser.parse_args()
     run(
         Path(args.config).resolve(),
         check_only=args.check_only,
         reevaluate_run=args.reevaluate_run,
+        confirm_from_run=args.confirm_from_run,
     )
 
 
