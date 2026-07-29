@@ -77,7 +77,11 @@ def run(config: dict[str, Any], config_path: Path, *, check_only: bool) -> dict[
     records = load_manifest(_resolve(str(config["data"]["manifest"]), config_path))
     grouped = {split: [record for record in records if record.split == split] for split in ("train", "validation", "test")}
     data_config = config["data"]
-    common = {"frames": int(data_config["frames"]), "image_size": int(data_config["image_size"])}
+    common = {
+        "frames": int(data_config["frames"]),
+        "image_size": int(data_config["image_size"]),
+        "decode_retries": int(data_config.get("decode_retries", 2)),
+    }
     train_data = VideoGestureDataset(grouped["train"], training=True, **common)
     validation_data = VideoGestureDataset(grouped["validation"], training=False, **common)
     test_data = VideoGestureDataset(grouped["test"], training=False, **common)

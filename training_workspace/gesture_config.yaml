@@ -11,11 +11,15 @@ data:
   manifest: gesture_data/ipn_manifest.jsonl
   frames: 32
   image_size: 112
+  # Reopen a video after a transient OpenCV/AVI seek failure.
+  decode_retries: 2
 
 # RTX 3090 Ti starting point. With 24 GB VRAM, increase batch_size carefully
 # only after a check run confirms decoder workers and VRAM are stable.
 batch_size: 24
-num_workers: 4
+# OpenCV AVI decoding is unstable in concurrent Windows worker processes.
+# Keep decoding in the main process; CUDA still performs all neural training.
+num_workers: 0
 
 experiments:
   - name: tiny_3d_cnn

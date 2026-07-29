@@ -7,7 +7,7 @@ import random
 import warnings
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 import numpy as np
 import torch
@@ -379,6 +379,56 @@ def _read_video_frame(
     )
 
 
+def _decode_video_frames(
+    video: str,
+    frame_indices: list[int],
+    *,
+    capture_factory: Callable[[str], Any],
+    position_property: int,
+    max_attempts: int = 3,
+) -> tuple[list[tuple[np.ndarray, int]], int]:
+    """Decode a clip, reopening the container after a transient codec failure.
+
+    OpenCV's AVI backend can occasionally fail a seek when several Windows
+    DataLoader processes are decoding concurrently.  A failed attempt is
+    discarded in full: mixing frames from a broken decoder with a new capture
+    would make a silently corrupted training sample.
+    """
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be at least 1")
+    if not frame_indices:
+        raise ValueError("frame_indices must not be empty")
+
+    last_error: RuntimeError | None = None
+    for attempt in range(1, max_attempts + 1):
+        capture = capture_factory(video)
+        decoded: list[tuple[np.ndarray, int]] = []
+        try:
+            if not capture.isOpened():
+                raise RuntimeError("OpenCV could not open the video container")
+            for frame_index in frame_indices:
+                try:
+                    decoded.append(
+                        _read_video_frame(
+                            capture,
+                            frame_index,
+                            position_property=position_property,
+                        )
+                    )
+                except RuntimeError as error:
+                    raise RuntimeError(f"frame {frame_index}: {error}") from error
+            return decoded, attempt
+        except RuntimeError as error:
+            last_error = error
+        finally:
+            capture.release()
+
+    raise RuntimeError(
+        f"Could not decode {video} after {max_attempts} fresh capture attempt(s): "
+        f"{last_error}"
+    ) from last_error
+
+
 class VideoGestureDataset(Dataset[tuple[torch.Tensor, int]]):
     """Decode a short RGB clip at read time; no 800k-frame JPEG cache is created."""
 
@@ -389,14 +439,19 @@ class VideoGestureDataset(Dataset[tuple[torch.Tensor, int]]):
         frames: int = 32,
         image_size: int = 112,
         training: bool = False,
+        decode_retries: int = 2,
     ) -> None:
         if frames < 4 or image_size < 32:
             raise ValueError("frames must be >= 4 and image_size must be >= 32")
+        if decode_retries < 0:
+            raise ValueError("decode_retries cannot be negative")
         self.records = records
         self.frames = frames
         self.image_size = image_size
         self.training = training
+        self.decode_retries = decode_retries
         self.label_to_index = {label: index for index, label in enumerate(IPN_LABELS)}
+        self._warned_retry_videos: set[str] = set()
 
     def __len__(self) -> int:
         return len(self.records)
@@ -407,37 +462,43 @@ class VideoGestureDataset(Dataset[tuple[torch.Tensor, int]]):
         except ModuleNotFoundError as error:  # pragma: no cover - depends on local setup
             raise RuntimeError("Install opencv-python-headless in the training environment") from error
         item = self.records[index]
-        capture = cv2.VideoCapture(item.video)
-        if not capture.isOpened():
-            raise RuntimeError(f"OpenCV cannot open video {item.video}")
-        frames: list[np.ndarray] = []
+        requested_indices = _sample_indices(
+            item.start_frame, item.end_frame, self.frames, training=self.training
+        )
         try:
-            for frame_index in _sample_indices(
-                item.start_frame, item.end_frame, self.frames, training=self.training
-            ):
-                try:
-                    frame, decoded_index = _read_video_frame(
-                        capture,
-                        frame_index,
-                        position_property=cv2.CAP_PROP_POS_FRAMES,
-                    )
-                except RuntimeError as error:
-                    raise RuntimeError(
-                        f"Could not decode frame {frame_index} from {item.video}"
-                    ) from error
-                if decoded_index != frame_index:
-                    warnings.warn(
-                        f"AVI boundary fallback for {item.video}: requested frame "
-                        f"{frame_index}, decoded {decoded_index}",
-                        RuntimeWarning,
-                        stacklevel=2,
-                    )
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame = cv2.resize(frame, (self.image_size, self.image_size), interpolation=cv2.INTER_AREA)
-                if self.training and random.random() < 0.5:
-                    frame = np.ascontiguousarray(frame[:, ::-1])
-                frames.append(frame)
-        finally:
-            capture.release()
+            decoded_frames, attempts_used = _decode_video_frames(
+                item.video,
+                requested_indices,
+                capture_factory=cv2.VideoCapture,
+                position_property=cv2.CAP_PROP_POS_FRAMES,
+                max_attempts=self.decode_retries + 1,
+            )
+        except RuntimeError as error:
+            raise RuntimeError(f"Could not decode clip from {item.video}: {error}") from error
+        if attempts_used > 1 and item.video not in self._warned_retry_videos:
+            warnings.warn(
+                f"AVI decoder recovered after reopening {item.video} "
+                f"(attempt {attempts_used}/{self.decode_retries + 1})",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            self._warned_retry_videos.add(item.video)
+
+        frames: list[np.ndarray] = []
+        for frame_index, (frame, decoded_index) in zip(
+            requested_indices, decoded_frames, strict=True
+        ):
+            if decoded_index != frame_index:
+                warnings.warn(
+                    f"AVI boundary fallback for {item.video}: requested frame "
+                    f"{frame_index}, decoded {decoded_index}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame = cv2.resize(frame, (self.image_size, self.image_size), interpolation=cv2.INTER_AREA)
+            if self.training and random.random() < 0.5:
+                frame = np.ascontiguousarray(frame[:, ::-1])
+            frames.append(frame)
         clip = torch.from_numpy(np.stack(frames)).permute(3, 0, 1, 2).float().div_(255.0)
         return clip, self.label_to_index[item.label]

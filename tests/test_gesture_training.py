@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import json
 
+import numpy as np
 import pytest
 import torch
 
 from ml.gesture.data import (
     GestureSegment,
+    _decode_video_frames,
     _read_video_frame,
     _sample_indices,
     audit_segments,
@@ -160,6 +162,48 @@ def test_video_decoder_can_reach_first_frame_from_early_avi_annotation():
 
     assert decoded_index == 1
     assert int(frame) == 0
+
+
+def test_video_decoder_reopens_container_and_discards_failed_attempt():
+    class Capture:
+        def __init__(self, *, broken):
+            self.broken = broken
+            self.position = 0
+            self.released = False
+
+        def isOpened(self):
+            return True
+
+        def set(self, _property, position):
+            self.position = int(position)
+
+        def read(self):
+            if self.broken:
+                return False, None
+            return True, np.full((2, 2, 3), self.position, dtype=np.uint8)
+
+        def release(self):
+            self.released = True
+
+    captures = []
+
+    def factory(_video):
+        capture = Capture(broken=not captures)
+        captures.append(capture)
+        return capture
+
+    decoded, attempts = _decode_video_frames(
+        "unstable.avi",
+        [5, 8],
+        capture_factory=factory,
+        position_property=1,
+        max_attempts=3,
+    )
+
+    assert attempts == 2
+    assert [index for _frame, index in decoded] == [5, 8]
+    assert [int(frame[0, 0, 0]) for frame, _index in decoded] == [4, 7]
+    assert all(capture.released for capture in captures)
 
 
 @pytest.mark.parametrize("architecture", ARCHITECTURES)
