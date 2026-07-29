@@ -160,20 +160,31 @@ def _harmonic_mean(left: float, right: float) -> float:
     return 2.0 * left * right / max(left + right, 1e-12)
 
 
-def _development_score(benchmarks: dict[str, dict[str, Any]]) -> float:
-    """Rank candidates on complete development behavior, never on holdout."""
+def _development_score(
+    benchmarks: dict[str, dict[str, Any]], metrics: dict[str, Any]
+) -> float:
+    """Rank both the neural model and post-processed runtime on development data."""
     custom = benchmarks["custom_validation"]
     regression = benchmarks["legacy_regression"]
     intent = _harmonic_mean(custom["intent_macro_f1"], regression["intent_macro_f1"])
+    raw_slot = float(metrics["custom_validation_slot_entity_f1"])
+    raw_frame = float(metrics["custom_validation_semantic_frame_exact_match"])
+    raw_command = float(metrics["custom_validation_end_to_end_command_accuracy"])
+    raw_hallucination = float(metrics["custom_validation_slot_hallucination_rate"])
     score = (
-        0.50 * intent
-        + 0.20 * custom["slot_entity_f1"]
-        + 0.20 * custom["semantic_frame_exact_match"]
-        + 0.10 * custom["end_to_end_command_accuracy"]
+        0.40 * intent
+        + 0.20 * raw_slot
+        + 0.15 * raw_frame
+        + 0.10 * raw_command
+        + 0.10 * custom["semantic_frame_exact_match"]
+        + 0.05 * custom["end_to_end_command_accuracy"]
     )
-    return score - 0.20 * custom["slot_hallucination_rate"] - 0.10 * custom[
-        "expected_calibration_error"
-    ]
+    return (
+        score
+        - 0.10 * raw_hallucination
+        - 0.10 * custom["slot_hallucination_rate"]
+        - 0.10 * custom["expected_calibration_error"]
+    )
 
 
 def _sha256(path: Path) -> str:
@@ -202,7 +213,12 @@ def _environment(require_cuda: bool) -> dict[str, Any]:
     }
 
 
-def run(config_path: Path, *, check_only: bool = False) -> dict[str, Any]:
+def run(
+    config_path: Path,
+    *,
+    check_only: bool = False,
+    reevaluate_run: Path | None = None,
+) -> dict[str, Any]:
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     environment = _environment(bool(raw.get("require_cuda", True)) and not check_only)
     base_checkpoint = _resolve(raw["base_checkpoint"], config_path)
@@ -288,7 +304,8 @@ def run(config_path: Path, *, check_only: bool = False) -> dict[str, Any]:
     # An old checkpoint may remain for forensic comparison, but it cannot be
     # copied after a new failed run because every run invalidates approval.
     approval_path.unlink(missing_ok=True)
-    run_dir = run_root / datetime.now().strftime("%Y%m%d_%H%M%S")
+    suffix = "_reeval" if reevaluate_run is not None else ""
+    run_dir = run_root / (datetime.now().strftime("%Y%m%d_%H%M%S") + suffix)
     run_dir.mkdir(parents=True, exist_ok=False)
     training_path = train_path
     if reviewed_feedback:
@@ -358,45 +375,115 @@ def run(config_path: Path, *, check_only: bool = False) -> dict[str, Any]:
             "checkpoint": str(output),
             "metrics": metrics,
             "benchmarks": measured,
-            "selection_score": _development_score(measured),
+            "selection_score": _development_score(measured, metrics),
         }
         print("RESULT", json.dumps(result, ensure_ascii=False))
         return result
 
-    phase_one_results = [execute_experiment(item) for item in phase_one_experiments]
     search_report: dict[str, Any] | None = None
-    if search_enabled:
-        top_k = int(search.get("top_k", 3))
-        if not 1 <= top_k <= len(phase_one_results):
-            raise ValueError("search.top_k must be between 1 and search.trials")
-        ranked = sorted(
-            phase_one_results,
-            key=lambda item: (
-                item["selection_score"],
-                -item["benchmarks"]["custom_validation"]["latency_ms_p95"],
-            ),
-            reverse=True,
-        )
-        finalist_names = {item["name"] for item in ranked[:top_k]}
-        finalists = [item for item in phase_one_experiments if item["name"] in finalist_names]
-        confirmation_specs = confirmation_experiments(finalists, search)
-        results = []
-        for experiment in confirmation_specs:
-            result = execute_experiment(experiment)
-            result["candidate"] = experiment["candidate"]
-            result["seed"] = experiment["seed"]
-            results.append(result)
-        search_report = {
-            "method": "two_stage_successive_halving",
-            "phase_one_seed": int(search.get("phase_one_seed", 17)),
-            "phase_one": phase_one_results,
-            "finalists": sorted(finalist_names),
-            "confirmation_seeds": list(
-                search.get("confirmation_seeds", [17, 43, 101, 211, 307])
-            ),
+    reevaluation: dict[str, Any] | None = None
+    if reevaluate_run is not None:
+        source_path = reevaluate_run.resolve()
+        source_report = json.loads(source_path.read_text(encoding="utf-8-sig"))
+        if "holdouts" in source_report:
+            raise ValueError(
+                "refusing to re-select a run whose holdout was already opened"
+            )
+
+        def rebenchmark_result(previous: dict[str, Any]) -> dict[str, Any]:
+            checkpoint = Path(previous["checkpoint"])
+            if not checkpoint.is_file():
+                raise FileNotFoundError(
+                    f"checkpoint referenced by report is missing: {checkpoint}"
+                )
+            metrics = previous.get("metrics") or json.loads(
+                checkpoint.with_suffix(".metrics.json").read_text(encoding="utf-8")
+            )
+            measured = {
+                "custom_validation": benchmark(
+                    checkpoint, custom_validation, **benchmark_kwargs
+                ),
+                "legacy_validation": benchmark(
+                    checkpoint, legacy_validation, **benchmark_kwargs
+                ),
+                "legacy_regression": benchmark(
+                    checkpoint, legacy_regression, **benchmark_kwargs
+                ),
+            }
+            refreshed = {
+                "name": previous["name"],
+                "config": previous["config"],
+                "checkpoint": str(checkpoint),
+                "metrics": metrics,
+                "benchmarks": measured,
+                "selection_score": _development_score(measured, metrics),
+            }
+            for key in ("candidate", "seed"):
+                if key in previous:
+                    refreshed[key] = previous[key]
+            print("REEVALUATED", json.dumps(refreshed, ensure_ascii=False))
+            return refreshed
+
+        previous_phase_one = source_report.get("search", {}).get("phase_one", [])
+        phase_one_results = [rebenchmark_result(item) for item in previous_phase_one]
+        results = [rebenchmark_result(item) for item in source_report.get("experiments", [])]
+        if not results:
+            raise ValueError("source report contains no trained experiments")
+        if search_enabled:
+            source_search = source_report.get("search") or {}
+            search_report = {
+                "method": "two_stage_successive_halving_reevaluation",
+                "phase_one_seed": source_search.get(
+                    "phase_one_seed", int(search.get("phase_one_seed", 17))
+                ),
+                "phase_one": phase_one_results,
+                "finalists": source_search.get("finalists", []),
+                "confirmation_seeds": source_search.get(
+                    "confirmation_seeds",
+                    list(search.get("confirmation_seeds", [17, 43, 101, 211, 307])),
+                ),
+            }
+        reevaluation = {
+            "source_report": str(source_path),
+            "checkpoints_reused": len(phase_one_results) + len(results),
+            "training_performed": False,
         }
     else:
-        results = phase_one_results
+        phase_one_results = [execute_experiment(item) for item in phase_one_experiments]
+        if search_enabled:
+            top_k = int(search.get("top_k", 3))
+            if not 1 <= top_k <= len(phase_one_results):
+                raise ValueError("search.top_k must be between 1 and search.trials")
+            ranked = sorted(
+                phase_one_results,
+                key=lambda item: (
+                    item["selection_score"],
+                    -item["benchmarks"]["custom_validation"]["latency_ms_p95"],
+                ),
+                reverse=True,
+            )
+            finalist_names = {item["name"] for item in ranked[:top_k]}
+            finalists = [
+                item for item in phase_one_experiments if item["name"] in finalist_names
+            ]
+            confirmation_specs = confirmation_experiments(finalists, search)
+            results = []
+            for experiment in confirmation_specs:
+                result = execute_experiment(experiment)
+                result["candidate"] = experiment["candidate"]
+                result["seed"] = experiment["seed"]
+                results.append(result)
+            search_report = {
+                "method": "two_stage_successive_halving",
+                "phase_one_seed": int(search.get("phase_one_seed", 17)),
+                "phase_one": phase_one_results,
+                "finalists": sorted(finalist_names),
+                "confirmation_seeds": list(
+                    search.get("confirmation_seeds", [17, 43, 101, 211, 307])
+                ),
+            }
+        else:
+            results = phase_one_results
     selection = raw.get("selection") or {}
     min_custom_improvement = float(
         selection.get("min_custom_macro_f1_improvement", 0.05)
@@ -411,6 +498,13 @@ def run(config_path: Path, *, check_only: bool = False) -> dict[str, Any]:
     min_frame_exact = float(selection.get("min_semantic_frame_exact_match", 0.0))
     min_command_accuracy = float(selection.get("min_end_to_end_command_accuracy", 0.0))
     max_ece = float(selection.get("max_expected_calibration_error", 1.0))
+    min_raw_slot_f1 = float(selection.get("min_raw_slot_entity_f1", 0.0))
+    min_raw_frame_exact = float(
+        selection.get("min_raw_semantic_frame_exact_match", 0.0)
+    )
+    max_raw_hallucination = float(
+        selection.get("max_raw_slot_hallucination_rate", 1.0)
+    )
     eligible: list[dict[str, Any]] = []
     eligibility: dict[str, list[str]] = {}
     for result in results:
@@ -428,6 +522,7 @@ def run(config_path: Path, *, check_only: bool = False) -> dict[str, Any]:
         if measured["legacy_regression"]["worst_intent_recall"] < min_regression_recall:
             failures.append("legacy_regression_worst_intent_recall")
         custom = measured["custom_validation"]
+        raw_metrics = result["metrics"]
         if custom["intent_macro_f1"] < min_intent_f1:
             failures.append("custom_validation_min_intent_macro_f1")
         if custom["worst_intent_recall"] < min_worst_recall:
@@ -444,6 +539,18 @@ def run(config_path: Path, *, check_only: bool = False) -> dict[str, Any]:
             failures.append("custom_validation_expected_calibration_error")
         if custom["latency_ms_p95"] > max_p95:
             failures.append("latency_p95")
+        if raw_metrics["custom_validation_slot_entity_f1"] < min_raw_slot_f1:
+            failures.append("raw_custom_validation_slot_entity_f1")
+        if (
+            raw_metrics["custom_validation_semantic_frame_exact_match"]
+            < min_raw_frame_exact
+        ):
+            failures.append("raw_custom_validation_semantic_frame_exact_match")
+        if (
+            raw_metrics["custom_validation_slot_hallucination_rate"]
+            > max_raw_hallucination
+        ):
+            failures.append("raw_custom_validation_slot_hallucination_rate")
         eligibility[result["name"]] = failures
         if not failures:
             eligible.append(result)
@@ -482,6 +589,8 @@ def run(config_path: Path, *, check_only: bool = False) -> dict[str, Any]:
     if search_report is not None:
         search_report["candidate_summaries"] = candidate_summaries
         report["search"] = search_report
+    if reevaluation is not None:
+        report["reevaluation"] = reevaluation
     if eligible:
         if search_enabled:
             winning_candidate = max(
@@ -620,8 +729,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="training_workspace/config.yaml")
     parser.add_argument("--check-only", action="store_true")
+    parser.add_argument(
+        "--reevaluate-run",
+        type=Path,
+        help="Re-score checkpoints from an unopened report without training",
+    )
     args = parser.parse_args()
-    run(Path(args.config).resolve(), check_only=args.check_only)
+    run(
+        Path(args.config).resolve(),
+        check_only=args.check_only,
+        reevaluate_run=args.reevaluate_run,
+    )
 
 
 if __name__ == "__main__":

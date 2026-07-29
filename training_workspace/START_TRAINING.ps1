@@ -1,6 +1,7 @@
 param(
     [switch]$CheckOnly,
-    [string]$Config = ""
+    [string]$Config = "",
+    [string]$ReevaluateRun = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,6 +18,9 @@ if (-not $Config) {
 $arguments = @("-m", "training_workspace.run", "--config", $Config)
 if ($CheckOnly) {
     $arguments += "--check-only"
+}
+if ($ReevaluateRun) {
+    $arguments += @("--reevaluate-run", $ReevaluateRun)
 }
 Push-Location $repo
 try {

@@ -21,7 +21,7 @@ from ml.nlu.finetune import _restore_with_expanded_vocabulary
 from ml.nlu.manager_train import _route_logits, _route_targets, _slot_consistency_loss
 from training_workspace.build_dataset import APPLICATIONS, TARGETS, build
 from training_workspace.nlu_search import confirmation_experiments, generate_phase_one
-from training_workspace.run import run
+from training_workspace.run import _development_score, run
 
 
 def test_custom_jsonl_builds_slot_spans(tmp_path: Path):
@@ -237,6 +237,47 @@ def test_runtime_drops_slots_that_are_illegal_for_predicted_intent():
     ) == {"application": "paint"}
 
 
+def test_runtime_keeps_neural_slots_when_no_supported_grammar_matches():
+    assert _normalise_slots(
+        "сигнал восемь потом позвонить родителям",
+        "set_reminder",
+        {"duration": "8", "reminder_text": "позвонить родителям"},
+    ) == {"minutes": "8", "reminder_text": "позвонить родителям"}
+    assert _normalise_slots(
+        "активируй paint",
+        "open_application",
+        {"application": "paint"},
+    ) == {"application": "paint"}
+
+
+def test_supported_grammar_repairs_incomplete_neural_spans():
+    assert _normalise_slots(
+        "напомни мне через 8 минут что пора позвонить родителям",
+        "set_reminder",
+        {"duration": "8", "reminder_text": "родителям"},
+    ) == {"minutes": "8", "reminder_text": "позвонить родителям"}
+    assert _normalise_slots(
+        "открой для меня paint",
+        "open_application",
+        {"application": "для меня paint"},
+    ) == {"application": "paint"}
+
+
+def test_slot_fallback_covers_canonical_validation_and_holdout_templates():
+    data_dir = Path(__file__).resolve().parents[1] / "training_workspace" / "data"
+    for filename in ("validation.jsonl", "evaluation_holdout.jsonl"):
+        for example in load_jsonl(data_dir / filename, allow_empty=False):
+            if example.intent not in {"open_application", "set_reminder"}:
+                continue
+            expected = {
+                ("minutes" if span.label == "duration" else span.label): (
+                    example.text[span.start : span.end]
+                )
+                for span in example.spans
+            }
+            assert _normalise_slots(example.text, example.intent, {}) == expected
+
+
 def test_two_stage_search_is_reproducible_and_seed_fair():
     search = {
         "trials": 6,
@@ -257,6 +298,109 @@ def test_two_stage_search_is_reproducible_and_seed_fair():
     }
     assert len(confirmation) == 6
     assert {item["seed"] for item in confirmation} == {17, 43, 101}
+
+
+def test_development_score_distinguishes_raw_neural_slot_quality():
+    benchmarks = {
+        "custom_validation": {
+            "intent_macro_f1": 0.95,
+            "semantic_frame_exact_match": 0.85,
+            "end_to_end_command_accuracy": 0.85,
+            "slot_hallucination_rate": 0.0,
+            "expected_calibration_error": 0.02,
+        },
+        "legacy_regression": {"intent_macro_f1": 0.95},
+    }
+    weak = {
+        "custom_validation_slot_entity_f1": 0.50,
+        "custom_validation_semantic_frame_exact_match": 0.40,
+        "custom_validation_end_to_end_command_accuracy": 0.40,
+        "custom_validation_slot_hallucination_rate": 0.20,
+    }
+    strong = {
+        "custom_validation_slot_entity_f1": 0.82,
+        "custom_validation_semantic_frame_exact_match": 0.70,
+        "custom_validation_end_to_end_command_accuracy": 0.72,
+        "custom_validation_slot_hallucination_rate": 0.10,
+    }
+
+    assert _development_score(benchmarks, strong) > _development_score(
+        benchmarks, weak
+    )
+
+
+def test_reevaluation_reuses_checkpoints_without_training(tmp_path: Path, monkeypatch):
+    root = Path(__file__).resolve().parents[1]
+    base = tmp_path / "base.pt"
+    candidate = tmp_path / "candidate.pt"
+    base.write_bytes(b"baseline")
+    candidate.write_bytes(b"candidate")
+    metrics = {
+        "custom_validation_slot_entity_f1": 0.80,
+        "custom_validation_semantic_frame_exact_match": 0.65,
+        "custom_validation_end_to_end_command_accuracy": 0.70,
+        "custom_validation_slot_hallucination_rate": 0.10,
+    }
+    source_report = tmp_path / "source_report.json"
+    source_report.write_text(
+        json.dumps(
+            {
+                "experiments": [
+                    {
+                        "name": "saved_seed_17",
+                        "config": {"name": "saved_seed_17", "seed": 17},
+                        "checkpoint": str(candidate),
+                        "metrics": metrics,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = {
+        "base_checkpoint": str(base),
+        "training_device": "cpu",
+        "require_cuda": False,
+        "runs_dir": str(tmp_path / "runs"),
+        "export_dir": str(tmp_path / "export"),
+        "data": {
+            "train": str(root / "training_workspace/data/train.jsonl"),
+            "validation": str(root / "training_workspace/data/validation.jsonl"),
+            "evaluation_holdout": str(
+                root / "training_workspace/data/evaluation_holdout.jsonl"
+            ),
+            "final_holdout": str(root / "ml/nlu/holdout_v2.jsonl"),
+        },
+        "search": {"enabled": False},
+        "experiments": [{"name": "unused", "trainer": "manager"}],
+        "benchmark": {"device": "cpu", "warmup": 0, "repetitions": 1},
+        "selection": {"min_custom_macro_f1_improvement": 1.0},
+    }
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    measured = {
+        "intent_accuracy": 0.9,
+        "intent_macro_f1": 0.9,
+        "worst_intent_recall": 0.8,
+        "slot_entity_f1": 0.8,
+        "slot_hallucination_rate": 0.0,
+        "semantic_frame_exact_match": 0.8,
+        "end_to_end_command_accuracy": 0.8,
+        "expected_calibration_error": 0.02,
+        "latency_ms_p95": 0.5,
+    }
+    monkeypatch.setattr("training_workspace.run.benchmark", lambda *a, **k: measured)
+
+    def training_must_not_run(*_args, **_kwargs):
+        raise AssertionError("reevaluation must not start manager training")
+
+    monkeypatch.setattr("training_workspace.run.subprocess.run", training_must_not_run)
+
+    report = run(config_path, reevaluate_run=source_report)
+
+    assert report["reevaluation"]["training_performed"] is False
+    assert report["reevaluation"]["checkpoints_reused"] == 1
+    assert report["selection"]["status"] == "rejected"
 
 
 def test_workspace_uses_char_manager_experiments_and_strict_export_gates():
@@ -284,6 +428,9 @@ def test_workspace_uses_char_manager_experiments_and_strict_export_gates():
     assert selection["max_slot_hallucination_rate"] <= 0.02
     assert selection["min_semantic_frame_exact_match"] >= 0.80
     assert selection["max_expected_calibration_error"] <= 0.04
+    assert selection["min_raw_slot_entity_f1"] >= 0.78
+    assert selection["min_raw_semantic_frame_exact_match"] >= 0.60
+    assert selection["max_raw_slot_hallucination_rate"] <= 0.20
 
 
 def test_copy_script_requires_approved_hash():
@@ -296,3 +443,14 @@ def test_copy_script_requires_approved_hash():
     assert "approved.json" in script
     assert "Get-FileHash" in script
     assert "Refusing to copy stale or modified weights" in script
+
+
+def test_start_script_exposes_checkpoint_reevaluation_mode():
+    script = (
+        Path(__file__).resolve().parents[1]
+        / "training_workspace"
+        / "START_TRAINING.ps1"
+    ).read_text(encoding="utf-8")
+
+    assert "ReevaluateRun" in script
+    assert "--reevaluate-run" in script

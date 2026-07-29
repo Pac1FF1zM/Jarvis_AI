@@ -28,6 +28,8 @@ PyTorch используется только как вычислительны�
    stopping по общей оценке intent, slots и полной semantic frame;
 9. проверяет intent macro-F1, worst recall, F1 каждого slot, hallucination rate,
    semantic-frame exact match, end-to-end accuracy, ECE и CPU latency;
+   neural BIO-метрики считаются отдельно до regex fallback, поэтому guardrails
+   не могут скрыть слабую обученную модель;
 10. только после выбора одного репрезентативного checkpoint один раз открывает
     два holdout и создаёт `approved.json` лишь после прохождения всех гейтов.
 
@@ -206,6 +208,20 @@ training_workspace/export/approved.json
 `approved.json` с совпадающим SHA-256. Если approval не появился, это нормальная
 защита: модель не прошла regression/holdout. Изучите `report.json`; не понижайте
 пороги только ради появления файла.
+
+Если обучение уже завершилось, а изменился только evaluator/decoder, веса не
+нужно обучать повторно. Пока исходный отчёт не содержит раздел `holdouts` и все
+указанные в нём checkpoints остаются на месте, их можно безопасно пересчитать:
+
+```powershell
+.\training_workspace\START_TRAINING.ps1 -ReevaluateRun "C:\полный\путь\nlu_report.json"
+```
+
+Этот режим не запускает optimizer и не меняет веса. Он пересчитывает
+development-метрики текущим runtime-кодом, повторно применяет raw-neural и
+end-to-end gates и открывает holdout только для нового устойчивого победителя.
+Если старый отчёт уже содержит holdout, команда откажется повторно выбирать по
+нему модель.
 
 ## 6. Проверка скорости на компьютере, где будет работать Jarvis
 

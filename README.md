@@ -309,6 +309,13 @@ semantic frame, ложные slots, калибровку и CPU latency. Два 
 .\training_workspace\START_TRAINING.ps1
 ```
 
+Сохранённые checkpoints можно повторно оценить после исправления decoder без
+нового обучения:
+
+```powershell
+.\training_workspace\START_TRAINING.ps1 -ReevaluateRun "C:\path\nlu_report.json"
+```
+
 Формат данных, правила независимого holdout, интерпретация отчёта и безопасное
 подключение победителя описаны в
 [`training_workspace/GUIDE_RU.md`](training_workspace/GUIDE_RU.md).

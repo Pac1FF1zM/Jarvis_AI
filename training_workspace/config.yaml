@@ -113,6 +113,11 @@ selection:
   min_semantic_frame_exact_match: 0.80
   min_end_to_end_command_accuracy: 0.80
   max_expected_calibration_error: 0.04
+  # These gates score the neural BIO head before regex fallback. They prevent
+  # deterministic guardrails from hiding a weak learned model.
+  min_raw_slot_entity_f1: 0.78
+  min_raw_semantic_frame_exact_match: 0.60
+  max_raw_slot_hallucination_rate: 0.20
   min_evaluation_holdout_macro_f1_improvement: 0.05
   min_final_holdout_macro_f1_improvement: 0.0
   min_holdout_worst_recall: 0.60

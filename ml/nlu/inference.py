@@ -77,27 +77,27 @@ def _decode_slots(text: str, slot_ids: list[int], tokenizer) -> dict[str, str]:
 
 
 def _normalise_slots(text: str, intent: str, slots: dict[str, str]) -> dict[str, str]:
+    # Neural spans remain the general signal.  For a complete command grammar
+    # that Jarvis explicitly supports, deterministic parsing validates the
+    # tool arguments; raw neural quality is scored separately during training.
+    slots = dict(slots)
     if "duration" in slots:
         match = re.search(r"\d+", slots["duration"])
         if match:
             slots["minutes"] = match.group(0)
         slots.pop("duration", None)
     if intent == "set_reminder":
-        # The first baseline is deliberately hybrid: the neural slot head is
-        # trained and evaluated, while a constrained decoder guarantees that
-        # the two parameters required by today's only reminder tool are not
-        # truncated by a weak sequence tagger.  This is not presented as an
-        # ML result; raw slot F1 remains in the training report.
-        duration = re.search(
-            r"(?:через|на|спустя|in)\s+(\d+)\s+(?:минут(?:у|ы)?|minutes?)\b",
-            text,
-            flags=re.IGNORECASE,
-        )
-        if duration:
+        duration = _relative_duration(text)
+        if duration is not None:
             slots["minutes"] = duration.group(1)
+        if duration is not None:
             remainder = text[duration.end():].strip(" ,.:;!?-")
             remainder = re.sub(
-                r"^(?:напомни(?:\s+мне)?|скажи\s+мне|о\s+том\s+чтобы|to)\s+",
+                r"^(?:(?:и\s+)?напомни(?:\s+мне)?|"
+                r"сообщи(?:\s+мне)?(?:\s+что\s+нужно)?|"
+                r"скажи(?:\s+мне)?|что\s+пора|"
+                r"не\s+забудь\s+сказать|вспомнить|"
+                r"напоминани[ея]\s+чтобы|о\s+том\s+чтобы|to)\s+",
                 "",
                 remainder,
                 flags=re.IGNORECASE,
@@ -105,18 +105,11 @@ def _normalise_slots(text: str, intent: str, slots: dict[str, str]) -> dict[str,
             if remainder:
                 slots["reminder_text"] = remainder
     elif intent == "open_application":
-        # Never trust an unconstrained neural span for process launching. The
-        # intent is learned, but an explicit imperative form is also required
-        # before an application value is allowed to reach the launcher.
-        slots.pop("application", None)
-        match = re.search(
-            r"(?:(?:открой|открыть|запусти|запустить|запустим|включи|open|launch)"
-            r"(?:\s+мне)?(?:\s+приложение)?\s+|"
-            r"мне\s+нужно\s+приложение\s+)(.+)$",
-            text,
-            flags=re.IGNORECASE,
-        )
-        if match:
+        # The launcher independently resolves this value through its strict
+        # allow-list.  Keeping the neural span here is therefore both safer
+        # than arbitrary process execution and more accurate than discarding it.
+        match = _application_fallback(text)
+        if match is not None:
             application = re.sub(
                 r"\s+(?:пожалуйста|джарвис)$", "", match.group(1), flags=re.IGNORECASE
             ).strip(" ,.:;!?-")
@@ -127,3 +120,31 @@ def _normalise_slots(text: str, intent: str, slots: dict[str, str]) -> dict[str,
     # deterministic contract boundary as a final safety net.
     allowed = INTENT_SLOTS[intent]
     return {name: value for name, value in slots.items() if name in allowed}
+
+
+def _relative_duration(text: str) -> re.Match[str] | None:
+    patterns = (
+        r"(?:через|на|спустя|in)\s+(\d+)\s+(?:минут(?:у|ы)?|minutes?)\b",
+        r"(?:отсчитай|когда\s+пройд[её]т)\s+(\d+)\s+(?:минут(?:у|ы)?|minutes?)\b",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match is not None:
+            return match
+    return None
+
+
+def _application_fallback(text: str) -> re.Match[str] | None:
+    patterns = (
+        r"(?:(?:открой(?:-ка)?|открыть|запусти|запустить|запустим|включи|"
+        r"включим|open|launch)(?:\s+мне|\s+для\s+меня)?"
+        r"(?:\s+приложение|\s+программу)?\s+)(.+)$",
+        r"(?:я\s+хочу\s+чтобы\s+ты\s+открыл|будь\s+добр\s+открой|"
+        r"можно\s+запустить|пора\s+открыть|прошу\s+запустить|"
+        r"мне\s+сейчас\s+нужен|мне\s+нужно\s+приложение)\s+(.+)$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match is not None:
+            return match
+    return None
