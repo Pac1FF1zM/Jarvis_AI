@@ -62,9 +62,11 @@ wake_word_detected
   holdout-порог (macro-F1 0.0726), поэтому интегрирован только как observer:
   камера и inference работают, но жесты не могут выполнять действия Windows.
 - `python main.py --gesture_mode` запускает Gesture Core отдельно: только
-  webcam, нейросеть и вывод распознанных жестов в терминал, без STT, NLU, LLM,
-  TTS, wake word и оркестратора. На Windows камера открывается через DirectShow,
-  а завершение по `Ctrl+C` освобождает устройство.
+  webcam, нейросеть и live-preview с сырым классом/confidence, без STT, NLU,
+  LLM, TTS, wake word и оркестратора. На Windows камера открывается через
+  DirectShow; `Q`, `Esc`, закрытие окна или `Ctrl+C` освобождают устройство.
+  Для окна следует запускать runtime-окружение `venv`: обучающее
+  `.venv-training` использует headless OpenCV и предназначено только для обучения.
 - Необработанное исключение handler превращается в `interaction_failed`;
   watchdog возвращает зависший trace в `IDLE`, а запоздавшие события закрытого
   trace игнорируются. Recovery также останавливает захват и TTS.

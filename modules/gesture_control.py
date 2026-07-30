@@ -39,6 +39,19 @@ from ml.gesture.models import GestureModelConfig, build_model
 logger = logging.getLogger("jarvis.module.gesture")
 
 
+def _opencv_gui_available(cv2: Any) -> bool:
+    """Return false for headless OpenCV wheels before ``namedWindow`` crashes."""
+    try:
+        build_info = str(cv2.getBuildInformation())
+    except Exception:  # noqa: BLE001 - older/fake OpenCV builds may omit it
+        return True
+    for line in build_info.splitlines():
+        if line.strip().casefold().startswith("gui:"):
+            value = line.split(":", 1)[1].strip().casefold()
+            return value not in {"none", "no", "false"}
+    return True
+
+
 @dataclass
 class TemporalGestureGate:
     """Require a stable, confident temporal prediction before emitting a proposal."""
@@ -98,6 +111,11 @@ class GestureControlModule(BaseModule):
         self._camera_backend = str(
             params.get("camera_backend", default_backend)
         ).strip().casefold()
+        self._preview_enabled = bool(params.get("preview_enabled", False))
+        self._preview_window = (
+            str(params.get("preview_window", "Jarvis Gesture Core")).strip()
+            or "Jarvis Gesture Core"
+        )
         self._frames = int(params.get("frames", 32))
         self._image_size = int(params.get("image_size", 112))
         self._window_stride = int(params.get("window_stride", 4))
@@ -125,6 +143,8 @@ class GestureControlModule(BaseModule):
         self._stop_camera = threading.Event()
         self._capture_lock = threading.Lock()
         self._capture: Any = None
+        self._prediction_lock = threading.Lock()
+        self._latest_prediction: tuple[str, float] | None = None
         self._generation = 0
 
     def _validate_settings(self) -> None:
@@ -303,6 +323,8 @@ class GestureControlModule(BaseModule):
         self._armed = enabled
         self._generation += 1
         self._gate.reset()
+        with self._prediction_lock:
+            self._latest_prediction = None
         if enabled:
             self._stop_camera.clear()
             self._camera_task = asyncio.create_task(self._camera_loop_async(self._generation))
@@ -357,6 +379,28 @@ class GestureControlModule(BaseModule):
             )
             self._release_capture()
             return
+        preview_open = False
+        if self._preview_enabled:
+            if not _opencv_gui_available(cv2):
+                self._publish_status_from_thread(
+                    "preview_unavailable",
+                    detail=(
+                        "OpenCV has no GUI support; run Jarvis from venv, "
+                        "not .venv-training"
+                    ),
+                )
+                self._release_capture()
+                return
+            try:
+                cv2.namedWindow(self._preview_window, cv2.WINDOW_NORMAL)
+                cv2.resizeWindow(self._preview_window, 960, 720)
+                preview_open = True
+            except Exception as exc:  # noqa: BLE001 - OpenCV GUI backend error
+                self._publish_status_from_thread(
+                    "preview_unavailable", detail=f"{type(exc).__name__}: {exc}"
+                )
+                self._release_capture()
+                return
         self._publish_status_from_thread(
             "camera_ready",
             detail=(
@@ -372,9 +416,14 @@ class GestureControlModule(BaseModule):
                 if not ok:
                     self._publish_status_from_thread("camera_read_failed")
                     return
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame = cv2.resize(frame, (self._image_size, self._image_size), interpolation=cv2.INTER_AREA)
-                frames.append(frame)
+                camera_frame = frame
+                model_frame = cv2.cvtColor(camera_frame, cv2.COLOR_BGR2RGB)
+                model_frame = cv2.resize(
+                    model_frame,
+                    (self._image_size, self._image_size),
+                    interpolation=cv2.INTER_AREA,
+                )
+                frames.append(model_frame)
                 seen += 1
                 if (
                     len(frames) == self._frames
@@ -387,8 +436,86 @@ class GestureControlModule(BaseModule):
                         self._infer_clip(np.stack(frames).copy(), generation), self._loop
                     )
                     future.add_done_callback(lambda _future: self._inference_pending.clear())
+                if self._preview_enabled and not self._render_preview(cv2, camera_frame):
+                    self._stop_camera.set()
+                    self._publish_status_from_thread(
+                        "preview_closed", detail="Q, Escape or window close"
+                    )
+                    return
         finally:
+            if preview_open:
+                try:
+                    cv2.destroyWindow(self._preview_window)
+                    cv2.waitKey(1)
+                except Exception:  # noqa: BLE001 - window may already be closed
+                    logger.debug("error closing gesture preview", exc_info=True)
             self._release_capture()
+
+    def _render_preview(self, cv2: Any, frame: np.ndarray) -> bool:
+        """Render the raw classifier output; return false when the user exits."""
+        with self._prediction_lock:
+            prediction = self._latest_prediction
+        if prediction is None:
+            primary = f"Collecting {self._frames} frames..."
+            confidence = 0.0
+            label = NO_GESTURE_LABEL
+        else:
+            label, confidence = prediction
+            primary = (
+                f"Prediction: {label} ({JARVIS_ACTION_HINTS[label]}) "
+                f"{confidence:.1%}"
+            )
+        gate_ready = (
+            prediction is not None
+            and label != NO_GESTURE_LABEL
+            and confidence >= self._gate.confidence_threshold
+        )
+        color = (80, 220, 80) if gate_ready else (0, 210, 255)
+        height, width = frame.shape[:2]
+        cv2.rectangle(frame, (0, 0), (width, min(height, 108)), (20, 20, 20), -1)
+        cv2.putText(
+            frame,
+            primary,
+            (16, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.72,
+            color,
+            2,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            frame,
+            (
+                f"Safety gate: >= {self._gate.confidence_threshold:.0%} x "
+                f"{self._gate.consecutive_windows} | OBSERVER ONLY"
+            ),
+            (16, 62),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.58,
+            (220, 220, 220),
+            1,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            frame,
+            "Q / ESC / close window: exit",
+            (16, 91),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (180, 180, 180),
+            1,
+            cv2.LINE_AA,
+        )
+        cv2.imshow(self._preview_window, frame)
+        key = cv2.waitKey(1) & 0xFF
+        if key in {ord("q"), 27}:
+            return False
+        try:
+            return cv2.getWindowProperty(
+                self._preview_window, cv2.WND_PROP_VISIBLE
+            ) >= 1.0
+        except Exception:  # noqa: BLE001 - unsupported property means keep running
+            return True
 
     async def _infer_clip(self, frames: np.ndarray, generation: int) -> None:
         if not self._armed or generation != self._generation or self._model is None:
@@ -398,6 +525,8 @@ class GestureControlModule(BaseModule):
             label, confidence = await asyncio.to_thread(self._predict_sync, clip)
         if not self._armed or generation != self._generation:
             return
+        with self._prediction_lock:
+            self._latest_prediction = (label, confidence)
         if not self._gate.observe(label, confidence, now=time.monotonic()):
             return
         assert self.bus is not None

@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import numpy as np
 import torch
 
 from core.event_bus import EventBus
@@ -17,7 +18,11 @@ from ml.gesture.labels import IPN_LABELS
 from ml.gesture.models import GestureModelConfig, build_model, checkpoint_payload
 from modules.command_router import route_explicit_command
 from modules.gesture_bridge import GestureActionBridge
-from modules.gesture_control import GestureControlModule, TemporalGestureGate
+from modules.gesture_control import (
+    GestureControlModule,
+    TemporalGestureGate,
+    _opencv_gui_available,
+)
 
 
 def _candidate_files(tmp_path, *, approved: bool = False):
@@ -68,6 +73,55 @@ def test_temporal_gate_requires_stable_windows_and_respects_cooldown():
     assert gate.observe("G01", 0.95, now=1.3)
 
 
+def test_headless_opencv_is_detected_before_preview_start():
+    class HeadlessCV2:
+        @staticmethod
+        def getBuildInformation():
+            return "Video I/O:\n  GUI: NONE\n"
+
+    assert _opencv_gui_available(HeadlessCV2()) is False
+
+
+def test_preview_shows_raw_prediction_and_q_requests_exit():
+    config = SimpleNamespace(
+        device="cpu",
+        model="",
+        params={"preview_enabled": True, "frames": 4, "image_size": 32},
+    )
+    module = GestureControlModule(config, GPULock())
+    module._latest_prediction = ("G03", 0.76)
+    rendered_text: list[str] = []
+
+    class FakeCV2:
+        FONT_HERSHEY_SIMPLEX = 0
+        LINE_AA = 0
+        WND_PROP_VISIBLE = 0
+
+        @staticmethod
+        def rectangle(*_args):
+            return None
+
+        @staticmethod
+        def putText(_frame, value, *_args):
+            rendered_text.append(value)
+
+        @staticmethod
+        def imshow(*_args):
+            return None
+
+        @staticmethod
+        def waitKey(_delay):
+            return ord("q")
+
+    keep_running = module._render_preview(
+        FakeCV2(), np.zeros((480, 640, 3), dtype=np.uint8)
+    )
+
+    assert keep_running is False
+    assert any("Prediction: G03 (navigate_up) 76.0%" in text for text in rendered_text)
+    assert any("OBSERVER ONLY" in text for text in rendered_text)
+
+
 class _AlwaysClick(torch.nn.Module):
     def forward(self, clip: torch.Tensor) -> torch.Tensor:
         logits = torch.full((clip.shape[0], len(IPN_LABELS)), -12.0)
@@ -97,6 +151,9 @@ async def test_runtime_publishes_a_proposal_only_after_three_windows():
     frames = __import__("numpy").zeros((4, 32, 32, 3), dtype="uint8")
 
     await module._infer_clip(frames, 1)
+    assert module._latest_prediction is not None
+    assert module._latest_prediction[0] == "G01"
+    assert module._latest_prediction[1] == pytest.approx(1.0)
     await module._infer_clip(frames, 1)
     assert bus.queue.empty()
     await module._infer_clip(frames, 1)

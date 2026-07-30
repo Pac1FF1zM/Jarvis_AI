@@ -167,7 +167,11 @@ async def run_gesture_mode(
         device=configured.device,
         compute_type=configured.compute_type,
         model=configured.model,
-        params={**configured.params, "armed_on_start": False},
+        params={
+            **configured.params,
+            "armed_on_start": False,
+            "preview_enabled": True,
+        },
     )
     bus = EventBus()
     try:
@@ -178,6 +182,7 @@ async def run_gesture_mode(
     camera_ready = asyncio.Event()
     rejected = asyncio.Event()
     fatal_runtime = asyncio.Event()
+    preview_closed = asyncio.Event()
     failure_detail = ""
     observer_only = False
 
@@ -199,7 +204,14 @@ async def run_gesture_mode(
         print(f"Gesture Core: {status}{': ' + detail if detail else ''}", flush=True)
         if status == "camera_ready":
             camera_ready.set()
-        if status in {"dependency_missing", "camera_unavailable", "camera_read_failed"}:
+        if status == "preview_closed":
+            preview_closed.set()
+        if status in {
+            "dependency_missing",
+            "camera_unavailable",
+            "camera_read_failed",
+            "preview_unavailable",
+        }:
             failure_detail = f"{status}{': ' + detail if detail else ''}"
             fatal_runtime.set()
 
@@ -286,8 +298,10 @@ async def run_gesture_mode(
         stop_requested = shutdown_event or asyncio.Event()
         shutdown_wait = asyncio.create_task(stop_requested.wait())
         failure_wait = asyncio.create_task(fatal_runtime.wait())
+        preview_wait = asyncio.create_task(preview_closed.wait())
         done, pending = await asyncio.wait(
-            {shutdown_wait, failure_wait}, return_when=asyncio.FIRST_COMPLETED
+            {shutdown_wait, failure_wait, preview_wait},
+            return_when=asyncio.FIRST_COMPLETED,
         )
         for task in pending:
             task.cancel()

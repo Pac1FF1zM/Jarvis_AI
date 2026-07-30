@@ -59,6 +59,7 @@ async def test_isolated_runtime_arms_reports_prediction_and_stops_cleanly(
     class FakeGestureControlModule:
         def __init__(self, config, gpu_lock) -> None:
             assert config.params["armed_on_start"] is False
+            assert config.params["preview_enabled"] is True
             self.bus = None
 
         async def start(self, bus) -> None:
@@ -91,7 +92,12 @@ async def test_isolated_runtime_arms_reports_prediction_and_stops_cleanly(
                     execution="observer_unapproved_model",
                 ),
             )
-            shutdown.set()
+            self.bus.publish(
+                "gesture_runtime_status",
+                GestureRuntimeStatusPayload(
+                    status="preview_closed", detail="Q, Escape or window close"
+                ),
+            )
 
         async def stop(self) -> None:
             stopped.set()
@@ -107,6 +113,7 @@ async def test_isolated_runtime_arms_reports_prediction_and_stops_cleanly(
     assert "Gesture Core: camera_ready: camera_index=0" in output
     assert "observer-режиме" in output
     assert "Жест: G03 (navigate_up), уверенность 96.0%" in output
+    assert "Gesture Core: preview_closed" in output
     assert stopped.is_set()
 
 
