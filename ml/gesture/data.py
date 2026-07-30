@@ -386,6 +386,63 @@ def _read_video_frame(
     )
 
 
+def _decode_video_frames_pyav(
+    video: str,
+    frame_indices: list[int],
+    *,
+    max_backtrack: int = 4,
+) -> list[tuple[np.ndarray, int]]:
+    """Decode frames sequentially with an independent FFmpeg binding.
+
+    This is deliberately a fallback rather than the normal path. Some official
+    IPN AVI seek indexes intermittently fail through OpenCV even though their
+    underlying video stream remains decodable from the beginning.
+    """
+    try:
+        import av
+    except ModuleNotFoundError as error:  # pragma: no cover - environment dependent
+        raise RuntimeError(
+            "OpenCV exhausted all AVI retries and PyAV is not installed; "
+            "run `.venv-training\\Scripts\\python.exe -m pip install av`"
+        ) from error
+
+    wanted = {
+        candidate
+        for requested in frame_indices
+        for candidate in range(requested, max(1, requested - max_backtrack) - 1, -1)
+    }
+    decoded: dict[int, np.ndarray] = {}
+    last_requested = max(frame_indices)
+    try:
+        with av.open(video, mode="r") as container:
+            for frame_number, frame in enumerate(container.decode(video=0), start=1):
+                if frame_number in wanted:
+                    decoded[frame_number] = frame.to_ndarray(format="bgr24")
+                if frame_number >= last_requested:
+                    break
+    except Exception as error:  # noqa: BLE001 - external codec errors vary by format
+        raise RuntimeError(f"PyAV could not decode {video}: {error}") from error
+
+    result: list[tuple[np.ndarray, int]] = []
+    for requested in frame_indices:
+        lowest_candidate = max(1, requested - max_backtrack)
+        decoded_index = next(
+            (
+                candidate
+                for candidate in range(requested, lowest_candidate - 1, -1)
+                if candidate in decoded
+            ),
+            None,
+        )
+        if decoded_index is None:
+            raise RuntimeError(
+                f"PyAV could not decode frame {requested} or the previous "
+                f"{requested - lowest_candidate} frame(s) from {video}"
+            )
+        result.append((decoded[decoded_index], decoded_index))
+    return result
+
+
 def _decode_video_frames(
     video: str,
     frame_indices: list[int],
@@ -430,10 +487,14 @@ def _decode_video_frames(
         finally:
             capture.release()
 
-    raise RuntimeError(
-        f"Could not decode {video} after {max_attempts} fresh capture attempt(s): "
-        f"{last_error}"
-    ) from last_error
+    try:
+        return _decode_video_frames_pyav(video, frame_indices), 0
+    except RuntimeError as fallback_error:
+        raise RuntimeError(
+            f"Could not decode {video} after {max_attempts} fresh OpenCV "
+            f"capture attempt(s), then PyAV fallback failed: {fallback_error}; "
+            f"last OpenCV error: {last_error}"
+        ) from fallback_error
 
 
 class VideoGestureDataset(Dataset[tuple[torch.Tensor, int]]):
@@ -482,13 +543,15 @@ class VideoGestureDataset(Dataset[tuple[torch.Tensor, int]]):
             )
         except RuntimeError as error:
             raise RuntimeError(f"Could not decode clip from {item.video}: {error}") from error
-        if attempts_used > 1 and item.video not in self._warned_retry_videos:
-            warnings.warn(
-                f"AVI decoder recovered after reopening {item.video} "
-                f"(attempt {attempts_used}/{self.decode_retries + 1})",
-                RuntimeWarning,
-                stacklevel=2,
-            )
+        if attempts_used != 1 and item.video not in self._warned_retry_videos:
+            if attempts_used == 0:
+                recovery = f"AVI decoder recovered with PyAV fallback for {item.video}"
+            else:
+                recovery = (
+                    f"AVI decoder recovered after reopening {item.video} "
+                    f"(attempt {attempts_used}/{self.decode_retries + 1})"
+                )
+            warnings.warn(recovery, RuntimeWarning, stacklevel=2)
             self._warned_retry_videos.add(item.video)
 
         frames: list[np.ndarray] = []

@@ -258,6 +258,7 @@ def test_ipn_import_rejects_placeholder_paths_before_parsing(tmp_path):
 
 def test_smoke_workspace_contains_real_avi(tmp_path):
     cv2 = pytest.importorskip("cv2")
+    pytest.importorskip("av")
     config_path = create_smoke_config(tmp_path, device="cpu", epochs=1)
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     records = load_manifest(Path(config["data"]["manifest"]))
@@ -272,6 +273,30 @@ def test_smoke_workspace_contains_real_avi(tmp_path):
         assert ok and frame.shape == (64, 64, 3)
     finally:
         capture.release()
+
+    class BrokenCapture:
+        def isOpened(self):
+            return True
+
+        def set(self, _property, _position):
+            return True
+
+        def read(self):
+            return False, None
+
+        def release(self):
+            pass
+
+    decoded, attempts = _decode_video_frames(
+        records[0].video,
+        [1, 5, 16],
+        capture_factory=lambda _video: BrokenCapture(),
+        position_property=cv2.CAP_PROP_POS_FRAMES,
+        max_attempts=2,
+    )
+    assert attempts == 0
+    assert [index for _frame, index in decoded] == [1, 5, 16]
+    assert all(frame.shape == (64, 64, 3) for frame, _index in decoded)
 
 
 @pytest.mark.parametrize("architecture", ARCHITECTURES)
