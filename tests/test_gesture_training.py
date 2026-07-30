@@ -23,6 +23,10 @@ from ml.gesture.labels import IPN_LABELS
 from ml.gesture.models import ARCHITECTURES, GestureModelConfig, build_model, checkpoint_payload
 from ml.gesture.training import _metrics
 from training_workspace.gesture_smoke import create_smoke_config
+from training_workspace.build_gesture_manifest import (
+    GestureImportInputError,
+    build_manifest,
+)
 from training_workspace.run_gesture_training import GestureTrainingInputError, inspect
 
 
@@ -225,6 +229,15 @@ def test_missing_manifest_explains_import_and_smoke_commands(tmp_path):
     assert "IMPORT_IPN_HAND.ps1" in message
     assert "START_GESTURE_TRAINING.ps1 -Smoke" in message
     assert str(tmp_path / "missing" / "ipn_manifest.jsonl") in message
+
+
+def test_ipn_import_rejects_placeholder_paths_before_parsing(tmp_path):
+    with pytest.raises(GestureImportInputError, match="videos directory was not found"):
+        build_manifest(
+            tmp_path / "folder-with-AVI",
+            tmp_path / "annotations-folder",
+            tmp_path / "manifest.jsonl",
+        )
 
 
 def test_smoke_workspace_contains_real_avi(tmp_path):

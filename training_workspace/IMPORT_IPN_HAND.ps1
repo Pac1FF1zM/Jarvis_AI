@@ -18,6 +18,9 @@ if (-not $Output) {
 Push-Location $repo
 try {
     & $python -m training_workspace.build_gesture_manifest --videos $Videos --annotations $Annotations --output $Output
+    # Input errors are already explained by the Python preflight. Preserve the
+    # native exit code without obscuring that message with a PowerShell trace.
+    if ($LASTEXITCODE -eq 2) { return }
     if ($LASTEXITCODE -ne 0) { throw "IPN import failed with exit code $LASTEXITCODE" }
 }
 finally {
