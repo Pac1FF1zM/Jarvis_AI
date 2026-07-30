@@ -21,13 +21,17 @@ from ml.gesture.data import (
 )
 from ml.gesture.labels import IPN_LABELS
 from ml.gesture.models import ARCHITECTURES, GestureModelConfig, build_model, checkpoint_payload
-from ml.gesture.training import _metrics
+from ml.gesture.training import _metrics, selection_score
 from training_workspace.gesture_smoke import create_smoke_config
 from training_workspace.build_gesture_manifest import (
     GestureImportInputError,
     build_manifest,
 )
-from training_workspace.run_gesture_training import GestureTrainingInputError, inspect
+from training_workspace.run_gesture_training import (
+    GestureTrainingInputError,
+    _balanced_class_weights,
+    inspect,
+)
 
 
 def _segment(path, split: str, label: str, video_id: str) -> GestureSegment:
@@ -321,3 +325,31 @@ def test_metrics_make_false_trigger_rate_explicit():
     assert metrics["accuracy"] == pytest.approx(2 / 3)
     assert metrics["no_gesture_recall"] == pytest.approx(1 / 2)
     assert metrics["false_trigger_rate"] == pytest.approx(1 / 2)
+
+
+def test_class_balancing_moderates_ipn_background_dominance():
+    records = [
+        GestureSegment(
+            video="unused.avi",
+            label=label,
+            start_frame=1,
+            end_frame=4,
+            split="train",
+            video_id=f"{label}-{index}",
+        )
+        for label in IPN_LABELS
+        for index in range(10 if label == "D0X" else 2)
+    ]
+
+    weights = _balanced_class_weights(records, power=0.5)
+
+    assert sum(weights) / len(weights) == pytest.approx(1.0)
+    assert weights[IPN_LABELS.index("G01")] > weights[IPN_LABELS.index("D0X")]
+    assert weights[IPN_LABELS.index("G01")] / weights[0] == pytest.approx(5**0.5)
+
+
+def test_epoch_selection_prefers_macro_f1_over_idle_only_collapse():
+    collapsed = {"macro_f1": 0.0432, "no_gesture_recall": 0.9927}
+    broader = {"macro_f1": 0.0901, "no_gesture_recall": 0.7591}
+
+    assert selection_score(broader) > selection_score(collapsed)

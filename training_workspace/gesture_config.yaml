@@ -21,6 +21,10 @@ batch_size: 24
 # Keep decoding in the main process; CUDA still performs all neural training.
 num_workers: 0
 
+# IPN contains far more D0X/B0A/B0B samples than each dynamic gesture.
+# Square-root inverse frequency corrects collapse without overbalancing.
+class_weight_power: 0.5
+
 experiments:
   - name: tiny_3d_cnn
     architecture: tiny_3d_cnn

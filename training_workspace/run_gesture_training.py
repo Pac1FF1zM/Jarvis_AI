@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
 import os
 import shutil
@@ -16,7 +17,13 @@ from torch.utils.data import DataLoader
 from ml.gesture.data import VideoGestureDataset, audit_segments, load_manifest
 from ml.gesture.labels import IPN_LABELS
 from ml.gesture.models import GestureModelConfig, build_model, checkpoint_payload
-from ml.gesture.training import TrainingSettings, evaluate, seed_everything, train_model
+from ml.gesture.training import (
+    TrainingSettings,
+    evaluate,
+    seed_everything,
+    selection_score,
+    train_model,
+)
 
 
 class GestureTrainingInputError(ValueError):
@@ -62,6 +69,29 @@ def _loader(dataset: VideoGestureDataset, config: dict[str, Any], *, shuffle: bo
         pin_memory=str(config.get("device", "cuda")) == "cuda",
         persistent_workers=int(config.get("num_workers", 0)) > 0,
     )
+
+
+def _balanced_class_weights(
+    records: list[Any],
+    *,
+    power: float,
+) -> tuple[float, ...]:
+    """Return normalized inverse-frequency weights with tunable moderation."""
+    if not 0.0 <= power <= 1.0:
+        raise GestureTrainingInputError("class_weight_power must be in [0, 1]")
+    counts = Counter(record.label for record in records)
+    missing = [label for label in IPN_LABELS if counts[label] == 0]
+    if missing:
+        raise GestureTrainingInputError(
+            f"Training split has no examples for gesture classes: {missing}"
+        )
+    total = len(records)
+    raw = [
+        (total / (len(IPN_LABELS) * counts[label])) ** power
+        for label in IPN_LABELS
+    ]
+    mean = sum(raw) / len(raw)
+    return tuple(value / mean for value in raw)
 
 
 def inspect(config: dict[str, Any], config_path: Path) -> dict[str, Any]:
@@ -119,6 +149,10 @@ def run(
     train_data = VideoGestureDataset(grouped["train"], training=True, **common)
     validation_data = VideoGestureDataset(grouped["validation"], training=False, **common)
     test_data = VideoGestureDataset(grouped["test"], training=False, **common)
+    class_weight_power = float(config.get("class_weight_power", 0.5))
+    class_weights = _balanced_class_weights(
+        grouped["train"], power=class_weight_power
+    )
 
     runs_dir = _resolve(str(config["runs_dir"]), config_path) / datetime.now().strftime("%Y%m%d_%H%M%S")
     runs_dir.mkdir(parents=True, exist_ok=False)
@@ -141,6 +175,7 @@ def run(
             weight_decay=float(experiment["weight_decay"]), label_smoothing=float(experiment["label_smoothing"]),
             patience=int(experiment["patience"]), device=str(config["device"]), amp=bool(config["amp"]),
             run_name=str(experiment["name"]),
+            class_weights=class_weights,
         )
         trained, history = train_model(
             model,
@@ -157,6 +192,7 @@ def run(
                 "validation": validation,
                 "history": history,
                 "smoke": smoke,
+                "class_weights": dict(zip(IPN_LABELS, class_weights, strict=True)),
             }
         )
         torch.save(payload, checkpoint)
@@ -170,7 +206,7 @@ def run(
 
     winner = max(
         candidates,
-        key=lambda item: 0.8 * item["validation"]["macro_f1"] + 0.2 * item["validation"]["no_gesture_recall"],
+        key=lambda item: selection_score(item["validation"]),
     )
     # Now, and only now, load the held-out official test clips once.
     payload = torch.load(winner["checkpoint"], map_location="cpu", weights_only=False)
@@ -187,6 +223,10 @@ def run(
         "selected": {"name": winner["name"], "checkpoint": str(winner["checkpoint"])},
         "test": test_metrics,
         "smoke": smoke,
+        "training": {
+            "class_weight_power": class_weight_power,
+            "class_weights": dict(zip(IPN_LABELS, class_weights, strict=True)),
+        },
         "approval": {"approved": not failed_gates, "failed_gates": failed_gates},
     }
     if not failed_gates:

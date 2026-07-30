@@ -25,6 +25,7 @@ class TrainingSettings:
     device: str = "cuda"
     amp: bool = True
     run_name: str = "gesture"
+    class_weights: tuple[float, ...] | None = None
 
 
 def seed_everything(seed: int) -> None:
@@ -67,6 +68,11 @@ def _metrics(target: list[int], predicted: list[int]) -> dict[str, Any]:
     }
 
 
+def selection_score(metrics: dict[str, Any]) -> float:
+    """Prefer broad gesture recognition; use idle recall only as a tie-breaker."""
+    return float(metrics["macro_f1"]) + 0.05 * float(metrics["no_gesture_recall"])
+
+
 @torch.no_grad()
 def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> dict[str, Any]:
     model.eval()
@@ -98,7 +104,15 @@ def train_model(
     model.to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=settings.learning_rate, weight_decay=settings.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=settings.epochs)
-    criterion = nn.CrossEntropyLoss(label_smoothing=settings.label_smoothing)
+    class_weights = (
+        torch.tensor(settings.class_weights, dtype=torch.float32, device=device)
+        if settings.class_weights is not None
+        else None
+    )
+    criterion = nn.CrossEntropyLoss(
+        weight=class_weights,
+        label_smoothing=settings.label_smoothing,
+    )
     amp_enabled = settings.amp and device.type == "cuda"
     scaler = torch.amp.GradScaler(device.type, enabled=amp_enabled)
     best_state: dict[str, torch.Tensor] | None = None
@@ -124,8 +138,9 @@ def train_model(
             count += labels.numel()
         scheduler.step()
         validation = evaluate(model, validation_loader, device)
-        # A classifier that fires during idle motion is unsafe even if its raw F1 is high.
-        score = 0.8 * validation["macro_f1"] + 0.2 * float(validation["no_gesture_recall"])
+        # Final safety gates still enforce idle recall. During learning it is a
+        # tie-breaker, otherwise predicting only D0X can beat a broadly useful model.
+        score = selection_score(validation)
         row = {
             "epoch": epoch,
             "train_loss": total_loss / max(count, 1),
