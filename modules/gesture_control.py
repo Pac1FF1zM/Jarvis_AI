@@ -14,6 +14,7 @@ import hashlib
 import importlib
 import json
 import logging
+import sys
 import threading
 import time
 from collections import deque
@@ -93,6 +94,10 @@ class GestureControlModule(BaseModule):
         self.gpu_lock = gpu_lock
         self._device = str(getattr(config, "device", "cpu")).casefold()
         self._camera_index = int(params.get("camera_index", 0))
+        default_backend = "dshow" if sys.platform == "win32" else "auto"
+        self._camera_backend = str(
+            params.get("camera_backend", default_backend)
+        ).strip().casefold()
         self._frames = int(params.get("frames", 32))
         self._image_size = int(params.get("image_size", 112))
         self._window_stride = int(params.get("window_stride", 4))
@@ -127,6 +132,8 @@ class GestureControlModule(BaseModule):
             raise ValueError("gesture device must be 'cpu' or 'cuda'")
         if self._camera_index < 0:
             raise ValueError("gesture camera_index must be >= 0")
+        if self._camera_backend not in {"auto", "dshow", "msmf"}:
+            raise ValueError("gesture camera_backend must be auto, dshow or msmf")
         if self._frames < 4 or self._image_size < 32:
             raise ValueError("gesture frames must be >= 4 and image_size must be >= 32")
         if self._window_stride < 1:
@@ -327,13 +334,36 @@ class GestureControlModule(BaseModule):
         except ImportError:
             self._publish_status_from_thread("dependency_missing", detail="opencv-python is not installed")
             return
-        capture = cv2.VideoCapture(self._camera_index)
+        backend_ids = {
+            "auto": cv2.CAP_ANY,
+            "dshow": cv2.CAP_DSHOW,
+            "msmf": cv2.CAP_MSMF,
+        }
+        backend_id = backend_ids[self._camera_backend]
+        capture = (
+            cv2.VideoCapture(self._camera_index)
+            if self._camera_backend == "auto"
+            else cv2.VideoCapture(self._camera_index, backend_id)
+        )
         with self._capture_lock:
             self._capture = capture
         if not capture.isOpened():
-            self._publish_status_from_thread("camera_unavailable", detail=f"camera_index={self._camera_index}")
+            self._publish_status_from_thread(
+                "camera_unavailable",
+                detail=(
+                    f"camera_index={self._camera_index} "
+                    f"backend={self._camera_backend}"
+                ),
+            )
             self._release_capture()
             return
+        self._publish_status_from_thread(
+            "camera_ready",
+            detail=(
+                f"camera_index={self._camera_index} "
+                f"backend={self._camera_backend}"
+            ),
+        )
         frames: deque[np.ndarray] = deque(maxlen=self._frames)
         seen = 0
         try:
@@ -409,7 +439,8 @@ class GestureControlModule(BaseModule):
             "gesture_runtime_status",
             GestureRuntimeStatusPayload(status=status, detail=detail),
         )
-        logger.warning("GESTURE_RUNTIME_STATUS status=%s detail=%s", status, detail)
+        log_status = logger.info if status == "camera_ready" else logger.warning
+        log_status("GESTURE_RUNTIME_STATUS status=%s detail=%s", status, detail)
 
     def _release_capture(self) -> None:
         with self._capture_lock:

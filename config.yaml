@@ -19,6 +19,8 @@ modules:
       checkpoint_sha256: 2a30948dae9347cdbe937f56f4ce4941c17cb4d8836772a19b7a5cff50913356
       allow_unapproved_observer: true
       camera_index: 0
+      # DirectShow avoids slow/hanging CAP_ANY probing on Windows webcams.
+      camera_backend: dshow
       frames: 32
       image_size: 112
       window_stride: 4

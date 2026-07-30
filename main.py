@@ -8,6 +8,7 @@ Run::
 
     python main.py              # persistent push-to-talk mode
     python main.py --demo       # one simulated interaction, then exit
+    python main.py --gesture_mode  # webcam + Gesture Core only
 
 ``--text`` remains a one-shot audio-free command surface. All modes use the
 same clean shutdown path.
@@ -23,9 +24,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from core.config_loader import Config, load_config
+from core.config_loader import Config, ModuleConfig, load_config
 from core.event_bus import EventBus
-from core.event_payloads import TranscriptionReadyPayload, WakeWordDetectedPayload
+from core.event_payloads import (
+    GestureModeRequestedPayload,
+    TranscriptionReadyPayload,
+    WakeWordDetectedPayload,
+)
 from core.gpu_lock import GPULock
 from core.orchestrator import Orchestrator, State
 from core.runtime_diagnostics import run_doctor
@@ -34,6 +39,10 @@ from core.profile_manager import ProfileManager, apply_profile_to_config
 CONFIG_PATH = os.environ.get("JARVIS_CONFIG", "config.yaml")
 
 logger = logging.getLogger("jarvis.main")
+
+
+class GestureModeError(RuntimeError):
+    """The isolated Gesture Core runtime could not become usable."""
 
 
 class _TraceCompletion:
@@ -125,6 +134,182 @@ def setup_logging(cfg: Config) -> Path:
 # ---------------------------------------------------------------------------- #
 # Pipeline wiring
 # ---------------------------------------------------------------------------- #
+async def run_gesture_mode(
+    config_path: str = CONFIG_PATH,
+    *,
+    shutdown_event: asyncio.Event | None = None,
+) -> None:
+    """Run the webcam gesture model without the voice/assistant pipeline.
+
+    This deliberately does not construct the orchestrator, NLU, LLM, STT, TTS,
+    wake-word, memory, reminders, tools or gesture-to-desktop bridge. Predictions
+    are observable in the terminal, but the model's normal quality and execution
+    gates remain authoritative.
+    """
+    try:
+        from modules.gesture_control import GestureControlModule
+
+        cfg = load_config(config_path)
+    except (ImportError, OSError, ValueError) as exc:
+        raise GestureModeError(str(exc)) from exc
+    configured = cfg.modules.get("gesture")
+    if configured is None:
+        raise GestureModeError("в config.yaml отсутствует секция modules.gesture")
+    if not configured.enabled:
+        raise GestureModeError("модуль gesture отключён в config.yaml")
+    setup_logging(cfg)
+    logger.info("=== isolated Gesture Core starting (config=%s) ===", config_path)
+
+    # The CLI owns activation. Ignore armed_on_start so every startup follows
+    # one deterministic EventBus request/acknowledgement lifecycle.
+    gesture_config = ModuleConfig(
+        enabled=True,
+        device=configured.device,
+        compute_type=configured.compute_type,
+        model=configured.model,
+        params={**configured.params, "armed_on_start": False},
+    )
+    bus = EventBus()
+    try:
+        gesture = GestureControlModule(gesture_config, GPULock(concurrency=1))
+    except (ImportError, RuntimeError, ValueError) as exc:
+        raise GestureModeError(f"неверная конфигурация: {exc}") from exc
+    activated = asyncio.Event()
+    camera_ready = asyncio.Event()
+    rejected = asyncio.Event()
+    fatal_runtime = asyncio.Event()
+    failure_detail = ""
+    observer_only = False
+
+    async def on_mode_changed(event: Any) -> None:
+        nonlocal failure_detail, observer_only
+        if bool(event.payload.get("armed", False)):
+            observer_only = event.payload.get("reason") == "observer_unapproved_model"
+            activated.set()
+            return
+        reason = str(event.payload.get("reason") or "model_unavailable")
+        if not activated.is_set():
+            failure_detail = reason
+            rejected.set()
+
+    async def on_runtime_status(event: Any) -> None:
+        nonlocal failure_detail
+        status = str(event.payload.get("status", "unknown"))
+        detail = str(event.payload.get("detail", ""))
+        print(f"Gesture Core: {status}{': ' + detail if detail else ''}", flush=True)
+        if status == "camera_ready":
+            camera_ready.set()
+        if status in {"dependency_missing", "camera_unavailable", "camera_read_failed"}:
+            failure_detail = f"{status}{': ' + detail if detail else ''}"
+            fatal_runtime.set()
+
+    async def on_gesture_action(event: Any) -> None:
+        payload = event.payload
+        execution = str(payload.get("execution", "disabled"))
+        suffix = (
+            "наблюдение, действия отключены"
+            if execution != "enabled"
+            else "действие разрешено"
+        )
+        print(
+            "Жест: {label} ({hint}), уверенность {confidence:.1%} — {suffix}".format(
+                label=payload.get("label", "?"),
+                hint=payload.get("action_hint", "unknown"),
+                confidence=float(payload.get("confidence", 0.0)),
+                suffix=suffix,
+            ),
+            flush=True,
+        )
+
+    bus.subscribe("gesture_mode_changed", on_mode_changed)
+    bus.subscribe("gesture_runtime_status", on_runtime_status)
+    bus.subscribe("gesture_action_ready", on_gesture_action)
+
+    run_task: asyncio.Task[None] | None = None
+    module_started = False
+    try:
+        await gesture.start(bus)
+        module_started = True
+        run_task = asyncio.create_task(bus.run())
+        bus.publish(
+            "gesture_mode_requested",
+            GestureModeRequestedPayload(enabled=True, source="standalone_cli"),
+        )
+
+        activated_wait = asyncio.create_task(activated.wait())
+        rejected_wait = asyncio.create_task(rejected.wait())
+        fatal_wait = asyncio.create_task(fatal_runtime.wait())
+        done, pending = await asyncio.wait(
+            {activated_wait, rejected_wait, fatal_wait},
+            timeout=15.0,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        if not done:
+            raise GestureModeError("модель не ответила на запрос запуска за 15 секунд")
+        if rejected.is_set():
+            raise GestureModeError(f"модель не активирована: {failure_detail}")
+        if fatal_runtime.is_set():
+            raise GestureModeError(f"камера не запущена: {failure_detail}")
+
+        camera_wait = asyncio.create_task(camera_ready.wait())
+        fatal_wait = asyncio.create_task(fatal_runtime.wait())
+        done, pending = await asyncio.wait(
+            {camera_wait, fatal_wait},
+            timeout=10.0,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        if not done:
+            raise GestureModeError("камера не подтвердила запуск за 10 секунд")
+        if fatal_runtime.is_set():
+            raise GestureModeError(f"камера не запущена: {failure_detail}")
+
+        quality_note = (
+            " Модель работает в observer-режиме и не управляет Windows."
+            if observer_only
+            else ""
+        )
+        print(
+            "Gesture Core активирован. Показывайте жесты в камеру; "
+            f"для выхода нажмите Ctrl+C.{quality_note}",
+            flush=True,
+        )
+        logger.info("=== isolated Gesture Core ready observer_only=%s ===", observer_only)
+
+        stop_requested = shutdown_event or asyncio.Event()
+        shutdown_wait = asyncio.create_task(stop_requested.wait())
+        failure_wait = asyncio.create_task(fatal_runtime.wait())
+        done, pending = await asyncio.wait(
+            {shutdown_wait, failure_wait}, return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        if failure_wait in done and fatal_runtime.is_set():
+            raise GestureModeError(f"жестовый режим остановлен: {failure_detail}")
+    except asyncio.CancelledError:
+        logger.info("isolated Gesture Core shutdown requested (Ctrl+C/SIGINT)")
+    finally:
+        logger.info("=== isolated Gesture Core shutting down ===")
+        if module_started:
+            try:
+                await gesture.stop()
+            except Exception:  # noqa: BLE001 - always continue shared cleanup
+                logger.exception("error stopping isolated Gesture Core")
+        await bus.stop()
+        if run_task is not None:
+            await run_task
+        logger.info("=== isolated Gesture Core stopped cleanly ===")
+
+
 async def run_pipeline(
     config_path: str = CONFIG_PATH,
     text_input: str | None = None,
@@ -401,9 +586,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
             "Примеры:\n"
             "  python main.py\n"
             "  python main.py --text \"открой калькулятор\"\n"
-            "  python main.py --doctor\n"
-            "  python main.py --profiles\n"
-            "  python main.py --calibrate-voice"
+            "  python main.py --gesture_mode"
         ),
     )
     mode = parser.add_argument_group("Режимы запуска").add_mutually_exclusive_group()
@@ -416,6 +599,13 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         "--demo",
         action="store_true",
         help="запустить одну тестовую сессию",
+    )
+    mode.add_argument(
+        "--gesture_mode",
+        "--gesture-mode",
+        dest="gesture_mode",
+        action="store_true",
+        help="запустить только распознавание жестов",
     )
     mode.add_argument(
         "--doctor",
@@ -507,6 +697,14 @@ def main() -> None:
             )
         except (CalibrationQualityError, ImportError, OSError, ValueError) as exc:
             parser.exit(2, f"Калибровка не сохранена: {exc}\n")
+        return
+    if args.gesture_mode:
+        try:
+            asyncio.run(run_gesture_mode(args.config))
+        except (GestureModeError, ImportError, OSError, ValueError) as exc:
+            parser.exit(2, f"Gesture Core не запущен: {exc}\n")
+        except KeyboardInterrupt:
+            pass
         return
     try:
         asyncio.run(
