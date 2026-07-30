@@ -282,26 +282,33 @@ def write_manifest(records: Iterable[GestureSegment], path: Path) -> dict[str, A
     records = list(records)
     if not records:
         raise ValueError("Cannot write an empty gesture manifest")
-    path.parent.mkdir(parents=True, exist_ok=True)
     relative_records = []
     for item in records:
         data = asdict(item)
         data["video"] = str(Path(item.video).resolve())
         relative_records.append(data)
-    path.write_text(
-        "\n".join(json.dumps(item, ensure_ascii=False, sort_keys=True) for item in relative_records)
-        + "\n",
-        encoding="utf-8",
-    )
     by_split: dict[str, dict[str, int]] = {}
     videos_by_split: dict[str, set[str]] = {}
     for item in records:
         by_split.setdefault(item.split, {}).setdefault(item.label, 0)
         by_split[item.split][item.label] += 1
         videos_by_split.setdefault(item.split, set()).add(item.video_id)
-    overlap = set.intersection(*videos_by_split.values()) if len(videos_by_split) > 1 else set()
-    if overlap:
-        raise ValueError(f"Split leakage: videos occur in more than one split: {sorted(overlap)[:5]}")
+    for left, left_videos in videos_by_split.items():
+        for right, right_videos in videos_by_split.items():
+            if left >= right:
+                continue
+            overlap = left_videos & right_videos
+            if overlap:
+                raise ValueError(
+                    f"Split leakage between {left} and {right}: "
+                    f"{sorted(overlap)[:5]}"
+                )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(json.dumps(item, ensure_ascii=False, sort_keys=True) for item in relative_records)
+        + "\n",
+        encoding="utf-8",
+    )
     return {
         "manifest": str(path.resolve()),
         "segments": len(records),

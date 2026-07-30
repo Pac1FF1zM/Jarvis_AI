@@ -128,6 +128,10 @@ def test_audit_rejects_video_leakage_and_temporal_sampler_is_bounded(tmp_path):
     records = [_segment(video, "train", "D0X", "same"), _segment(video, "test", "G01", "same")]
     with pytest.raises(ValueError, match="leakage"):
         audit_segments(records)
+    leaked_manifest = tmp_path / "leaked_manifest.jsonl"
+    with pytest.raises(ValueError, match="leakage"):
+        write_manifest(records, leaked_manifest)
+    assert not leaked_manifest.exists()
 
     assert _sample_indices(4, 7, 8, training=False) == [4, 4, 5, 5, 6, 6, 7, 7]
     assert all(4 <= item <= 20 for item in _sample_indices(4, 20, 8, training=True))
@@ -229,6 +233,18 @@ def test_missing_manifest_explains_import_and_smoke_commands(tmp_path):
     assert "IMPORT_IPN_HAND.ps1" in message
     assert "START_GESTURE_TRAINING.ps1 -Smoke" in message
     assert str(tmp_path / "missing" / "ipn_manifest.jsonl") in message
+
+
+def test_windows_preflight_refuses_unsafe_parallel_avi_workers(tmp_path, monkeypatch):
+    config = {
+        "require_cuda": False,
+        "num_workers": 4,
+        "data": {"manifest": "not-reached.jsonl"},
+    }
+    monkeypatch.setattr("training_workspace.run_gesture_training.os.name", "nt")
+
+    with pytest.raises(GestureTrainingInputError, match="requires num_workers: 0"):
+        inspect(config, tmp_path / "gesture_config.yaml")
 
 
 def test_ipn_import_rejects_placeholder_paths_before_parsing(tmp_path):

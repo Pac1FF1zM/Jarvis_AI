@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -64,6 +65,15 @@ def _loader(dataset: VideoGestureDataset, config: dict[str, Any], *, shuffle: bo
 
 
 def inspect(config: dict[str, Any], config_path: Path) -> dict[str, Any]:
+    workers = int(config.get("num_workers", 0))
+    if workers < 0:
+        raise GestureTrainingInputError("num_workers cannot be negative")
+    if os.name == "nt" and workers > 0:
+        raise GestureTrainingInputError(
+            "Windows IPN AVI training requires num_workers: 0. "
+            "Parallel OpenCV workers are disabled because they caused "
+            "intermittent frame-decoding failures."
+        )
     manifest = _resolve(str(config["data"]["manifest"]), config_path)
     if not manifest.is_file():
         raise GestureTrainingInputError(
