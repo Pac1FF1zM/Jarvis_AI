@@ -156,6 +156,36 @@ def test_healthy_runtime_report_is_ready_without_real_engines(tmp_path):
     assert by_id["model.ollama"].status == DiagnosticStatus.PASS
 
 
+def test_unapproved_gesture_candidate_is_reported_as_observer_warning(tmp_path):
+    config = _config(tmp_path)
+    checkpoint = tmp_path / "models" / "gesture.pt"
+    checkpoint.write_bytes(b"candidate")
+    quality_report = tmp_path / "models" / "gesture-report.json"
+    quality_report.write_text("{}", encoding="utf-8")
+    config.modules["gesture"] = ModuleConfig(
+        enabled=True,
+        device="cpu",
+        model=str(checkpoint),
+        params={
+            "quality_report": str(quality_report),
+            "checkpoint_sha256": "a" * 64,
+            "allow_unapproved_observer": True,
+            "execution_enabled": False,
+        },
+    )
+    runner = _healthy_runner(tmp_path, config=config)
+    runner._gesture_checkpoint_validator = (
+        lambda checkpoint, report, digest: (False, 0.0726, "tiny_3d_cnn")
+    )
+
+    report = runner.run()
+    check = next(item for item in report.checks if item.check_id == "engine.gesture")
+
+    assert check.status == DiagnosticStatus.WARN
+    assert "observer" in check.summary
+    assert "0.0726" in check.detail
+
+
 def test_missing_core_and_voice_dependencies_are_actionable_failures(tmp_path):
     config = _config(tmp_path)
     Path(config.module("nlu").model).unlink()

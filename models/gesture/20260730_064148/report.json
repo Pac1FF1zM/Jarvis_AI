@@ -1,0 +1,484 @@
+{
+  "environment": {
+    "python": "3.12.9 (tags/v3.12.9:fdb8142, Feb  4 2025, 15:27:58) [MSC v.1942 64 bit (AMD64)]",
+    "torch": "2.11.0+cu128",
+    "cuda_available": true,
+    "cuda_runtime": "12.8",
+    "gpu": "NVIDIA GeForce RTX 3090 Ti"
+  },
+  "data": {
+    "segments": 5649,
+    "videos": {
+      "train": 120,
+      "validation": 28,
+      "test": 52
+    },
+    "class_counts": {
+      "train": {
+        "D0X": 785,
+        "G11": 120,
+        "B0B": 603,
+        "G04": 121,
+        "G05": 120,
+        "G03": 120,
+        "B0A": 604,
+        "G02": 120,
+        "G08": 120,
+        "G06": 120,
+        "G10": 120,
+        "G09": 120,
+        "G07": 120,
+        "G01": 120
+      },
+      "validation": {
+        "D0X": 137,
+        "G03": 28,
+        "B0B": 140,
+        "G10": 28,
+        "B0A": 141,
+        "G08": 28,
+        "G11": 28,
+        "G05": 28,
+        "G02": 28,
+        "G07": 28,
+        "G06": 28,
+        "G04": 28,
+        "G01": 28,
+        "G09": 28
+      },
+      "test": {
+        "D0X": 509,
+        "G10": 52,
+        "B0A": 265,
+        "G07": 52,
+        "G11": 52,
+        "B0B": 264,
+        "G06": 52,
+        "G04": 52,
+        "G03": 52,
+        "G09": 52,
+        "G02": 52,
+        "G08": 52,
+        "G01": 52,
+        "G05": 52
+      }
+    }
+  },
+  "runs_dir": "C:\\Users\\mikha\\OneDrive\\Desktop\\Jarvis_AI-main1\\training_workspace\\gesture_runs\\20260730_064148",
+  "candidates": [
+    {
+      "name": "tiny_3d_cnn",
+      "checkpoint": "C:\\Users\\mikha\\OneDrive\\Desktop\\Jarvis_AI-main1\\training_workspace\\gesture_runs\\20260730_064148\\tiny_3d_cnn.pt",
+      "validation": {
+        "accuracy": 0.24242424242424243,
+        "macro_f1": 0.06827344082500957,
+        "no_gesture_recall": 0.8905109489051095,
+        "false_trigger_rate": 0.10948905109489052,
+        "per_class": {
+          "D0X": {
+            "precision": 0.23689320388349513,
+            "recall": 0.8905109489051095,
+            "f1": 0.37423312883435583,
+            "support": 137
+          },
+          "B0A": {
+            "precision": 0.45121951219512196,
+            "recall": 0.2624113475177305,
+            "f1": 0.3318385650224215,
+            "support": 141
+          },
+          "B0B": {
+            "precision": 0.43243243243243246,
+            "recall": 0.11428571428571428,
+            "f1": 0.18079096045197737,
+            "support": 140
+          },
+          "G01": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G02": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G03": {
+            "precision": 1.0,
+            "recall": 0.03571428571428571,
+            "f1": 0.0689655172413793,
+            "support": 28
+          },
+          "G04": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G05": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G06": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G07": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G08": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G09": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G10": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G11": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          }
+        },
+        "loss": 2.5634401455398432
+      }
+    },
+    {
+      "name": "cnn_bigru",
+      "checkpoint": "C:\\Users\\mikha\\OneDrive\\Desktop\\Jarvis_AI-main1\\training_workspace\\gesture_runs\\20260730_064148\\cnn_bigru.pt",
+      "validation": {
+        "accuracy": 0.2190082644628099,
+        "macro_f1": 0.0467223114725629,
+        "no_gesture_recall": 0.7737226277372263,
+        "false_trigger_rate": 0.22627737226277372,
+        "per_class": {
+          "D0X": {
+            "precision": 0.2163265306122449,
+            "recall": 0.7737226277372263,
+            "f1": 0.33811802232854865,
+            "support": 137
+          },
+          "B0A": {
+            "precision": 0.1875,
+            "recall": 0.02127659574468085,
+            "f1": 0.03821656050955414,
+            "support": 141
+          },
+          "B0B": {
+            "precision": 0.22727272727272727,
+            "recall": 0.35714285714285715,
+            "f1": 0.2777777777777778,
+            "support": 140
+          },
+          "G01": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G02": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G03": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G04": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G05": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G06": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G07": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G08": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G09": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G10": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G11": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          }
+        },
+        "loss": 2.3728567844580026
+      }
+    },
+    {
+      "name": "cnn_temporal_transformer",
+      "checkpoint": "C:\\Users\\mikha\\OneDrive\\Desktop\\Jarvis_AI-main1\\training_workspace\\gesture_runs\\20260730_064148\\cnn_temporal_transformer.pt",
+      "validation": {
+        "accuracy": 0.256198347107438,
+        "macro_f1": 0.05682021228827878,
+        "no_gesture_recall": 0.6642335766423357,
+        "false_trigger_rate": 0.3357664233576642,
+        "per_class": {
+          "D0X": {
+            "precision": 0.2607449856733524,
+            "recall": 0.6642335766423357,
+            "f1": 0.3744855967078189,
+            "support": 137
+          },
+          "B0A": {
+            "precision": 0.5555555555555556,
+            "recall": 0.03546099290780142,
+            "f1": 0.06666666666666667,
+            "support": 141
+          },
+          "B0B": {
+            "precision": 0.24456521739130435,
+            "recall": 0.6428571428571429,
+            "f1": 0.35433070866141736,
+            "support": 140
+          },
+          "G01": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G02": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G03": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G04": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G05": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G06": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G07": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G08": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G09": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G10": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          },
+          "G11": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 28
+          }
+        },
+        "loss": 2.354298625110595
+      }
+    }
+  ],
+  "selected": {
+    "name": "tiny_3d_cnn",
+    "checkpoint": "C:\\Users\\mikha\\OneDrive\\Desktop\\Jarvis_AI-main1\\training_workspace\\gesture_runs\\20260730_064148\\tiny_3d_cnn.pt"
+  },
+  "test": {
+    "accuracy": 0.3372670807453416,
+    "macro_f1": 0.07258689260879839,
+    "no_gesture_recall": 0.9214145383104125,
+    "false_trigger_rate": 0.07858546168958742,
+    "per_class": {
+      "D0X": {
+        "precision": 0.38985868661679135,
+        "recall": 0.9214145383104125,
+        "f1": 0.5478971962616822,
+        "support": 509
+      },
+      "B0A": {
+        "precision": 0.4,
+        "recall": 0.07547169811320754,
+        "f1": 0.12698412698412698,
+        "support": 265
+      },
+      "B0B": {
+        "precision": 0.5176470588235295,
+        "recall": 0.16666666666666666,
+        "f1": 0.2521489971346705,
+        "support": 264
+      },
+      "G01": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 52
+      },
+      "G02": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 52
+      },
+      "G03": {
+        "precision": 0.058823529411764705,
+        "recall": 0.019230769230769232,
+        "f1": 0.028985507246376815,
+        "support": 52
+      },
+      "G04": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 52
+      },
+      "G05": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 52
+      },
+      "G06": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 52
+      },
+      "G07": {
+        "precision": 0.03643724696356275,
+        "recall": 0.17307692307692307,
+        "f1": 0.06020066889632106,
+        "support": 52
+      },
+      "G08": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 52
+      },
+      "G09": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 52
+      },
+      "G10": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 52
+      },
+      "G11": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 52
+      }
+    },
+    "loss": 2.356782104361872
+  },
+  "smoke": false,
+  "training": {
+    "class_weight_power": 0.5,
+    "class_weights": {
+      "D0X": 0.4457922255481564,
+      "B0A": 0.5082166034247743,
+      "B0B": 0.5086378356590656,
+      "G01": 1.1401886030461328,
+      "G02": 1.1401886030461328,
+      "G03": 1.1401886030461328,
+      "G04": 1.1354673049066735,
+      "G05": 1.1401886030461328,
+      "G06": 1.1401886030461328,
+      "G07": 1.1401886030461328,
+      "G08": 1.1401886030461328,
+      "G09": 1.1401886030461328,
+      "G10": 1.1401886030461328,
+      "G11": 1.1401886030461328
+    }
+  },
+  "approval": {
+    "approved": false,
+    "failed_gates": [
+      "test macro-F1 below threshold"
+    ]
+  }
+}

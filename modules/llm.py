@@ -472,7 +472,12 @@ class LLMModule(BaseModule):
             return
         armed = bool(event.payload.get("armed"))
         reason = str(event.payload.get("reason") or "")
-        if requested and armed:
+        if requested and armed and reason == "observer_unapproved_model":
+            text = (
+                "Тестовый режим жестов включен. Модель распознает жесты, "
+                "но управление компьютером отключено из-за низкой точности."
+            )
+        elif requested and armed:
             text = "Режим жестов включен. Камера активна; голосовые команды продолжают работать."
         elif not requested and not armed:
             text = "Режим жестов выключен. Жду wake word."

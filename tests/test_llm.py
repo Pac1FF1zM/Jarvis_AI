@@ -838,3 +838,49 @@ async def test_voice_gesture_mode_request_waits_for_the_runtime_result(bus: Even
 
     assert len(responses) == 1
     assert "Режим жестов включен" in responses[0].payload["text"]
+
+
+async def test_voice_reports_unapproved_gesture_model_as_observer(bus: EventBus):
+    tools = ToolRegistry()
+    mod = LLMModule(
+        config=ModuleConfig(params={"input_event": "nlu_result"}),
+        gpu_lock=GPULock(),
+        tools=tools,
+        short_term=ShortTermMemory(max_turns=4),
+        gesture_enabled=True,
+    )
+    responses: list[Event] = []
+
+    async def accept_observer(event: Event) -> None:
+        bus.publish_event(
+            event.child(
+                "gesture_mode_changed",
+                GestureModeChangedPayload(
+                    armed=True,
+                    source="voice",
+                    reason="observer_unapproved_model",
+                ),
+            )
+        )
+
+    bus.subscribe("response_ready", _recorder(responses))
+    bus.subscribe("gesture_mode_requested", accept_observer)
+    await mod.start(bus)
+    runner = asyncio.create_task(bus.run())
+    bus.publish(
+        "nlu_result",
+        {
+            "text": "включи режим жестов",
+            "intent": "gesture_mode",
+            "slots": {"enabled": True},
+        },
+        trace_id="gesture-observer",
+    )
+    await asyncio.sleep(0.08)
+    await bus.stop()
+    await runner
+    await mod.stop()
+
+    assert len(responses) == 1
+    assert "Тестовый режим жестов включен" in responses[0].payload["text"]
+    assert "управление компьютером отключено" in responses[0].payload["text"]

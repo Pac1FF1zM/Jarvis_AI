@@ -1,6 +1,8 @@
 """Safety tests for the webcam Gesture Core runtime shell."""
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,9 +14,44 @@ from core.orchestrator import Orchestrator
 from core.gpu_lock import GPULock
 from core.event_payloads import GestureActionReadyPayload
 from ml.gesture.labels import IPN_LABELS
+from ml.gesture.models import GestureModelConfig, build_model, checkpoint_payload
 from modules.command_router import route_explicit_command
 from modules.gesture_bridge import GestureActionBridge
 from modules.gesture_control import GestureControlModule, TemporalGestureGate
+
+
+def _candidate_files(tmp_path, *, approved: bool = False):
+    model_config = GestureModelConfig(
+        architecture="tiny_3d_cnn", classes=len(IPN_LABELS), width=4, dropout=0.0
+    )
+    payload = checkpoint_payload(build_model(model_config), model_config)
+    payload.update(
+        {
+            "experiment": {"name": "candidate"},
+            "smoke": False,
+            "history": [],
+            "validation": {"macro_f1": 0.1},
+        }
+    )
+    checkpoint = tmp_path / "candidate.pt"
+    torch.save(payload, checkpoint)
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "selected": {"name": "candidate", "checkpoint": str(checkpoint)},
+                "test": {"macro_f1": 0.1},
+                "smoke": False,
+                "approval": {
+                    "approved": approved,
+                    "failed_gates": [] if approved else ["test macro-F1 below threshold"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+    return checkpoint, report, digest
 
 
 def test_temporal_gate_requires_stable_windows_and_respects_cooldown():
@@ -111,6 +148,74 @@ def test_runtime_refuses_a_synthetic_smoke_checkpoint(monkeypatch):
 
     with pytest.raises(ValueError, match="smoke checkpoint"):
         module._load_checkpoint(Path("synthetic.pt"))
+
+
+async def test_failed_gate_checkpoint_loads_only_as_observer(tmp_path, monkeypatch):
+    checkpoint, report, digest = _candidate_files(tmp_path)
+    config = SimpleNamespace(
+        device="cpu",
+        model=str(checkpoint),
+        params={
+            "quality_report": str(report),
+            "checkpoint_sha256": digest,
+            "allow_unapproved_observer": True,
+            "execution_enabled": True,
+            "frames": 4,
+            "image_size": 32,
+        },
+    )
+    module = GestureControlModule(config, GPULock())
+    bus = EventBus()
+    await module.start(bus)
+
+    async def no_camera(_generation):
+        return None
+
+    monkeypatch.setattr(module, "_camera_loop_async", no_camera)
+    await module._set_armed(True, source="voice")
+    event = bus.queue.get_nowait()
+
+    assert module._model_ready is True
+    assert module._observer_only is True
+    assert module._execution_enabled is False
+    assert event.event_type == "gesture_mode_changed"
+    assert event.payload["armed"] is True
+    assert event.payload["reason"] == "observer_unapproved_model"
+    await module.stop()
+
+
+async def test_failed_gate_checkpoint_is_refused_without_observer_opt_in(tmp_path):
+    checkpoint, report, digest = _candidate_files(tmp_path)
+    config = SimpleNamespace(
+        device="cpu",
+        model=str(checkpoint),
+        params={
+            "quality_report": str(report),
+            "checkpoint_sha256": digest,
+            "allow_unapproved_observer": False,
+        },
+    )
+    module = GestureControlModule(config, GPULock())
+    await module.start(EventBus())
+    assert module._model_ready is False
+    assert module._model is None
+
+
+async def test_checkpoint_hash_mismatch_is_refused_even_in_observer_mode(tmp_path):
+    checkpoint, report, _digest = _candidate_files(tmp_path)
+    config = SimpleNamespace(
+        device="cpu",
+        model=str(checkpoint),
+        params={
+            "quality_report": str(report),
+            "checkpoint_sha256": "0" * 64,
+            "allow_unapproved_observer": True,
+        },
+    )
+    module = GestureControlModule(config, GPULock())
+    await module.start(EventBus())
+    assert module._model_ready is False
+    assert module._model is None
 
 
 async def test_enabled_gesture_uses_the_normal_jarvis_lifecycle():

@@ -1,0 +1,14 @@
+{
+  "schema_version": "jarvis.gesture_candidate.v1",
+  "status": "observer_unapproved",
+  "architecture": "tiny_3d_cnn",
+  "classes": 14,
+  "parameter_count": 724658,
+  "training_epochs": 30,
+  "validation_macro_f1": 0.06827344082500957,
+  "test_macro_f1": 0.07258689260879839,
+  "test_no_gesture_recall": 0.9214145383104125,
+  "checkpoint_sha256": "2a30948dae9347cdbe937f56f4ce4941c17cb4d8836772a19b7a5cff50913356",
+  "source_archive_sha256": "a6bb83342587e949ee1579d7c5378cc2eb52751aa569aa45334d5b2bff814c03",
+  "runtime_policy": "inference_only_no_actions"
+}

@@ -97,6 +97,7 @@ DistributionVersion = Callable[[str], str]
 DiskUsage = Callable[[str | os.PathLike[str]], Any]
 UrlOpen = Callable[..., Any]
 CheckpointValidator = Callable[[Path], str]
+GestureCheckpointValidator = Callable[[Path, Path, str], tuple[bool, float, str]]
 MemoryProbe = Callable[[], int | None]
 
 
@@ -113,6 +114,7 @@ class RuntimeDiagnosticRunner:
         disk_usage: DiskUsage = shutil.disk_usage,
         urlopen: UrlOpen = urllib.request.urlopen,
         checkpoint_validator: CheckpointValidator | None = None,
+        gesture_checkpoint_validator: GestureCheckpointValidator | None = None,
         memory_probe: MemoryProbe | None = None,
         python_version: tuple[int, int, int] | None = None,
         platform_name: str | None = None,
@@ -125,6 +127,9 @@ class RuntimeDiagnosticRunner:
         self._urlopen = urlopen
         self._checkpoint_validator = (
             checkpoint_validator or _validate_nlu_checkpoint
+        )
+        self._gesture_checkpoint_validator = (
+            gesture_checkpoint_validator or _validate_gesture_checkpoint
         )
         self._memory_probe = memory_probe or _total_physical_memory
         self._python_version = python_version or (
@@ -150,6 +155,7 @@ class RuntimeDiagnosticRunner:
         self._check_runtime_paths()
         torch_module = self._check_torch_and_cuda()
         self._check_nlu(torch_module)
+        self._check_gesture(torch_module)
         sounddevice = self._check_voice_input()
         self._check_voice_profile(sounddevice)
         self._check_stt()
@@ -616,6 +622,83 @@ class RuntimeDiagnosticRunner:
             detail=detail,
         )
 
+    def _check_gesture(self, torch_module: Any | None) -> None:
+        """Validate the configured CV checkpoint without opening the camera."""
+        if "gesture" not in self.config.modules:
+            return
+        module = self.config.module("gesture")
+        if not module.enabled:
+            self._skip("engine.gesture", "gesture", "Распознавание жестов отключено")
+            return
+        checkpoint = self._resolve(module.model)
+        report = self._resolve(str(module.params.get("quality_report", "")))
+        expected_hash = str(module.params.get("checkpoint_sha256", "")).strip()
+        if not checkpoint.is_file():
+            self._add(
+                "engine.gesture",
+                "gesture",
+                DiagnosticStatus.FAIL,
+                "Checkpoint модели жестов не найден",
+                detail=str(checkpoint),
+                action="Верните checkpoint либо отключите модуль gesture.",
+            )
+            return
+        if not report.is_file() or not expected_hash:
+            self._add(
+                "engine.gesture",
+                "gesture",
+                DiagnosticStatus.FAIL,
+                "Для модели жестов отсутствует отчёт или контрольный хэш",
+                detail=f"checkpoint={checkpoint}; report={report}",
+                action="Используйте полный audited export вместе с report.json.",
+            )
+            return
+        if torch_module is None:
+            self._skip(
+                "engine.gesture",
+                "gesture",
+                "Checkpoint жестов найден, но не проверен без PyTorch",
+            )
+            return
+        try:
+            approved, macro_f1, selected_name = self._gesture_checkpoint_validator(
+                checkpoint, report, expected_hash
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._add(
+                "engine.gesture",
+                "gesture",
+                DiagnosticStatus.FAIL,
+                "Checkpoint жестов повреждён или не соответствует отчёту",
+                detail=_error_detail(exc),
+                action="Восстановите checkpoint и report.json из одного запуска.",
+            )
+            return
+        if approved:
+            self._add(
+                "engine.gesture",
+                "gesture",
+                DiagnosticStatus.PASS,
+                "Модель жестов прошла проверку и готова",
+                detail=f"{selected_name}; test macro-F1={macro_f1:.4f}",
+            )
+            return
+        observer = bool(module.params.get("allow_unapproved_observer", False))
+        execution = bool(module.params.get("execution_enabled", False))
+        status = DiagnosticStatus.WARN if observer and not execution else DiagnosticStatus.FAIL
+        self._add(
+            "engine.gesture",
+            "gesture",
+            status,
+            (
+                "Модель жестов загружается только в безопасном observer-режиме"
+                if status == DiagnosticStatus.WARN
+                else "Неутверждённой модели жестов запрещено выполнять действия"
+            ),
+            detail=f"{selected_name}; test macro-F1={macro_f1:.4f}",
+            action="Переобучите модель; не включайте execution_enabled до прохождения gates.",
+        )
+
     def _check_voice_input(self) -> Any | None:
         module = self.config.module("wake_word")
         if not module.enabled:
@@ -1012,6 +1095,32 @@ def _validate_nlu_checkpoint(path: Path) -> str:
     predictor = NLUPredictor(path, "cpu")
     result = predictor.predict("который час")
     return f"{path}; smoke intent={result.intent}, confidence={result.confidence:.3f}"
+
+
+def _validate_gesture_checkpoint(
+    checkpoint: Path, report: Path, expected_hash: str
+) -> tuple[bool, float, str]:
+    from types import SimpleNamespace
+
+    from core.gpu_lock import GPULock
+    from modules.gesture_control import GestureControlModule
+
+    module = GestureControlModule(
+        SimpleNamespace(
+            device="cpu",
+            model=str(checkpoint),
+            params={
+                "quality_report": str(report),
+                "checkpoint_sha256": expected_hash,
+            },
+        ),
+        GPULock(),
+    )
+    quality = module._verify_quality_report(checkpoint)
+    module._load_checkpoint(
+        checkpoint, expected_experiment=quality.selected_name
+    )
+    return quality.approved, quality.test_macro_f1, quality.selected_name
 
 
 def _total_physical_memory() -> int | None:

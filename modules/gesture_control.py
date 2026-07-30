@@ -10,7 +10,9 @@ validation is complete.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import importlib
+import json
 import logging
 import threading
 import time
@@ -69,6 +71,16 @@ class TemporalGestureGate:
         self._candidate, self._count = None, 0
 
 
+@dataclass(frozen=True)
+class GestureQualityStatus:
+    """Audited relationship between a checkpoint and its training report."""
+
+    approved: bool
+    selected_name: str
+    test_macro_f1: float
+    failed_gates: tuple[str, ...]
+
+
 class GestureControlModule(BaseModule):
     """Own local webcam capture and gated inference for a trained gesture model."""
 
@@ -86,6 +98,11 @@ class GestureControlModule(BaseModule):
         self._window_stride = int(params.get("window_stride", 4))
         self._armed_on_start = bool(params.get("armed_on_start", False))
         self._execution_enabled = bool(params.get("execution_enabled", False))
+        self._quality_report = Path(str(params.get("quality_report", ""))).expanduser()
+        self._expected_sha256 = str(params.get("checkpoint_sha256", "")).strip().casefold()
+        self._allow_unapproved_observer = bool(
+            params.get("allow_unapproved_observer", False)
+        )
         self._gate = TemporalGestureGate(
             confidence_threshold=float(params.get("confidence_threshold", 0.90)),
             consecutive_windows=int(params.get("consecutive_windows", 3)),
@@ -94,6 +111,8 @@ class GestureControlModule(BaseModule):
         self._validate_settings()
         self._model: torch.nn.Module | None = None
         self._model_ready = False
+        self._observer_only = False
+        self._quality: GestureQualityStatus | None = None
         self._armed = False
         self._loop: asyncio.AbstractEventLoop | None = None
         self._camera_task: asyncio.Task[None] | None = None
@@ -118,6 +137,11 @@ class GestureControlModule(BaseModule):
             raise ValueError("gesture consecutive_windows must be >= 2")
         if self._gate.cooldown_seconds < 0:
             raise ValueError("gesture cooldown_seconds must be >= 0")
+        if self._expected_sha256 and (
+            len(self._expected_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in self._expected_sha256)
+        ):
+            raise ValueError("gesture checkpoint_sha256 must be a 64-character hex digest")
 
     async def start(self, bus: EventBus) -> None:
         self.bus = bus
@@ -132,18 +156,40 @@ class GestureControlModule(BaseModule):
             )
             return
         try:
-            self._model = await asyncio.to_thread(self._load_checkpoint, checkpoint)
+            quality = await asyncio.to_thread(self._verify_quality_report, checkpoint)
+            if not quality.approved and not self._allow_unapproved_observer:
+                raise ValueError(
+                    "gesture checkpoint failed quality gates: "
+                    + "; ".join(quality.failed_gates or ("not approved",))
+                )
+            self._model = await asyncio.to_thread(
+                self._load_checkpoint,
+                checkpoint,
+                expected_experiment=quality.selected_name,
+            )
         except Exception:  # noqa: BLE001 - external model file must not break Jarvis startup
             logger.exception("GestureControlModule inactive: refused checkpoint %s", checkpoint)
             self._model = None
             return
+        self._quality = quality
+        self._observer_only = not quality.approved
+        if self._observer_only and self._execution_enabled:
+            logger.warning(
+                "Gesture execution forced off: checkpoint is observer-only "
+                "(test_macro_f1=%.4f)",
+                quality.test_macro_f1,
+            )
+            self._execution_enabled = False
         self._model_ready = True
         logger.info(
-            "GestureControlModule ready device=%s frames=%d image_size=%d; "
-            "camera remains off until gesture_mode_requested",
+            "GestureControlModule ready device=%s frames=%d image_size=%d "
+            "quality=%s test_macro_f1=%.4f; camera remains off until "
+            "gesture_mode_requested",
             self._device,
             self._frames,
             self._image_size,
+            "approved" if quality.approved else "observer-unapproved",
+            quality.test_macro_f1,
         )
         if self._armed_on_start:
             await self._set_armed(True, source="config")
@@ -152,17 +198,71 @@ class GestureControlModule(BaseModule):
         await self._set_armed(False, source="shutdown")
         self._model = None
         self._model_ready = False
+        self._observer_only = False
+        self._quality = None
         self._loop = None
         logger.info("GestureControlModule stopped")
 
-    def _load_checkpoint(self, checkpoint: Path) -> torch.nn.Module:
-        payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    def _verify_quality_report(self, checkpoint: Path) -> GestureQualityStatus:
+        if not self._quality_report.is_file():
+            raise ValueError(
+                f"gesture quality report is missing at {self._quality_report or '<empty path>'}"
+            )
+        if not self._expected_sha256:
+            raise ValueError("gesture checkpoint_sha256 is required")
+        digest = hashlib.sha256()
+        with checkpoint.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != self._expected_sha256:
+            raise ValueError("gesture checkpoint SHA-256 does not match config")
+        report = json.loads(self._quality_report.read_text(encoding="utf-8-sig"))
+        if not isinstance(report, dict) or report.get("smoke") is True:
+            raise ValueError("gesture quality report is invalid or synthetic")
+        selected = report.get("selected")
+        approval = report.get("approval")
+        test_metrics = report.get("test")
+        if not all(isinstance(value, dict) for value in (selected, approval, test_metrics)):
+            raise ValueError("gesture quality report is missing selected/test/approval")
+        selected_name = str(selected.get("name", "")).strip()
+        selected_checkpoint = Path(str(selected.get("checkpoint", ""))).name
+        if not selected_name or selected_checkpoint != checkpoint.name:
+            raise ValueError("gesture quality report does not select this checkpoint")
+        macro_f1 = float(test_metrics.get("macro_f1", -1.0))
+        if not 0.0 <= macro_f1 <= 1.0:
+            raise ValueError("gesture quality report has invalid test macro-F1")
+        failed_gates = approval.get("failed_gates", [])
+        if not isinstance(failed_gates, list) or not all(
+            isinstance(item, str) and item.strip() for item in failed_gates
+        ):
+            raise ValueError("gesture quality report has invalid failed_gates")
+        approved = approval.get("approved")
+        if not isinstance(approved, bool):
+            raise ValueError("gesture quality report has invalid approval flag")
+        if approved == bool(failed_gates):
+            raise ValueError("gesture quality report approval contradicts failed_gates")
+        return GestureQualityStatus(
+            approved=approved,
+            selected_name=selected_name,
+            test_macro_f1=macro_f1,
+            failed_gates=tuple(failed_gates),
+        )
+
+    def _load_checkpoint(
+        self,
+        checkpoint: Path,
+        *,
+        expected_experiment: str | None = None,
+    ) -> torch.nn.Module:
+        payload = torch.load(checkpoint, map_location="cpu", weights_only=True)
         if not isinstance(payload, dict) or payload.get("kind") != "jarvis_gesture_from_scratch_v1":
             raise ValueError("checkpoint is not a Jarvis Gesture Core v1 model")
         if payload.get("pretrained") is not False:
             raise ValueError("gesture checkpoint must declare pretrained=false")
         if payload.get("smoke") is True:
             raise ValueError("synthetic smoke checkpoint cannot control Jarvis")
+        if expected_experiment is not None and payload.get("experiment", {}).get("name") != expected_experiment:
+            raise ValueError("gesture checkpoint experiment does not match quality report")
         raw_config = payload.get("model_config")
         state_dict = payload.get("state_dict")
         if not isinstance(raw_config, dict) or not isinstance(state_dict, dict):
@@ -210,7 +310,11 @@ class GestureControlModule(BaseModule):
                 self._camera_task = None
         self.bus.publish(
             "gesture_mode_changed",
-            GestureModeChangedPayload(armed=enabled, source=source),
+            GestureModeChangedPayload(
+                armed=enabled,
+                source=source,
+                reason=("observer_unapproved_model" if enabled and self._observer_only else None),
+            ),
         )
         logger.info("GESTURE_MODE armed=%s source=%s", enabled, source)
 
@@ -276,7 +380,15 @@ class GestureControlModule(BaseModule):
                 action_hint=JARVIS_ACTION_HINTS[label],
                 confidence=round(confidence, 4),
                 consecutive_windows=self._gate.consecutive_windows,
-                execution="enabled" if self._execution_enabled else "disabled_pending_real_camera_validation",
+                execution=(
+                    "enabled"
+                    if self._execution_enabled
+                    else (
+                        "observer_unapproved_model"
+                        if self._observer_only
+                        else "disabled_pending_real_camera_validation"
+                    )
+                ),
             ),
         )
         logger.info("GESTURE_ACTION_READY label=%s confidence=%.3f", label, confidence)
