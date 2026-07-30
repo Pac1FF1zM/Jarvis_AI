@@ -110,6 +110,10 @@ modules:
 memory:
   db_path: memory.db            # long-term SQLite store
   short_term_turns: 8           # rolling conversational window size
+  max_facts: 500                # explicit facts per user profile; never silently evicted
+  max_fact_chars: 500           # rejects accidental transcripts or oversized secrets
+  context_facts: 6              # bounded local-memory facts added to free dialogue
+  context_chars: 1200           # hard prompt-size cap for those facts
 
 reminders:
   db_path: reminders.db

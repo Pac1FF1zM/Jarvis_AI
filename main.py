@@ -179,7 +179,7 @@ async def run_pipeline(
     tools = ToolRegistry({"reminder_scheduler": reminder_scheduler})
     tools.discover("tools")
     short_term = ShortTermMemory.from_config(cfg.memory)
-    long_term = LongTermMemory.from_config(cfg.memory)
+    long_term = LongTermMemory.from_config(cfg.memory, profile_id=active_profile)
 
     # Build only the modules the config enables.
     wake_word: Any | None = None
@@ -219,6 +219,7 @@ async def run_pipeline(
                 gpu_lock,
                 tools,
                 short_term,
+                long_term=long_term,
                 gesture_enabled=False,
             )
         )
@@ -242,6 +243,7 @@ async def run_pipeline(
                     gpu_lock,
                     tools,
                     short_term,
+                    long_term=long_term,
                     gesture_enabled=cfg.module("gesture").enabled,
                 )
             ),
@@ -393,6 +395,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
             "  • открывать приложения, файлы, сайты и настройки Windows;\n"
             "  • управлять окнами, вкладками, громкостью и музыкой;\n"
             "  • искать в интернете, сообщать время и ставить напоминания;\n"
+            "  • запоминать явно указанные факты отдельно для каждого профиля;\n"
             "  • выполнять составные команды и понимать исправления.\n\n"
             "Примеры:\n"
             "  python main.py\n"
