@@ -1,5 +1,6 @@
 param(
     [switch]$CheckOnly,
+    [switch]$Smoke,
     [string]$Config = ""
 )
 
@@ -18,7 +19,11 @@ Push-Location $repo
 try {
     $arguments = @("-m", "training_workspace.run_gesture_training", "--config", $Config)
     if ($CheckOnly) { $arguments += "--check-only" }
+    if ($Smoke) { $arguments += "--smoke" }
     & $python @arguments
+    # Exit code 2 is a fully explained input/preflight error from argparse.
+    # Preserve $LASTEXITCODE for automation without adding a PowerShell stack trace.
+    if ($LASTEXITCODE -eq 2) { return }
     if ($LASTEXITCODE -ne 0) { throw "Gesture training runner failed with exit code $LASTEXITCODE" }
 }
 finally {

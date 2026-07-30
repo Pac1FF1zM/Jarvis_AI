@@ -1,6 +1,7 @@
 """Safety tests for the webcam Gesture Core runtime shell."""
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -93,6 +94,23 @@ def test_voice_router_treats_gesture_mode_as_a_first_class_command():
         "intent": "gesture_mode", "slots": {"enabled": True}, "confidence": 0.99
     }
     assert route_explicit_command("отключи жестами").slots == {"enabled": False}
+
+
+def test_runtime_refuses_a_synthetic_smoke_checkpoint(monkeypatch):
+    config = SimpleNamespace(device="cpu", model="", params={})
+    module = GestureControlModule(config, GPULock())
+    monkeypatch.setattr(
+        torch,
+        "load",
+        lambda *_args, **_kwargs: {
+            "kind": "jarvis_gesture_from_scratch_v1",
+            "pretrained": False,
+            "smoke": True,
+        },
+    )
+
+    with pytest.raises(ValueError, match="smoke checkpoint"):
+        module._load_checkpoint(Path("synthetic.pt"))
 
 
 async def test_enabled_gesture_uses_the_normal_jarvis_lifecycle():

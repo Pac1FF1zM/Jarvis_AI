@@ -161,6 +161,8 @@ class GestureControlModule(BaseModule):
             raise ValueError("checkpoint is not a Jarvis Gesture Core v1 model")
         if payload.get("pretrained") is not False:
             raise ValueError("gesture checkpoint must declare pretrained=false")
+        if payload.get("smoke") is True:
+            raise ValueError("synthetic smoke checkpoint cannot control Jarvis")
         raw_config = payload.get("model_config")
         state_dict = payload.get("state_dict")
         if not isinstance(raw_config, dict) or not isinstance(state_dict, dict):

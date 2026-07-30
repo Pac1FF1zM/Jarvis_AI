@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
+import yaml
 
 from ml.gesture.data import (
     GestureSegment,
@@ -14,11 +16,14 @@ from ml.gesture.data import (
     _sample_indices,
     audit_segments,
     import_ipn_segments,
+    load_manifest,
     write_manifest,
 )
 from ml.gesture.labels import IPN_LABELS
 from ml.gesture.models import ARCHITECTURES, GestureModelConfig, build_model, checkpoint_payload
 from ml.gesture.training import _metrics
+from training_workspace.gesture_smoke import create_smoke_config
+from training_workspace.run_gesture_training import GestureTrainingInputError, inspect
 
 
 def _segment(path, split: str, label: str, video_id: str) -> GestureSegment:
@@ -204,6 +209,40 @@ def test_video_decoder_reopens_container_and_discards_failed_attempt():
     assert [index for _frame, index in decoded] == [5, 8]
     assert [int(frame[0, 0, 0]) for frame, _index in decoded] == [4, 7]
     assert all(capture.released for capture in captures)
+
+
+def test_missing_manifest_explains_import_and_smoke_commands(tmp_path):
+    config_path = tmp_path / "gesture_config.yaml"
+    config = {
+        "require_cuda": False,
+        "data": {"manifest": "missing/ipn_manifest.jsonl"},
+    }
+
+    with pytest.raises(GestureTrainingInputError) as raised:
+        inspect(config, config_path)
+
+    message = str(raised.value)
+    assert "IMPORT_IPN_HAND.ps1" in message
+    assert "START_GESTURE_TRAINING.ps1 -Smoke" in message
+    assert str(tmp_path / "missing" / "ipn_manifest.jsonl") in message
+
+
+def test_smoke_workspace_contains_real_avi(tmp_path):
+    cv2 = pytest.importorskip("cv2")
+    config_path = create_smoke_config(tmp_path, device="cpu", epochs=1)
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    records = load_manifest(Path(config["data"]["manifest"]))
+
+    assert len(records) == len(IPN_LABELS) * 3
+    assert {record.split for record in records} == {"train", "validation", "test"}
+    assert all(Path(record.video).suffix == ".avi" for record in records)
+    capture = cv2.VideoCapture(records[0].video)
+    try:
+        assert capture.isOpened()
+        ok, frame = capture.read()
+        assert ok and frame.shape == (64, 64, 3)
+    finally:
+        capture.release()
 
 
 @pytest.mark.parametrize("architecture", ARCHITECTURES)

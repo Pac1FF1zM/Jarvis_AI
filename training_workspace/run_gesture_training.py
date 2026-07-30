@@ -18,6 +18,10 @@ from ml.gesture.models import GestureModelConfig, build_model, checkpoint_payloa
 from ml.gesture.training import TrainingSettings, evaluate, seed_everything, train_model
 
 
+class GestureTrainingInputError(ValueError):
+    """The local dataset/config is incomplete, so training cannot start."""
+
+
 def _resolve(value: str, source: Path) -> Path:
     candidate = Path(value)
     return candidate if candidate.is_absolute() else (source.parent / candidate).resolve()
@@ -61,8 +65,22 @@ def _loader(dataset: VideoGestureDataset, config: dict[str, Any], *, shuffle: bo
 
 def inspect(config: dict[str, Any], config_path: Path) -> dict[str, Any]:
     manifest = _resolve(str(config["data"]["manifest"]), config_path)
-    records = load_manifest(manifest)
-    audit = audit_segments(records)
+    if not manifest.is_file():
+        raise GestureTrainingInputError(
+            f"IPN manifest was not found: {manifest}\n"
+            "This computer has not imported the IPN Hand dataset. Run:\n"
+            ".\\training_workspace\\IMPORT_IPN_HAND.ps1 "
+            "-Videos <folder-with-AVI> -Annotations <annotations-folder>\n"
+            "To test the code without IPN data, run "
+            ".\\training_workspace\\START_GESTURE_TRAINING.ps1 -Smoke"
+        )
+    try:
+        records = load_manifest(manifest)
+        audit = audit_segments(records)
+    except FileNotFoundError as error:
+        raise GestureTrainingInputError(
+            f"The IPN manifest exists but references a missing video: {error}"
+        ) from error
     required = {"train", "validation", "test"}
     missing = required - {record.split for record in records}
     if missing:
@@ -70,7 +88,13 @@ def inspect(config: dict[str, Any], config_path: Path) -> dict[str, Any]:
     return {"environment": _environment(bool(config.get("require_cuda", True))), "data": audit}
 
 
-def run(config: dict[str, Any], config_path: Path, *, check_only: bool) -> dict[str, Any]:
+def run(
+    config: dict[str, Any],
+    config_path: Path,
+    *,
+    check_only: bool,
+    smoke: bool = False,
+) -> dict[str, Any]:
     report = inspect(config, config_path)
     if check_only:
         return report
@@ -117,7 +141,14 @@ def run(config: dict[str, Any], config_path: Path, *, check_only: bool) -> dict[
         validation = evaluate(trained, _loader(validation_data, config, shuffle=False), torch.device(settings.device))
         checkpoint = runs_dir / f"{experiment['name']}.pt"
         payload = checkpoint_payload(trained.cpu(), model_config)
-        payload.update({"experiment": experiment, "validation": validation, "history": history})
+        payload.update(
+            {
+                "experiment": experiment,
+                "validation": validation,
+                "history": history,
+                "smoke": smoke,
+            }
+        )
         torch.save(payload, checkpoint)
         candidates.append({"name": experiment["name"], "checkpoint": checkpoint, "validation": validation})
         print(
@@ -137,12 +168,15 @@ def run(config: dict[str, Any], config_path: Path, *, check_only: bool) -> dict[
     model.load_state_dict(payload["state_dict"])
     test_metrics = evaluate(model.to(config["device"]), _loader(test_data, config, shuffle=False), torch.device(config["device"]))
     failed_gates = _gate(test_metrics, config["selection"])
+    if smoke:
+        failed_gates.append("synthetic smoke checkpoints cannot be approved")
     result = {
         **report,
         "runs_dir": str(runs_dir),
         "candidates": [{**item, "checkpoint": str(item["checkpoint"])} for item in candidates],
         "selected": {"name": winner["name"], "checkpoint": str(winner["checkpoint"])},
         "test": test_metrics,
+        "smoke": smoke,
         "approval": {"approved": not failed_gates, "failed_gates": failed_gates},
     }
     if not failed_gates:
@@ -159,10 +193,29 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Train Jarvis Gesture Core from scratch on IPN Hand.")
     parser.add_argument("--config", type=Path, default=Path("training_workspace/gesture_config.yaml"))
     parser.add_argument("--check-only", action="store_true")
+    parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args()
-    source = args.config.resolve()
-    config = yaml.safe_load(source.read_text(encoding="utf-8"))
-    print(json.dumps(run(config, source, check_only=args.check_only), ensure_ascii=False, indent=2))
+    if args.smoke and args.check_only:
+        parser.error("--smoke and --check-only cannot be used together")
+    if args.smoke:
+        from training_workspace.gesture_smoke import create_smoke_config
+
+        source = create_smoke_config(Path("training_workspace/gesture_runs"))
+    else:
+        source = args.config.resolve()
+    try:
+        if not source.is_file():
+            raise GestureTrainingInputError(f"Gesture config was not found: {source}")
+        config = yaml.safe_load(source.read_text(encoding="utf-8"))
+        result = run(
+            config,
+            source,
+            check_only=args.check_only,
+            smoke=args.smoke,
+        )
+    except GestureTrainingInputError as error:
+        parser.exit(2, f"GESTURE_TRAINING_INPUT_ERROR\n{error}\n")
+    print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
