@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0] — IPN Hand training and custom capture
+
+- Added a reproducible IPN Hand pipeline with subject-disjoint
+  train/validation/test manifests, uniform temporal sampling, clip-consistent
+  augmentation, ImageNet normalization and decode-error gates.
+- Added pretrained TSN backbones and comparison scaffolding for MobileNet-TSN,
+  R3D-18 and R(2+1)D-18, including smoke, overfit and VRAM preflight gates.
+- Added isolated-video inference, evaluation reports and reusable preparation
+  tools for user-recorded gesture clips.
+- Added an automatic webcam recorder with separate train/validation/test
+  presets, labelled filenames, manifest generation, redo controls and a
+  camera-free dry-run mode.
+- Added pinned CUDA training dependencies and regression tests for the gesture
+  dataset, architecture registry and recorder plan.
+- Kept raw datasets, user recordings, generated reports and checkpoints out of
+  Git history.
+
 ## [core-hardening] — `core/` patch pass
 
 A patch pass against the five `core/` files. Scope was limited to `core/` plus

@@ -119,6 +119,33 @@ Raw neural slot tagging ещё недостаточно точен. Первый
 Подробности:
 [`ml/README.md`](ml/README.md).
 
+### IPN Hand: обучение и собственные записи
+
+В `src/` находится отдельный воспроизводимый pipeline распознавания жестов:
+аудит IPN Hand, subject-disjoint split, TSN/3D-модели, обязательные gates,
+обучение, оценка и inference по изолированному видео. Обучающие зависимости
+закреплены в `training_workspace/requirements-training.txt`; скачанные видео,
+checkpoints, кэш и generated-отчёты в Git не добавляются.
+
+Проверка отдельного видео с выбранным TSN checkpoint:
+
+```powershell
+.\.venv-training\Scripts\python.exe -m src.infer video.mp4 --checkpoint checkpoints/tsn_resnet18_seed42/best.pt
+```
+
+Для адаптации к собственной камере автоматический recorder показывает класс,
+делает обратный отсчёт, записывает трёхсекундный клип и сам создаёт разметку:
+
+```powershell
+.\.venv-training\Scripts\python.exe -m src.record_custom_dataset --split train
+.\.venv-training\Scripts\python.exe -m src.record_custom_dataset --split val
+.\.venv-training\Scripts\python.exe -m src.record_custom_dataset --split test
+```
+
+Train, validation и test сохраняются раздельно в `data/custom_capture/`.
+Управление и короткий режим проверки описаны в
+[`docs/custom_dataset_recording.md`](docs/custom_dataset_recording.md).
+
 Запуск приложений требует явной командной конструкции. Системные цели имеют
 фиксированные безопасные обработчики, а остальные приложения обнаруживаются
 только в меню «Пуск» и Windows `App Paths`. Jarvis открывает зарегистрированный

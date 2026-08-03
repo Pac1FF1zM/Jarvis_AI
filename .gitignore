@@ -42,6 +42,14 @@ data/feedback/
 
 # Generated/downloaded ML artifacts. Project-owned NLU checkpoints in
 # models/*.pt intentionally remain tracked because they are small runtime data.
+data/raw/
+data/cache/
+data/custom_capture/
+data/custom_test/
+data/splits/
+data/audit_report.json
+checkpoints/
+reports/
 models/openai-whisper/
 latest_silero_models.yml
 training_workspace/runs/

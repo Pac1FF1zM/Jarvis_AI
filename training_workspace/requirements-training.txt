@@ -1,5 +1,20 @@
-numpy>=1.24
-pyyaml>=6.0
-pytest>=8.0
-opencv-python-headless>=4.10  # local MP4 decoding for the gesture workspace
-av>=14,<19  # independent sequential FFmpeg fallback for damaged AVI seek indexes
+# Reproducible IPN Hand training environment (Python 3.10.0).
+# The explicit CUDA index prevents pip from replacing PyTorch with a CPU wheel.
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+opencv-python-headless==5.0.0.93
+pandas==2.3.3
+numpy==2.2.6
+PyYAML==6.0.3
+tqdm==4.70.0
+scikit-learn==1.7.2
+tensorboard==2.21.0
+matplotlib==3.10.9
+
+# Dataset acquisition, AVI fallback decoding, and tests.
+gdown==6.1.0
+av==17.1.0
+pytest==9.1.1
+pytest-asyncio==1.4.0

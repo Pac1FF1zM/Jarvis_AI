@@ -1,0 +1,56 @@
+data:
+  root: data/raw/ipn
+  manifest: data/splits/manifest.jsonl
+  video_ext: .avi
+  clip_len: 16
+  frame_size: 112
+  cache_dir: data/cache/ipn_tsn_uniform16_resize128
+  cache_resize_size: 128
+  decode_retries: 2
+  max_decode_error_rate: 0.01
+
+train:
+  batch_size: 4
+  min_batch_size: 1
+  effective_batch_size: 8
+  gradient_accumulation_steps: 2
+  auto_gradient_accumulation: true
+  auto_reduce_batch_on_oom: true
+  vram_safety_ratio: 0.85
+  epochs: 40
+  lr: 0.0001
+  weight_decay: 0.0001
+  optimizer: adamw
+  scheduler: cosine_warmup
+  warmup_epochs: 3
+  min_lr_ratio: 0.01
+  class_weight_power: 1.0
+  seed: 42
+  amp: true
+  num_workers: 0
+  pin_memory: true
+  log_vram_first_epoch: true
+  checkpoint_every_epochs: 1
+
+model:
+  name: r3d_18
+  num_classes: 14
+  pretrained: true
+  dropout: 0.2
+
+overfit:
+  samples: 14
+  steps: 400
+  lr: 0.003
+  target_accuracy: 0.98
+  target_loss: 0.05
+
+paths:
+  checkpoints: checkpoints
+  logs: logs/ipn_tsn
+  reports: reports
+
+evaluation:
+  selection_metric: macro_f1
+  save_confusion_matrix: true
+  save_per_class_metrics: true
