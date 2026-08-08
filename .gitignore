@@ -11,6 +11,7 @@ htmlcov/
 .venv/
 venv/
 .venv-training/
+.venv-jester/
 build/
 dist/
 *.egg-info/
@@ -71,6 +72,7 @@ installer/.tools/
 # Local previews and editable office documents may contain screen/profile metadata
 artifacts/
 docs/*.docx
+tmp/pdfs/
 
 # Local archives, IDE and OS metadata
 *.zip

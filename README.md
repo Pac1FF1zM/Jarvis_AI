@@ -145,6 +145,13 @@ Raw neural slot tagging ещё недостаточно точен. Первый
 закреплены в `training_workspace/requirements-training.txt`; скачанные видео,
 checkpoints, кэш и generated-отчёты в Git не добавляются.
 
+Для отдельного обучения динамической модели с нуля подготовлен Jester pipeline:
+три случайно инициализированных кандидата, потоковая распаковка официального
+multipart-TGZ, равнобюджетный benchmark и закрытый до финала test split.
+Инструкции находятся в `training_workspace/jester/README.md`, зависимости — в
+`training_workspace/requirements-jester.txt`, окружение создаёт
+`SETUP_JESTER_TRAINING.cmd`.
+
 Проверка отдельного видео с выбранным TSN checkpoint:
 
 ```powershell

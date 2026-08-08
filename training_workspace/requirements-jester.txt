@@ -1,0 +1,13 @@
+# Dedicated Jester training environment (Python 3.10, RTX 3050 / CUDA).
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+opencv-python-headless==5.0.0.93
+numpy==2.2.6
+PyYAML==6.0.3
+scikit-learn==1.7.2
+tensorboard==2.21.0
+tqdm==4.70.0
+pytest==9.1.1
+pytest-asyncio==1.4.0
