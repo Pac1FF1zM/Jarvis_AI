@@ -9,17 +9,33 @@ import pytest
 import torch
 
 from ml.jsc.baseline_metrics import evaluate_program_predictions
+from ml.jsc.constrained_decoding import constrain_jal_predictions
+from ml.jsc.structured_decoding import assemble_structured_execution
+from ml.jsc.structured_labels import (
+    build_parameter_labels,
+    decode_parameter_logits,
+    parameter_label,
+)
+from ml.jsc.span_labels import (
+    SPAN_ARGUMENTS,
+    decode_span_arguments,
+    find_argument_span,
+    span_tool_arguments,
+)
 from ml.jsc.baseline_training import (
     TrainingConfig,
     _capture_rng,
     _load_resume,
     _restore_rng,
+    _token_loss,
     evaluate_locked_test,
     inspect_training,
 )
 from ml.jsc.data import load_jsc_jsonl
-from ml.jsc.jal import DialogueAct, JALPlan, ToolCall, ToolSchemaRegistry, dumps
+from ml.jsc.jal import DialogueAct, JALPlan, ToolCall, ToolSchemaRegistry, dumps, loads
 from ml.jsc.models import ARCHITECTURES, BaselineConfig, JSCBaselineModel
+from ml.jsc.project_registry import build_project_schema_registry
+from core.russian_numbers import extract_russian_cardinals
 from ml.jsc.sequence_data import (
     JSCSequenceDataset,
     SequenceLimits,
@@ -38,9 +54,7 @@ DATA_DIR = Path("training_workspace/jsc_data")
 
 @pytest.fixture(scope="module")
 def schemas() -> ToolSchemaRegistry:
-    registry = ToolRegistry()
-    registry.discover("tools")
-    return ToolSchemaRegistry.from_tool_registry(registry)
+    return build_project_schema_registry()
 
 
 @pytest.fixture(scope="module")
@@ -67,6 +81,21 @@ def test_utterance_normalization_is_split_independent_and_stt_friendly():
     )
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("через четырнадцать минут", (14,)),
+        ("через двадцать минут", (20,)),
+        ("номер пятьдесят пять", (55,)),
+        ("через сто двадцать пять секунд", (125,)),
+        ("один два потом", (1, 2)),
+        ("через 17 минут", (17,)),
+    ],
+)
+def test_russian_cardinal_extraction(text, expected):
+    assert extract_russian_cardinals(text) == expected
+
+
 def test_sequence_dataset_preserves_dialogue_state_and_builds_dynamic_batch(train_examples):
     tokenizer = JSCCharTokenizer.fit(tokenizer_training_texts(train_examples))
     dialogue = next(example for example in train_examples if example.history and example.state)
@@ -82,10 +111,30 @@ def test_sequence_dataset_preserves_dialogue_state_and_builds_dynamic_batch(trai
     assert "H_USER:" in serialize_source(dialogue)
     assert "H_JARVIS:" in serialize_source(dialogue)
     assert "STATE:" in serialize_source(dialogue)
+    numeric = next(
+        example
+        for example in train_examples
+        if example.metadata.get("number_surface") == "words"
+    )
+    assert "USER_NUM:" in serialize_source(numeric)
     assert batch["source_ids"].shape[0] == 2
     assert batch["labels"].shape == batch["decoder_input_ids"].shape
     assert batch["source_mask"].dtype == torch.bool
+    assert batch["execution_allowed"].tolist() == [
+        int(dialogue.target.act == DialogueAct.EXECUTE),
+        int(plain.target.act == DialogueAct.EXECUTE),
+    ]
     assert (batch["labels"] == -100).any()
+
+    tool_names = sorted(
+        {step.tool for example in train_examples for step in example.target.steps}
+    )
+    structured = make_collate_fn(
+        tokenizer.pad_id,
+        {name: index + 1 for index, name in enumerate(tool_names)},
+    )([dataset[0], dataset[1]])
+    assert structured["step_count"].tolist() == [len(dialogue.target.steps), len(plain.target.steps)]
+    assert structured["tool_ids"].shape == (2, 8)
 
 
 def test_train_tokenizer_has_zero_unknown_characters_on_every_frozen_split(
@@ -146,6 +195,573 @@ def test_each_baseline_backpropagates_and_decodes(architecture):
     assert any(parameter.grad is not None for parameter in model.parameters())
 
 
+def test_copy_mechanism_returns_normalized_log_probabilities_and_backpropagates():
+    config = BaselineConfig(
+        architecture="tiny_transformer",
+        vocab_size=32,
+        num_acts=6,
+        d_model=32,
+        encoder_layers=1,
+        decoder_layers=1,
+        attention_heads=4,
+        feedforward_dim=64,
+        max_source_length=24,
+        max_target_length=16,
+        dropout=0.0,
+        copy_mechanism=True,
+    )
+    model = JSCBaselineModel(config)
+    source = torch.randint(4, 32, (2, 10))
+    decoder = torch.randint(4, 32, (2, 7))
+    labels = torch.randint(4, 32, (2, 7))
+    labels[1, -2:] = -100
+
+    scores, act_logits = model(source, source.ne(0), decoder, decoder.ne(0))
+    loss = _token_loss(
+        scores,
+        labels,
+        log_probabilities=model.token_scores_are_log_probabilities,
+        label_smoothing=0.05,
+    ) + act_logits.mean()
+    loss.backward()
+
+    assert scores.shape == (2, 7, 32)
+    assert torch.allclose(scores.exp().sum(-1), torch.ones(2, 7), atol=1e-5)
+    assert model.copy_query is not None and model.copy_query.weight.grad is not None
+    assert model.copy_gate is not None and model.copy_gate.weight.grad is not None
+
+
+def test_structured_heads_learn_count_and_ordered_tool_labels():
+    config = BaselineConfig(
+        architecture="tiny_transformer",
+        vocab_size=32,
+        num_acts=6,
+        d_model=32,
+        encoder_layers=1,
+        decoder_layers=1,
+        attention_heads=4,
+        feedforward_dim=64,
+        max_source_length=24,
+        max_target_length=16,
+        dropout=0.0,
+        num_tools=11,
+    )
+    model = JSCBaselineModel(config)
+    source = torch.randint(4, 32, (2, 10))
+    decoder = torch.randint(4, 32, (2, 7))
+    token_scores, acts, counts, tools = model.forward_structured(
+        source, source.ne(0), decoder, decoder.ne(0)
+    )
+    (token_scores.mean() + acts.mean() + counts.mean() + tools.mean()).backward()
+
+    assert counts.shape == (2, 9)
+    assert tools.shape == (2, 8, 11)
+    assert model.step_count_head is not None
+    assert model.tool_sequence_head is not None
+    assert any(parameter.grad is not None for parameter in model.step_count_head.parameters())
+
+
+def test_schema_conditioned_parameter_head_shapes_and_backpropagates():
+    config = BaselineConfig(
+        architecture="tiny_transformer",
+        vocab_size=32,
+        num_acts=6,
+        d_model=32,
+        encoder_layers=1,
+        decoder_layers=1,
+        attention_heads=4,
+        feedforward_dim=64,
+        max_source_length=24,
+        max_target_length=16,
+        dropout=0.0,
+        num_tools=13,
+        num_parameter_labels=58,
+    )
+    model = JSCBaselineModel(config)
+    source = torch.randint(4, 32, (2, 10))
+    decoder = torch.randint(4, 32, (2, 7))
+    outputs = model.forward_schema_conditioned(
+        source, source.ne(0), decoder, decoder.ne(0)
+    )
+    token_scores, acts, counts, tools, parameters = outputs
+    sum(value.mean() for value in outputs).backward()
+
+    assert token_scores.shape == (2, 7, 32)
+    assert acts.shape == (2, 6)
+    assert counts.shape == (2, 9)
+    assert tools.shape == (2, 8, 13)
+    assert parameters.shape == (2, 8, 58)
+    assert model.parameter_head is not None
+    assert any(parameter.grad is not None for parameter in model.parameter_head.parameters())
+
+
+def test_parameter_label_space_and_dynamic_batch_are_schema_conditioned(
+    schemas, train_examples
+):
+    labels = build_parameter_labels(schemas)
+    assert parameter_label("window_control", "action", "close") in labels
+    assert parameter_label("gesture_mode", "action", "enable") in labels
+    assert parameter_label("file_control", "confirmed", True) in labels
+
+    example = next(
+        item
+        for item in train_examples
+        if any(step.tool == "gesture_mode" for step in item.target.steps)
+    )
+    tokenizer = JSCCharTokenizer.fit(tokenizer_training_texts(train_examples))
+    row = JSCSequenceDataset(
+        [example], tokenizer, SequenceLimits(384, 384)
+    )[0]
+    batch = make_collate_fn(
+        tokenizer.pad_id,
+        {name: index + 1 for index, name in enumerate(schemas.tool_names)},
+        {name: index for index, name in enumerate(labels)},
+    )([row])
+
+    assert batch["parameter_targets"].shape == (1, 8, len(labels))
+    assert batch["parameter_mask"].dtype == torch.bool
+    assert int(batch["parameter_targets"].sum()) >= 1
+    assert int(batch["parameter_mask"].sum()) >= int(
+        batch["parameter_targets"].sum()
+    )
+
+
+def test_parameter_decoder_selects_one_value_per_tool_argument(schemas):
+    labels = build_parameter_labels(schemas)
+    scores = [0.01] * len(labels)
+    scores[labels.index(parameter_label("window_control", "action", "close"))] = 0.91
+    scores[labels.index(parameter_label("window_control", "action", "restore"))] = 0.60
+
+    assert decode_parameter_logits(scores, labels, "window_control") == {
+        "action": "close"
+    }
+
+
+def test_span_labels_align_free_form_values_and_dynamic_batch(
+    schemas, train_examples
+):
+    example = next(
+        item
+        for item in train_examples
+        if any(
+            step.tool == "set_reminder"
+            and isinstance(step.arguments.get("message"), str)
+            and step.arguments["message"].casefold() in serialize_source(item)
+            for step in item.target.steps
+        )
+    )
+    tokenizer = JSCCharTokenizer.fit(tokenizer_training_texts(train_examples))
+    row = JSCSequenceDataset([example], tokenizer, SequenceLimits(384, 384))[0]
+    call = next(step for step in example.target.steps if step.tool == "set_reminder")
+    start, end = find_argument_span(str(row["source_text"]), call, "message")
+    batch = make_collate_fn(
+        tokenizer.pad_id,
+        {name: index + 1 for index, name in enumerate(schemas.tool_names)},
+        {name: index for index, name in enumerate(build_parameter_labels(schemas))},
+        SPAN_ARGUMENTS,
+        span_tool_arguments(schemas),
+    )([row])
+    message_index = SPAN_ARGUMENTS.index("message")
+    step_index = list(example.target.steps).index(call)
+
+    assert str(row["source_text"])[start - 1 : end] == call.arguments["message"]
+    assert batch["span_start_targets"][0, step_index, message_index] == start
+    assert batch["span_end_targets"][0, step_index, message_index] == end
+    assert batch["span_mask"][0, step_index, message_index]
+
+
+def test_full_semantic_span_heads_shape_and_backpropagate():
+    config = BaselineConfig(
+        architecture="tiny_transformer",
+        vocab_size=32,
+        num_acts=6,
+        d_model=32,
+        encoder_layers=1,
+        decoder_layers=1,
+        attention_heads=4,
+        feedforward_dim=64,
+        max_source_length=24,
+        max_target_length=16,
+        dropout=0.0,
+        num_tools=13,
+        num_parameter_labels=58,
+        num_span_slots=len(SPAN_ARGUMENTS),
+    )
+    model = JSCBaselineModel(config)
+    source = torch.randint(4, 32, (2, 10))
+    decoder = torch.randint(4, 32, (2, 7))
+    outputs = model.forward_full_semantic(
+        source, source.ne(0), decoder, decoder.ne(0)
+    )
+    start_logits, end_logits = outputs[-2:]
+    sum(value.mean() for value in outputs).backward()
+
+    assert start_logits.shape == (2, 8, len(SPAN_ARGUMENTS), 10)
+    assert end_logits.shape == start_logits.shape
+    assert model.span_start_query is not None
+    assert model.span_start_query.weight.grad is not None
+
+
+def test_semantic_pooling_and_execution_verifier_shape_and_backpropagate():
+    config = BaselineConfig(
+        architecture="tiny_transformer",
+        vocab_size=32,
+        num_acts=6,
+        d_model=32,
+        encoder_layers=1,
+        decoder_layers=1,
+        attention_heads=4,
+        feedforward_dim=64,
+        max_source_length=24,
+        max_target_length=16,
+        dropout=0.0,
+        num_tools=13,
+        num_parameter_labels=58,
+        num_span_slots=len(SPAN_ARGUMENTS),
+        semantic_pooling=True,
+        execution_verifier=True,
+    )
+    model = JSCBaselineModel(config)
+    source = torch.randint(4, 32, (2, 10))
+    decoder = torch.randint(4, 32, (2, 7))
+    outputs = model.forward_verified_semantic(
+        source, source.ne(0), decoder, decoder.ne(0)
+    )
+    verifier_logits = outputs[-1]
+    sum(value.mean() for value in outputs).backward()
+
+    assert verifier_logits.shape == (2, 2)
+    assert model.semantic_attention is not None
+    assert model.semantic_attention.weight.grad is not None
+    assert model.execution_verifier_head is not None
+    assert any(
+        parameter.grad is not None
+        for parameter in model.execution_verifier_head.parameters()
+    )
+
+
+def test_span_decoder_extracts_and_canonicalizes_application(schemas):
+    source = "USER:пожалуйста открой дискорд"
+    length = len(source) + 2
+    starts = torch.zeros(8, len(SPAN_ARGUMENTS), length)
+    ends = torch.zeros_like(starts)
+    start = source.index("дискорд") + 1
+    end = start + len("дискорд") - 1
+    slot = SPAN_ARGUMENTS.index("application")
+    starts[0, slot, start] = 1.0
+    ends[0, slot, end] = 1.0
+
+    decoded = decode_span_arguments(
+        starts.tolist(), ends.tolist(), source, ("open_application",), schemas
+    )
+
+    assert decoded == ({"application": "discord"},)
+
+
+def test_span_decoder_ignores_structured_none_tool(schemas):
+    empty = torch.zeros(1, len(SPAN_ARGUMENTS), 4).tolist()
+
+    assert decode_span_arguments(empty, empty, "ab", ("<none>",), schemas) == ({},)
+
+
+def test_constrained_decoder_prefers_span_over_wrong_raw_free_text(schemas):
+    source = "USER:пожалуйста лололошка"
+    raw = dumps(
+        JALPlan(
+            DialogueAct.EXECUTE,
+            steps=(
+                ToolCall("browser_control", {"action": "search", "query": "ошибка"}),
+            ),
+        )
+    )
+    tool_labels = ("<none>", *schemas.tool_names)
+    count_logits = torch.full((1, 9), -5.0)
+    count_logits[0, 1] = 5.0
+    tool_logits = torch.full((1, 8, len(tool_labels)), -5.0)
+    tool_logits[:, :, 0] = 5.0
+    tool_logits[0, 0, tool_labels.index("browser_control")] = 10.0
+    length = len(source) + 2
+    starts = torch.full((1, 8, len(SPAN_ARGUMENTS), length), -10.0)
+    ends = torch.full_like(starts, -10.0)
+    start = source.index("лололошка") + 1
+    end = start + len("лололошка") - 1
+    slot = SPAN_ARGUMENTS.index("query")
+    starts[0, 0, slot, start] = 10.0
+    ends[0, 0, slot, end] = 10.0
+
+    result = constrain_jal_predictions(
+        [raw],
+        torch.tensor([[12.0, 0.0, 0.0, 0.0, 0.0, 0.0]]),
+        schemas,
+        utterances=["пожалуйста лололошка"],
+        step_count_logits=count_logits,
+        tool_logits=tool_logits,
+        tool_labels=tool_labels,
+        span_start_logits=starts,
+        span_end_logits=ends,
+        span_slots=SPAN_ARGUMENTS,
+        span_sources=[source],
+    )
+
+    assert loads(result.predictions[0]).steps[0].arguments["query"] == "лололошка"
+    assert result.decisions == {"accepted_structured": 1}
+
+
+def test_execution_verifier_is_an_independent_fail_closed_barrier(schemas):
+    prediction = dumps(
+        JALPlan(
+            DialogueAct.EXECUTE,
+            steps=(ToolCall("open_application", {"application": "paint"}),),
+        )
+    )
+    act_logits = torch.tensor([[12.0, 0.0, 0.0, 0.0, 0.0, 0.0]])
+
+    rejected = constrain_jal_predictions(
+        [prediction],
+        act_logits,
+        schemas,
+        execution_verifier_logits=torch.tensor([[12.0, 0.0]]),
+    )
+    accepted = constrain_jal_predictions(
+        [prediction],
+        act_logits,
+        schemas,
+        execution_verifier_logits=torch.tensor([[0.0, 12.0]]),
+    )
+
+    assert loads(rejected.predictions[0]) == JALPlan(
+        DialogueAct.REJECT, reason="low_confidence"
+    )
+    assert rejected.decisions == {"execution_verifier_rejected": 1}
+    assert loads(accepted.predictions[0]).act == DialogueAct.EXECUTE
+    assert accepted.decisions == {"accepted": 1}
+
+
+def test_verified_complete_route_can_correct_neural_tool_disagreement(schemas):
+    wrong = dumps(JALPlan(DialogueAct.EXECUTE, steps=(ToolCall("get_current_time"),)))
+    tool_labels = ("<none>", *schemas.tool_names)
+    count_logits = torch.full((1, 9), -5.0)
+    count_logits[0, 1] = 5.0
+    tool_logits = torch.full((1, 8, len(tool_labels)), -5.0)
+    tool_logits[0, 0, tool_labels.index("get_current_time")] = 10.0
+
+    result = constrain_jal_predictions(
+        [wrong],
+        torch.tensor([[12.0, 0.0, 0.0, 0.0, 0.0, 0.0]]),
+        schemas,
+        utterances=["открой paint"],
+        step_count_logits=count_logits,
+        tool_logits=tool_logits,
+        tool_labels=tool_labels,
+        execution_verifier_logits=torch.tensor([[0.0, 12.0]]),
+    )
+
+    assert loads(result.predictions[0]) == JALPlan(
+        DialogueAct.EXECUTE,
+        steps=(ToolCall("open_application", {"application": "paint"}),),
+    )
+    assert result.decisions == {"accepted_verified_explicit_route": 1}
+
+
+def test_constrained_decoder_uses_parameter_head_before_wrong_raw_enum(schemas):
+    raw = dumps(
+        JALPlan(
+            DialogueAct.EXECUTE,
+            steps=(
+                ToolCall(
+                    "window_control", {"action": "restore", "window": "discord"}
+                ),
+            ),
+        )
+    )
+    tool_labels = ("<none>", *schemas.tool_names)
+    parameter_labels = build_parameter_labels(schemas)
+    count_logits = torch.full((1, 9), -5.0)
+    count_logits[0, 1] = 5.0
+    tool_logits = torch.full((1, 8, len(tool_labels)), -5.0)
+    tool_logits[:, :, 0] = 5.0
+    tool_logits[0, 0, tool_labels.index("window_control")] = 10.0
+    parameter_logits = torch.full((1, 8, len(parameter_labels)), -10.0)
+    parameter_logits[
+        0,
+        0,
+        parameter_labels.index(
+            parameter_label("window_control", "action", "close")
+        ),
+    ] = 10.0
+
+    result = constrain_jal_predictions(
+        [raw],
+        torch.tensor([[12.0, 0.0, 0.0, 0.0, 0.0, 0.0]]),
+        schemas,
+        utterances=["убери окно discord"],
+        step_count_logits=count_logits,
+        tool_logits=tool_logits,
+        tool_labels=tool_labels,
+        parameter_logits=parameter_logits,
+        parameter_labels=parameter_labels,
+    )
+
+    plan = loads(result.predictions[0])
+    assert plan.steps[0].arguments == {"action": "close", "window": "discord"}
+    assert result.decisions == {"accepted_structured": 1}
+
+
+def test_parameter_head_cannot_authorize_execution_without_independent_evidence(
+    schemas,
+):
+    assert assemble_structured_execution(
+        "совершенно неизвестная просьба",
+        ("system_control",),
+        schemas,
+        structured_arguments=({"action": "volume_up"},),
+    ) is None
+
+
+def test_constrained_decoder_is_canonical_schema_valid_and_fail_closed(schemas):
+    valid_execution = dumps(
+        JALPlan(
+            DialogueAct.EXECUTE,
+            steps=(ToolCall("open_application", {"application": "paint"}),),
+        )
+    )
+    # DialogueAct order: execute, ask, confirm, cancel, reject, dialogue.
+    logits = torch.tensor(
+        [
+            [9.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.1, 0.0, 0.0, 0.0, 5.0, 0.0],
+            [0.2, 0.0, 0.0, 0.0, 0.0, 0.0],
+        ]
+    )
+    result = constrain_jal_predictions(
+        [valid_execution, "not json", valid_execution],
+        logits,
+        schemas,
+        execution_threshold=0.75,
+    )
+
+    plans = [loads(value) for value in result.predictions]
+    for plan in plans:
+        schemas.validate(plan)
+        assert dumps(plan) in result.predictions
+    assert plans[0].act == DialogueAct.EXECUTE
+    assert plans[1].act == DialogueAct.REJECT
+    assert plans[2].act == DialogueAct.REJECT
+    assert result.decisions == {
+        "accepted": 1,
+        "invalid_rejected": 1,
+        "low_confidence_execution_rejected": 1,
+    }
+
+
+def test_constrained_decoder_grounds_written_number_in_numeric_tool_slot(schemas):
+    prediction = dumps(
+        JALPlan(
+            DialogueAct.EXECUTE,
+            steps=(
+                ToolCall(
+                    "set_reminder",
+                    {"minutes": 5, "message": "позвонить родителям"},
+                ),
+            ),
+        )
+    )
+    result = constrain_jal_predictions(
+        [prediction],
+        torch.tensor([[9.0, 0.0, 0.0, 0.0, 0.0, 0.0]]),
+        schemas,
+        utterances=["напомни через четырнадцать минут позвонить родителям"],
+    )
+
+    grounded = loads(result.predictions[0])
+    assert grounded.steps[0].arguments["minutes"] == 14
+    assert result.decisions == {"accepted_numeric_grounded": 1}
+
+
+def test_constrained_decoder_requires_independent_tool_sequence_agreement(schemas):
+    prediction = dumps(
+        JALPlan(
+            DialogueAct.EXECUTE,
+            steps=(ToolCall("open_application", {"application": "paint"}),),
+        )
+    )
+    tool_labels = ("<none>", *schemas.tool_names)
+    wrong_tool_id = tool_labels.index("get_current_time")
+    count_logits = torch.full((1, 9), -5.0)
+    count_logits[0, 1] = 5.0
+    tool_logits = torch.full((1, 8, len(tool_labels)), -5.0)
+    tool_logits[:, :, 0] = 5.0
+    tool_logits[0, 0, wrong_tool_id] = 10.0
+
+    result = constrain_jal_predictions(
+        [prediction],
+        torch.tensor([[9.0, 0.0, 0.0, 0.0, 0.0, 0.0]]),
+        schemas,
+        step_count_logits=count_logits,
+        tool_logits=tool_logits,
+        tool_labels=tool_labels,
+    )
+
+    assert loads(result.predictions[0]).act == DialogueAct.REJECT
+    assert result.decisions == {"tool_disagreement_rejected": 1}
+
+
+def test_structured_assembler_builds_safe_four_step_jal(schemas):
+    plan = assemble_structured_execution(
+        "открой браузер запусти жестовый режим "
+        "напомни через четырнадцать минут о встрече закрой дискорд",
+        ("open_application", "gesture_mode", "set_reminder", "window_control"),
+        schemas,
+    )
+
+    assert plan == JALPlan(
+        DialogueAct.EXECUTE,
+        steps=(
+            ToolCall("open_application", {"application": "browser"}),
+            ToolCall("gesture_mode", {"action": "enable"}),
+            ToolCall("set_reminder", {"minutes": 14, "message": "встрече"}),
+            ToolCall("window_control", {"action": "close", "window": "discord"}),
+        ),
+    )
+    schemas.validate(plan)
+
+
+def test_structured_assembler_rejects_explicit_tool_disagreement(schemas):
+    assert assemble_structured_execution(
+        "закрой дискорд", ("open_application",), schemas
+    ) is None
+
+
+def test_constrained_decoder_blocks_destructive_ood_even_when_model_is_confident(schemas):
+    hallucination = dumps(
+        JALPlan(
+            DialogueAct.EXECUTE,
+            steps=(ToolCall("window_control", {"action": "restore", "window": "диск"}),),
+        )
+    )
+    labels = ("<none>", *schemas.tool_names)
+    count_logits = torch.full((1, 9), -5.0)
+    count_logits[0, 1] = 5.0
+    tool_logits = torch.full((1, 8, len(labels)), -5.0)
+    tool_logits[:, :, 0] = 5.0
+    tool_logits[0, 0, labels.index("window_control")] = 10.0
+
+    result = constrain_jal_predictions(
+        [hallucination],
+        torch.tensor([[12.0, 0.0, 0.0, 0.0, 0.0, 0.0]]),
+        schemas,
+        utterances=["очисти весь диск"],
+        step_count_logits=count_logits,
+        tool_logits=tool_logits,
+        tool_labels=labels,
+    )
+
+    assert loads(result.predictions[0]) == JALPlan(
+        DialogueAct.REJECT, reason="unsupported_tool"
+    )
+    assert result.decisions == {"unsafe_utterance_rejected": 1}
+
+
 def test_small_jal_model_can_overfit_and_greedy_decode_two_examples(train_examples):
     torch.manual_seed(5)
     examples = [
@@ -172,7 +788,7 @@ def test_small_jal_model_can_overfit_and_greedy_decode_two_examples(train_exampl
         )
     )
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.012, weight_decay=0.0)
-    for _ in range(61):
+    for _ in range(81):
         optimizer.zero_grad(set_to_none=True)
         logits, act_logits = model(
             batch["source_ids"],
@@ -262,6 +878,39 @@ def test_check_only_does_not_read_test_and_reports_rare_act_coverage(
     assert report["protocol"]["evaluation_holdout_loaded"] is False
     assert "test.jsonl" not in byte_reads
     assert not (tmp_path / "unused").exists()
+
+
+def test_resume_reuses_a_completed_matching_report(tmp_path, monkeypatch):
+    output = tmp_path / "completed"
+    output.mkdir()
+    checkpoint = output / "best.pt"
+    checkpoint.write_bytes(b"checkpoint")
+    expected = {
+        "architecture": "char_cnn",
+        "seed": 17,
+        "smoke": False,
+        "checkpoint": str(checkpoint),
+        "hyperparameters": {"learning_rate": 0.0005, "dropout": 0.1},
+    }
+    (output / "report.json").write_text(json.dumps(expected), encoding="utf-8")
+    args = SimpleNamespace(resume_existing=True, data_dir=str(tmp_path / "data"))
+    monkeypatch.setattr(
+        baseline_runner,
+        "train_baseline",
+        lambda _config: pytest.fail("completed run was trained again"),
+    )
+
+    result = baseline_runner._run(
+        args,
+        "char_cnn",
+        17,
+        0.0005,
+        0.1,
+        output,
+        epochs=24,
+    )
+
+    assert result == expected
 
 
 def test_locked_test_rejects_smoke_checkpoint_before_opening_data(tmp_path):

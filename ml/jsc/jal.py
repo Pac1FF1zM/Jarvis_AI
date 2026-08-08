@@ -271,6 +271,37 @@ class ToolSchemaRegistry:
         )
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
+    @property
+    def tool_names(self) -> tuple[str, ...]:
+        return tuple(sorted(self._schemas))
+
+    def argument_names(self, tool: str) -> tuple[str, ...]:
+        """Return the closed argument vocabulary for one registered tool."""
+        schema = self._schemas.get(tool)
+        if schema is None:
+            raise JALValidationError(f"unknown tool {tool!r}")
+        return tuple(schema["parameters"].get("properties", {}))
+
+    def required_arguments(self, tool: str) -> tuple[str, ...]:
+        """Return arguments which must be present in an executable call."""
+        schema = self._schemas.get(tool)
+        if schema is None:
+            raise JALValidationError(f"unknown tool {tool!r}")
+        return tuple(schema["parameters"].get("required", ()))
+
+    def categorical_values(self, tool: str) -> dict[str, tuple[JALScalar, ...]]:
+        """Return finite schema values suitable for learned parameter heads."""
+        schema = self._schemas.get(tool)
+        if schema is None:
+            raise JALValidationError(f"unknown tool {tool!r}")
+        result: dict[str, tuple[JALScalar, ...]] = {}
+        for name, spec in schema["parameters"].get("properties", {}).items():
+            if "enum" in spec:
+                result[name] = tuple(spec["enum"])
+            elif spec.get("type") == "boolean":
+                result[name] = (False, True)
+        return result
+
     def validate(self, plan: JALPlan) -> None:
         if not isinstance(plan, JALPlan):
             raise TypeError("validate expects JALPlan")

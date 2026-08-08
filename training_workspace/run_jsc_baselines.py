@@ -48,6 +48,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--resume-existing", action="store_true")
     parser.add_argument("--skip-sweep", action="store_true")
     parser.add_argument("--no-amp", action="store_true")
+    parser.add_argument("--copy-mechanism", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--structured-heads", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--parameter-heads", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--check-only", action="store_true")
     return parser
@@ -233,6 +236,18 @@ def _run(
     epochs: int,
     smoke: bool = False,
 ) -> dict[str, Any]:
+    completed = _load_completed_report(
+        args,
+        output_dir,
+        architecture=architecture,
+        seed=seed,
+        learning_rate=learning_rate,
+        dropout=dropout,
+        smoke=smoke,
+    )
+    if completed is not None:
+        print(f"resume: using completed report {Path(output_dir) / 'report.json'}")
+        return completed
     config = _config(
         args,
         architecture,
@@ -244,6 +259,53 @@ def _run(
         smoke=smoke,
     )
     return train_baseline(config)
+
+
+def _load_completed_report(
+    args: argparse.Namespace,
+    output_dir: Path,
+    *,
+    architecture: str,
+    seed: int,
+    learning_rate: float,
+    dropout: float,
+    smoke: bool,
+) -> dict[str, Any] | None:
+    """Reuse a finished run; ``latest.pt`` remains the path for partial runs."""
+    if not args.resume_existing:
+        return None
+    report_path = Path(output_dir) / "report.json"
+    if not report_path.is_file():
+        return None
+    data_dir = Path(args.data_dir)
+    inputs = [
+        data_dir / "dataset_manifest.json",
+        data_dir / "train.jsonl",
+        data_dir / "validation.jsonl",
+    ]
+    if any(path.is_file() and path.stat().st_mtime > report_path.stat().st_mtime for path in inputs):
+        return None
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        hyperparameters = report["hyperparameters"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError):
+        return None
+    if (
+        report.get("architecture") != architecture
+        or int(report.get("seed", -1)) != seed
+        or bool(report.get("smoke", False)) != smoke
+        or float(hyperparameters.get("learning_rate", -1.0)) != learning_rate
+        or float(hyperparameters.get("dropout", -1.0)) != dropout
+        or bool(hyperparameters.get("copy_mechanism", False))
+        != bool(getattr(args, "copy_mechanism", False))
+        or bool(hyperparameters.get("structured_heads", False))
+        != bool(getattr(args, "structured_heads", False))
+        or bool(hyperparameters.get("parameter_heads", False))
+        != bool(getattr(args, "parameter_heads", False))
+        or not Path(str(report.get("checkpoint", ""))).is_file()
+    ):
+        return None
+    return report
 
 
 def _config(
@@ -277,6 +339,9 @@ def _config(
         dropout=dropout,
         patience=args.patience,
         use_amp=not args.no_amp,
+        copy_mechanism=bool(getattr(args, "copy_mechanism", False)),
+        structured_heads=bool(getattr(args, "structured_heads", False)),
+        parameter_heads=bool(getattr(args, "parameter_heads", False)),
         resume=resume,
         smoke=smoke,
     )
@@ -299,12 +364,13 @@ def _select_hyperparameters(
     return selected
 
 
-def _validation_rank(report: dict[str, Any]) -> tuple[float, float, float, float]:
-    generation = report["validation"]["generation"]
+def _validation_rank(report: dict[str, Any]) -> tuple[bool, bool, float, float, float]:
+    generation = _preferred_generation(report["validation"])
     teacher = report["validation"]["teacher_forced"]
     return (
+        generation["false_execution_rate"] > 0.001,
+        generation["schema_valid_rate"] < 1.0,
         -generation["exact_jal_accuracy"],
-        -generation["schema_valid_rate"],
         generation["false_execution_rate"],
         teacher["token_nll"],
     )
@@ -319,10 +385,10 @@ def _leaderboard(
         matching = [report for report in reports if report["architecture"] == architecture]
         if not matching:
             continue
-        exact = [report["validation"]["generation"]["exact_jal_accuracy"] for report in matching]
-        valid = [report["validation"]["generation"]["schema_valid_rate"] for report in matching]
+        exact = [_preferred_generation(report["validation"])["exact_jal_accuracy"] for report in matching]
+        valid = [_preferred_generation(report["validation"])["schema_valid_rate"] for report in matching]
         false_execution = [
-            report["validation"]["generation"]["false_execution_rate"]
+            _preferred_generation(report["validation"])["false_execution_rate"]
             for report in matching
         ]
         rows.append(
@@ -339,8 +405,9 @@ def _leaderboard(
     return sorted(
         rows,
         key=lambda row: (
+            row["validation_false_execution_mean"] > 0.001,
+            row["validation_schema_valid_mean"] < 1.0,
             -row["validation_exact_jal_mean"],
-            -row["validation_schema_valid_mean"],
             row["validation_false_execution_mean"],
             row["parameters"],
         ),
@@ -348,7 +415,7 @@ def _leaderboard(
 
 
 def _test_summary(test_runs: list[dict[str, Any]]) -> dict[str, float]:
-    generations = [run["metrics"]["generation"] for run in test_runs]
+    generations = [_preferred_generation(run["metrics"]) for run in test_runs]
     return {
         "exact_jal_mean": statistics.fmean(
             result["exact_jal_accuracy"] for result in generations
@@ -363,6 +430,10 @@ def _test_summary(test_runs: list[dict[str, Any]]) -> dict[str, float]:
             result["false_execution_rate"] for result in generations
         ),
     }
+
+
+def _preferred_generation(metrics: dict[str, Any]) -> dict[str, Any]:
+    return metrics.get("constrained_generation", metrics["generation"])
 
 
 def _configuration_name(

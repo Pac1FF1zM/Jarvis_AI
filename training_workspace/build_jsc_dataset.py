@@ -1,4 +1,4 @@
-"""Build the deterministic, project-owned Jarvis Semantic Core v3 corpus."""
+"""Build the deterministic, project-owned Jarvis Semantic Core v5 corpus."""
 from __future__ import annotations
 
 import hashlib
@@ -21,6 +21,7 @@ from ml.jsc.jal import (
     dumps,
 )
 from tools.registry import ToolRegistry
+from ml.jsc.project_registry import build_project_schema_registry
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "jsc_data"
@@ -72,10 +73,17 @@ CATEGORY_ACT_MINIMUMS = {
 }
 
 CATEGORY_TOOL_MINIMUMS = {
-    "train": {"single": {"browser_control": 20, "file_control": 20, "system_control": 20, "window_control": 20}, "multi_turn": {"file_control": 4, "window_control": 4}},
-    "validation": {"single": {"browser_control": 5, "file_control": 5, "system_control": 5, "window_control": 5}, "multi_turn": {"file_control": 2, "window_control": 2}},
-    "test": {"single": {"browser_control": 5, "file_control": 5, "system_control": 5, "window_control": 5}, "multi_turn": {"file_control": 2, "window_control": 2}},
-    "evaluation_holdout": {"single": {"browser_control": 4, "file_control": 4, "system_control": 4, "window_control": 4}, "multi_turn": {"file_control": 1, "window_control": 1}},
+    "train": {"single": {"browser_control": 20, "file_control": 20, "system_control": 20, "window_control": 20, "gesture_mode": 20, "workspace_control": 20}, "compound": {"gesture_mode": 10, "workspace_control": 8}, "multi_turn": {"file_control": 4, "window_control": 4}},
+    "validation": {"single": {"browser_control": 5, "file_control": 5, "system_control": 5, "window_control": 5, "gesture_mode": 5, "workspace_control": 5}, "compound": {"gesture_mode": 3, "workspace_control": 2}, "multi_turn": {"file_control": 2, "window_control": 2}},
+    "test": {"single": {"browser_control": 5, "file_control": 5, "system_control": 5, "window_control": 5, "gesture_mode": 5, "workspace_control": 5}, "compound": {"gesture_mode": 3, "workspace_control": 2}, "multi_turn": {"file_control": 2, "window_control": 2}},
+    "evaluation_holdout": {"single": {"browser_control": 4, "file_control": 4, "system_control": 4, "window_control": 4, "gesture_mode": 4, "workspace_control": 4}, "compound": {"gesture_mode": 2, "workspace_control": 2}, "multi_turn": {"file_control": 1, "window_control": 1}},
+}
+
+CATEGORY_METADATA_MINIMUMS = {
+    "train": {"single": {"number_surface=words": 40}, "compound": {"number_surface=words": 12}, "multi_turn": {"number_surface=words": 12}, "correction": {"number_surface=words": 12}},
+    "validation": {"single": {"number_surface=words": 15}, "compound": {"number_surface=words": 5}, "multi_turn": {"number_surface=words": 5}, "correction": {"number_surface=words": 5}},
+    "test": {"single": {"number_surface=words": 15}, "compound": {"number_surface=words": 5}, "multi_turn": {"number_surface=words": 5}, "correction": {"number_surface=words": 5}},
+    "evaluation_holdout": {"single": {"number_surface=words": 12}, "compound": {"number_surface=words": 4}, "multi_turn": {"number_surface=words": 4}, "correction": {"number_surface=words": 4}},
 }
 
 DESKTOP_VALUES = {
@@ -249,6 +257,29 @@ VALUES = {
     },
 }
 
+_NUMBER_WORDS_UNDER_TWENTY = (
+    "ноль", "один", "два", "три", "четыре", "пять", "шесть", "семь",
+    "восемь", "девять", "десять", "одиннадцать", "двенадцать",
+    "тринадцать", "четырнадцать", "пятнадцать", "шестнадцать",
+    "семнадцать", "восемнадцать", "девятнадцать",
+)
+_NUMBER_TENS = {20: "двадцать", 30: "тридцать", 40: "сорок", 50: "пятьдесят"}
+
+
+def _number_word(value: int) -> str:
+    if 0 <= value < len(_NUMBER_WORDS_UNDER_TWENTY):
+        return _NUMBER_WORDS_UNDER_TWENTY[value]
+    tens, ones = divmod(value, 10)
+    prefix = _NUMBER_TENS.get(tens * 10)
+    if prefix is None or value > 59:
+        raise ValueError(f"number word is not defined for {value}")
+    return prefix if not ones else f"{prefix} {_NUMBER_WORDS_UNDER_TWENTY[ones]}"
+
+
+def _number_surfaces(value: int) -> tuple[str, str]:
+    """Keep digit and spoken-word forms mapped to the same numeric slot."""
+    return str(value), _number_word(value)
+
 HARD_NEGATIVES = {
     "train": ("зачем нужен {app}", "расскажи как работает {app}", "почему {app} иногда зависает", "мне нравится {app}", "можно ли удалить {app}", "слово напоминание означает что", "почему люди смотрят на время", "не открывай {app} просто расскажи о нём"),
     "validation": ("какая польза от {app}", "сравни {app} с другими программами", "я не просил открывать {app}", "как устроены системные часы"),
@@ -333,6 +364,82 @@ TIME_AND_APP_FRAMES = {
     "validation": "сначала назови время затем запусти {app}",
     "test": "проверь часы после чего включи {app}",
     "evaluation_holdout": "озвучь текущее время заодно открой {app}",
+}
+
+GESTURE_MODE_PHRASES = {
+    "train": (
+        ("запусти жестовый режим", "enable"),
+        ("включи режим жестов", "enable"),
+        ("активируй управление руками", "enable"),
+        ("начни распознавать жесты", "enable"),
+        ("выключи жестовый режим", "disable"),
+        ("останови режим жестов", "disable"),
+        ("выйди из управления жестами", "disable"),
+        ("прекрати распознавание жестов", "disable"),
+        ("поставь режим жестов на паузу", "pause"),
+        ("приостанови жестовый режим", "pause"),
+        ("продолжи жестовый режим", "resume"),
+        ("возобнови распознавание жестов", "resume"),
+        ("работает ли режим жестов", "status"),
+        ("проверь статус жестового режима", "status"),
+    ),
+    "validation": (
+        ("перейди в режим управления жестами", "enable"),
+        ("задействуй распознавание рук", "enable"),
+        ("отключи управление руками", "disable"),
+        ("заверши распознавание жестов", "disable"),
+        ("временно останови жесты", "pause"),
+        ("сними жестовый режим с паузы", "resume"),
+        ("активна ли камера жестов", "status"),
+    ),
+    "test": (
+        ("открой интерфейс жестового режима", "enable"),
+        ("начинай следить за жестами", "enable"),
+        ("закрой режим управления жестами", "disable"),
+        ("хватит отслеживать руки", "disable"),
+        ("заморозь распознавание жестов", "pause"),
+        ("верни распознавание жестов", "resume"),
+        ("жесты сейчас включены", "status"),
+    ),
+    "evaluation_holdout": (
+        ("подключи управление компьютером жестами", "enable"),
+        ("начни видеть мои жесты", "enable"),
+        ("убери управление жестами", "disable"),
+        ("больше не следи за жестами", "disable"),
+        ("сделай паузу в распознавании рук", "pause"),
+        ("продолжай распознавать руки", "resume"),
+        ("скажи состояние режима жестов", "status"),
+    ),
+}
+
+WORKSPACE_PHRASES = {
+    "train": {
+        "launch": ("запусти режим {workspace}", "включи {workspace} режим", "перейди в рабочее пространство {workspace}"),
+        "list": ("покажи мои рабочие пространства", "перечисли доступные режимы"),
+        "finish": ("заверши текущий режим", "выйди из рабочего пространства"),
+    },
+    "validation": {
+        "launch": ("активируй режим {workspace}", "открой рабочее пространство {workspace}"),
+        "list": ("какие рабочие режимы у меня есть",),
+        "finish": ("закрой активное рабочее пространство",),
+    },
+    "test": {
+        "launch": ("подготовь режим {workspace}", "переключись на пространство {workspace}"),
+        "list": ("назови сохранённые рабочие пространства",),
+        "finish": ("закончи работу в текущем режиме",),
+    },
+    "evaluation_holdout": {
+        "launch": ("разверни окружение {workspace}", "создай рабочий стол для режима {workspace}"),
+        "list": ("какие окружения можно запустить",),
+        "finish": ("убери текущее рабочее окружение",),
+    },
+}
+
+WORKSPACE_NAMES = {
+    "train": {"программирование": "programming", "игры": "gaming", "учёба": "study"},
+    "validation": {"кодинг": "programming", "игровой": "gaming", "учебный": "study"},
+    "test": {"разработка": "programming", "гейминг": "gaming", "занятия": "study"},
+    "evaluation_holdout": {"написание кода": "programming", "для игр": "gaming", "для учебы": "study"},
 }
 
 MULTI_TURN_FRAMES = {
@@ -432,9 +539,7 @@ class Candidate:
 
 
 def _registry() -> ToolSchemaRegistry:
-    tools = ToolRegistry()
-    tools.discover("tools")
-    return ToolSchemaRegistry.from_tool_registry(tools)
+    return build_project_schema_registry()
 
 
 def generate() -> tuple[dict[str, list[dict[str, Any]]], str]:
@@ -475,13 +580,23 @@ def generate() -> tuple[dict[str, list[dict[str, Any]]], str]:
                         f"have {len(matching)}"
                     )
                 chosen.extend(matching[:minimum])
+            for condition, minimum in CATEGORY_METADATA_MINIMUMS[split].get(category, {}).items():
+                name, expected = condition.split("=", 1)
+                already = {candidate.signature for candidate in chosen}
+                matching = [
+                    candidate
+                    for candidate in accepted
+                    if candidate.signature not in already
+                    and str(candidate.metadata.get(name)) == expected
+                ]
+                if len(matching) < minimum:
+                    raise RuntimeError(
+                        f"{split}/{category}: need {minimum} examples for {condition}, "
+                        f"have {len(matching)}"
+                    )
+                chosen.extend(matching[:minimum])
             chosen_signatures = {candidate.signature for candidate in chosen}
-            chosen.extend(
-                candidate
-                for candidate in accepted
-                if candidate.signature not in chosen_signatures
-            )
-            chosen = chosen[:count]
+            chosen = _balanced_complete(chosen, accepted, count)
             selected.extend(chosen)
             used.update(candidate.signature for candidate in chosen)
         random.Random(SEEDS[split]).shuffle(selected)
@@ -524,7 +639,7 @@ def write_dataset(output_dir: str | Path = DATA_DIR) -> dict[str, Any]:
     }
     report = validate_jsc_splits(loaded)
     manifest = {
-        "version": 3,
+        "version": 5,
         "data_schema_version": DATA_SCHEMA_VERSION,
         "generator": "training_workspace.build_jsc_dataset",
         "seeded": True,
@@ -562,6 +677,45 @@ def _candidate_pools(split: str) -> dict[str, list[Candidate]]:
     }
 
 
+def _balanced_complete(
+    chosen: list[Candidate], accepted: list[Candidate], count: int
+) -> list[Candidate]:
+    """Fill a category without letting one combinatorial tool pool dominate."""
+    selected = list(chosen)
+    selected_signatures = {candidate.signature for candidate in selected}
+    groups: dict[str, list[Candidate]] = {}
+    for candidate in accepted:
+        if candidate.signature in selected_signatures:
+            continue
+        if candidate.target.steps:
+            key = "tools:" + ",".join(step.tool for step in candidate.target.steps)
+        else:
+            key = "act:" + candidate.target.act.value
+        groups.setdefault(key, []).append(candidate)
+    keys = sorted(groups)
+    cursors = {key: 0 for key in keys}
+    while len(selected) < count:
+        progressed = False
+        for key in keys:
+            cursor = cursors[key]
+            if cursor >= len(groups[key]):
+                continue
+            candidate = groups[key][cursor]
+            cursors[key] += 1
+            if candidate.signature in selected_signatures:
+                continue
+            selected.append(candidate)
+            selected_signatures.add(candidate.signature)
+            progressed = True
+            if len(selected) == count:
+                break
+        if not progressed:
+            break
+    if len(selected) < count:
+        raise RuntimeError(f"balanced selection needs {count} examples, found {len(selected)}")
+    return selected
+
+
 def _single_candidates(split: str) -> list[Candidate]:
     lex = LEXICON[split]
     values = VALUES[split]
@@ -577,29 +731,37 @@ def _single_candidates(split: str) -> list[Candidate]:
                         _execute("open_application", application=tool_name),
                     )
                 )
-    candidates.extend(
-        Candidate("single", f"{split}.single.time_{index}", text, _execute("get_current_time"))
-        for index, text in enumerate(lex["time"])
+    read_only_groups = (
+        ("time", "get_current_time", lex["time"]),
+        ("apps", "list_applications", lex["list_apps"]),
+        ("reminders", "list_reminders", lex["list_reminders"]),
     )
-    candidates.extend(
-        Candidate("single", f"{split}.single.apps_{index}", text, _execute("list_applications"))
-        for index, text in enumerate(lex["list_apps"])
-    )
-    candidates.extend(
-        Candidate("single", f"{split}.single.reminders_{index}", text, _execute("list_reminders"))
-        for index, text in enumerate(lex["list_reminders"])
-    )
-    for template_index, template in enumerate(lex["reminder"]):
-        for minutes in values["minutes"]:
-            for message in values["messages"]:
+    for family, tool, phrases in read_only_groups:
+        for index, text in enumerate(phrases):
+            for wrapper_index, wrapped in enumerate(
+                (text, f"джарвис {text}", f"пожалуйста {text}", f"{text} пожалуйста")
+            ):
                 candidates.append(
                     Candidate(
                         "single",
-                        f"{split}.single.relative_{template_index}",
-                        template.format(minutes=minutes, message=message),
-                        _execute("set_reminder", minutes=minutes, message=message),
+                        f"{split}.single.{family}_{index}_{wrapper_index}",
+                        wrapped,
+                        _execute(tool),
                     )
                 )
+    for template_index, template in enumerate(lex["reminder"]):
+        for minutes in values["minutes"]:
+            for minute_surface in _number_surfaces(minutes):
+                for message in values["messages"]:
+                    candidates.append(
+                        Candidate(
+                            "single",
+                            f"{split}.single.relative_{template_index}",
+                            template.format(minutes=minute_surface, message=message),
+                            _execute("set_reminder", minutes=minutes, message=message),
+                            metadata={"number_surface": "words" if minute_surface != str(minutes) else "digits"},
+                        )
+                    )
     for template_index, template in enumerate(lex["absolute"]):
         day = "завтра" if "завтра" in template or "на завтра" in template else "сегодня"
         for clock in values["clocks"]:
@@ -614,14 +776,16 @@ def _single_candidates(split: str) -> list[Candidate]:
                 )
     for template_index, template in enumerate(lex["cancel_reminder"]):
         for number in range(1, 21):
-            candidates.append(
-                Candidate(
-                    "single",
-                    f"{split}.single.cancel_reminder_{template_index}",
-                    template.format(number=number),
-                    _execute("cancel_reminder", reminder_id=number),
+            for number_surface in _number_surfaces(number):
+                candidates.append(
+                    Candidate(
+                        "single",
+                        f"{split}.single.cancel_reminder_{template_index}",
+                        template.format(number=number_surface),
+                        _execute("cancel_reminder", reminder_id=number),
+                        metadata={"number_surface": "words" if number_surface != str(number) else "digits"},
+                    )
                 )
-            )
     candidates.extend(
         Candidate("single", f"{split}.single.cancel_{index}", text, JALPlan(DialogueAct.CANCEL, reason="user_requested"))
         for index, text in enumerate(lex["cancel"])
@@ -718,6 +882,57 @@ def _desktop_single_candidates(split: str) -> list[Candidate]:
         folder_text = folder_frames[split].format(value=folder)
         candidates.append(Candidate("single", f"{split}.single.file_list", folder_text, _execute("file_control", action="list", path=folder)))
         candidates.append(Candidate("single", f"{split}.single.file_list_polite", f"пожалуйста {folder_text}", _execute("file_control", action="list", path=folder)))
+
+    for index, (text, action) in enumerate(GESTURE_MODE_PHRASES[split]):
+        for wrapper_index, wrapped in enumerate((text, f"джарвис {text}", f"пожалуйста {text}")):
+            candidates.append(
+                Candidate(
+                    "single",
+                    f"{split}.single.gesture_{action}_{index}_{wrapper_index}",
+                    wrapped,
+                    _execute("gesture_mode", action=action),
+                )
+            )
+
+    workspace_frames = WORKSPACE_PHRASES[split]
+    for surface, canonical in WORKSPACE_NAMES[split].items():
+        for index, template in enumerate(workspace_frames["launch"]):
+            text = template.format(workspace=surface)
+            for wrapper_index, wrapped in enumerate((text, f"джарвис {text}")):
+                candidates.append(
+                    Candidate(
+                        "single",
+                        f"{split}.single.workspace_launch_{index}_{wrapper_index}",
+                        wrapped,
+                        _execute("workspace_control", action="launch", workspace=canonical),
+                    )
+                )
+    for action in ("list", "finish"):
+        for index, text in enumerate(workspace_frames[action]):
+            for wrapper_index, wrapped in enumerate((text, f"джарвис {text}")):
+                candidates.append(
+                    Candidate(
+                        "single",
+                        f"{split}.single.workspace_{action}_{index}_{wrapper_index}",
+                        wrapped,
+                        _execute("workspace_control", action=action),
+                    )
+                )
+    capture_names = {
+        "train": ("работа", "монтаж", "созвоны"),
+        "validation": ("мой проект", "офис"),
+        "test": ("дизайн", "исследование"),
+        "evaluation_holdout": ("вечерняя работа", "демо"),
+    }[split]
+    for name in capture_names:
+        candidates.append(
+            Candidate(
+                "single",
+                f"{split}.single.workspace_capture",
+                f"сохрани текущее расположение как {name}",
+                _execute("workspace_control", action="capture", workspace=name),
+            )
+        )
     return candidates
 
 
@@ -729,22 +944,23 @@ def _compound_candidates(split: str) -> list[Candidate]:
     for frame_index, frame in enumerate(frames):
         for app_name, words in applications:
             for minutes in values["minutes"]:
-                for message in values["messages"]:
-                    candidates.append(
-                        Candidate(
-                            "compound",
-                            f"{split}.compound.open_remind_{frame_index}",
-                            frame.format(app=words[0], minutes=minutes, message=message),
-                            JALPlan(
-                                DialogueAct.EXECUTE,
-                                steps=(
-                                    ToolCall("open_application", {"application": app_name}),
-                                    ToolCall("set_reminder", {"minutes": minutes, "message": message}),
+                for minute_surface in _number_surfaces(minutes):
+                    for message in values["messages"]:
+                        candidates.append(
+                            Candidate(
+                                "compound",
+                                f"{split}.compound.open_remind_{frame_index}",
+                                frame.format(app=words[0], minutes=minute_surface, message=message),
+                                JALPlan(
+                                    DialogueAct.EXECUTE,
+                                    steps=(
+                                        ToolCall("open_application", {"application": app_name}),
+                                        ToolCall("set_reminder", {"minutes": minutes, "message": message}),
+                                    ),
                                 ),
-                            ),
-                            metadata={"difficulty": "compositional"},
+                                metadata={"difficulty": "compositional", "number_surface": "words" if minute_surface != str(minutes) else "digits"},
+                            )
                         )
-                    )
     for app_name, words in applications:
         candidates.append(
             Candidate(
@@ -761,6 +977,73 @@ def _compound_candidates(split: str) -> list[Candidate]:
                 metadata={"difficulty": "compositional"},
             )
         )
+    raw_frames = {
+        "train": "открой браузер запусти жестовый режим напомни через {minutes} минут {message} закрой дискорд",
+        "validation": "сначала включи браузер затем активируй жесты напомни через {minutes} минут {message} после этого закрой discord",
+        "test": "запусти интернет включи управление руками поставь напоминание на {minutes} минут {message} затем заверши окно дискорда",
+        "evaluation_holdout": "подготовь браузер начни распознавать жесты напомни спустя {minutes} минут {message} потом убери discord",
+    }
+    for minutes in values["minutes"]:
+        for minute_surface in _number_surfaces(minutes):
+            for message in values["messages"]:
+                candidates.append(
+                    Candidate(
+                        "compound",
+                        f"{split}.compound.raw_voice_pipeline",
+                        raw_frames[split].format(minutes=minute_surface, message=message),
+                        JALPlan(
+                            DialogueAct.EXECUTE,
+                            steps=(
+                                ToolCall("open_application", {"application": "browser"}),
+                                ToolCall("gesture_mode", {"action": "enable"}),
+                                ToolCall("set_reminder", {"minutes": minutes, "message": message}),
+                                ToolCall("window_control", {"action": "close", "window": "discord"}),
+                            ),
+                        ),
+                        metadata={"difficulty": "raw_multi_action", "punctuation": False},
+                    )
+                )
+    for surface, canonical in WORKSPACE_NAMES[split].items():
+        workspace_compound_frames = {
+            "train": (
+                "запусти режим {workspace} и скажи который час",
+                "сначала включи {workspace} режим потом назови текущее время",
+                "подготовь рабочее пространство {workspace} заодно проверь часы",
+            ),
+            "validation": (
+                "активируй окружение {workspace} затем озвучь время",
+                "перейди в {workspace} режим и сообщи показания часов",
+                "разверни пространство {workspace} после этого назови время",
+            ),
+            "test": (
+                "включи рабочий набор {workspace} потом проверь системные часы",
+                "загрузи окружение {workspace} и сориентируй по времени",
+                "создай режим {workspace} заодно скажи текущий час",
+            ),
+            "evaluation_holdout": (
+                "собери пространство {workspace} и уточни время на компьютере",
+                "подними окружение {workspace} после чего прочитай часы",
+                "переключи меня в {workspace} режим параллельно назови время",
+            ),
+        }[split]
+        for variant, text in enumerate(
+            frame.format(workspace=surface) for frame in workspace_compound_frames
+        ):
+            candidates.append(
+                Candidate(
+                    "compound",
+                    f"{split}.compound.workspace_and_time_{variant}",
+                    text,
+                    JALPlan(
+                        DialogueAct.EXECUTE,
+                        steps=(
+                            ToolCall("workspace_control", {"action": "launch", "workspace": canonical}),
+                            ToolCall("get_current_time"),
+                        ),
+                    ),
+                    metadata={"difficulty": "compositional"},
+                )
+            )
     return candidates
 
 
@@ -786,22 +1069,23 @@ def _multi_turn_candidates(split: str) -> list[Candidate]:
                 )
             )
         for minutes in values["minutes"]:
-            for answer_index, answer_template in enumerate(frames["answers"]):
-                answer = answer_template.format(minutes=minutes)
-                candidates.append(
-                    Candidate(
-                        "multi_turn",
-                        f"{split}.multi.reminder_fill_{answer_index}",
-                        answer,
-                        _execute("set_reminder", minutes=minutes, message=message),
-                        history=(
-                            ("user", frames["requests"][0].format(message=message)),
-                            ("jarvis", frames["question"]),
-                        ),
-                        state=pending,
-                        metadata={"turn": "slot_fill"},
+            for minute_surface in _number_surfaces(minutes):
+                for answer_index, answer_template in enumerate(frames["answers"]):
+                    answer = answer_template.format(minutes=minute_surface)
+                    candidates.append(
+                        Candidate(
+                            "multi_turn",
+                            f"{split}.multi.reminder_fill_{answer_index}",
+                            answer,
+                            _execute("set_reminder", minutes=minutes, message=message),
+                            history=(
+                                ("user", frames["requests"][0].format(message=message)),
+                                ("jarvis", frames["question"]),
+                            ),
+                            state=pending,
+                            metadata={"turn": "slot_fill", "number_surface": "words" if minute_surface != str(minutes) else "digits"},
+                        )
                     )
-                )
     for app_name, words in APPLICATION_WORDS[split].items():
         pending = JALPlan(
             DialogueAct.ASK,
@@ -851,17 +1135,18 @@ def _multi_turn_candidates(split: str) -> list[Candidate]:
                     metadata={"turn": "request"},
                 )
             )
-        candidates.append(
-            Candidate(
-                "multi_turn",
-                f"{split}.multi.cancel_reminder_fill",
-                CANCEL_ID_ANSWERS[split].format(number=number),
-                _execute("cancel_reminder", reminder_id=number),
-                history=(("user", request), ("jarvis", question)),
-                state=pending,
-                metadata={"turn": "slot_fill"},
+        for number_surface in _number_surfaces(number):
+            candidates.append(
+                Candidate(
+                    "multi_turn",
+                    f"{split}.multi.cancel_reminder_fill",
+                    CANCEL_ID_ANSWERS[split].format(number=number_surface),
+                    _execute("cancel_reminder", reminder_id=number),
+                    history=(("user", request), ("jarvis", question)),
+                    state=pending,
+                    metadata={"turn": "slot_fill", "number_surface": "words" if number_surface != str(number) else "digits"},
+                )
             )
-        )
     confirmation_frames = {
         "train": {
             "window_request": "закрой окно", "window_question": "Какое окно закрыть?",
@@ -943,29 +1228,31 @@ def _correction_candidates(split: str) -> list[Candidate]:
             )
             for new_minutes in values["minutes"]:
                 if new_minutes != old_minutes:
-                    candidates.append(
-                        Candidate(
-                            "correction",
-                            f"{split}.correction.reminder_time",
-                            frames["reminder_fix"].format(new=new_minutes),
-                            _execute("set_reminder", minutes=new_minutes, message=message),
-                            history=(
-                                (
-                                    "user",
-                                    frames["reminder_request"].format(
-                                        old=old_minutes,
-                                        message=message,
+                    for old_surface in _number_surfaces(old_minutes):
+                        for new_surface in _number_surfaces(new_minutes):
+                            candidates.append(
+                                Candidate(
+                                    "correction",
+                                    f"{split}.correction.reminder_time",
+                                    frames["reminder_fix"].format(new=new_surface),
+                                    _execute("set_reminder", minutes=new_minutes, message=message),
+                                    history=(
+                                        (
+                                            "user",
+                                            frames["reminder_request"].format(
+                                                old=old_surface,
+                                                message=message,
+                                            ),
+                                        ),
+                                        (
+                                            "jarvis",
+                                            frames["reminder_question"].format(old=old_surface),
+                                        ),
                                     ),
-                                ),
-                                (
-                                    "jarvis",
-                                    frames["reminder_question"].format(old=old_minutes),
-                                ),
-                            ),
-                            state=old_plan,
-                            metadata={"correction": "replace_time"},
-                        )
-                    )
+                                    state=old_plan,
+                                    metadata={"correction": "replace_time", "number_surface": "words" if new_surface != str(new_minutes) or old_surface != str(old_minutes) else "digits"},
+                                )
+                            )
     return candidates
 
 
@@ -1143,6 +1430,10 @@ def _slot_terms() -> tuple[str, ...]:
         terms.update(VALUES[split]["topics"])
         for values in DESKTOP_VALUES[split].values():
             terms.update(values)
+    terms.update(_number_word(value) for value in range(1, 60))
+    for values in WORKSPACE_NAMES.values():
+        terms.update(values)
+        terms.update(values.values())
     return tuple(sorted(terms, key=len, reverse=True))
 
 

@@ -10,13 +10,18 @@ weights/embeddings и внешние AI API не используются.
 
 1. **[готово] JAL v1 и контракт инструментов** — формальный язык планов, канонический
    codec, типизированная проверка по реальным tool schemas и тесты.
-2. **[готово] Фабрика данных v3** — воспроизводимые одиночные, составные и многотуровые
-   сценарии; ASR-искажения, hard negatives, OOD; независимые family splits.
-3. **[код готов, ожидаются RTX-прогоны] Честные baselines** — CharCNN, BiGRU и
+2. **[готово] Фабрика данных v5** — воспроизводимые одиночные, составные и многотуровые
+   сценарии; ASR-искажения, hard negatives, OOD, цифры и русские числительные;
+   независимые family splits.
+3. **[готово] Честные baselines** — CharCNN, BiGRU и
    tiny Transformer encoder с общим JAL decoder; одинаковые данные, три seed,
    checkpoint/resume и единый safety-oriented evaluation protocol.
-4. **JSC semantic parser** — собственный Transformer encoder-decoder,
-   grammar-constrained генерация JAL и schema-conditioned tool selection.
+4. **[в работе] JSC semantic parser** — собственный Transformer encoder-decoder,
+   copy-механизм, числовые признаки, отдельные головы типа действия, числа
+   шагов, упорядоченного списка инструментов, категориальных параметров и
+   свободных character spans; schema-conditioned сборщик и fail-closed выдача
+   JAL. Следующий шаг — улучшение обобщения act/tool/span heads на новых
+   семействах формулировок и независимый verifier.
 5. **Диалог и исправления** — neural dialogue-state tracker, пропущенные slots,
    отрицания, замены, подтверждения и составные команды.
 6. **Надёжность** — OOD head, conformal clarification, selective risk,
@@ -37,8 +42,27 @@ weights/embeddings и внешние AI API не используются.
 - holdout не участвует в подборе параметров или эпохи.
 
 Текущий этап отмечается в git и меняется только после тестов и измеримого
-выходного гейта. Сейчас нужно выполнить 12 validation-only pilot runs и девять
-multi-seed confirmation runs на RTX 3090 Ti; без их mean/std этап 3 не считается
-закрытым. Подробности: `ml/jsc/JAL_SPEC_RU.md`,
+выходного гейта. Baseline-протокол из 21 запуска выполнен на RTX 3050 6GB.
+Лучший validation-эксперимент этапа 4 на сбалансированном JSC v5 (Transformer,
+seed 17, execution threshold 0,90) использует categorical parameter head,
+character-span head, отдельный execution verifier и полную детерминированную
+грамматику только как второй сигнал при согласии verifier. Он дал 100%
+schema-valid планов, 0% ложных исполнений, 28,97% exact JAL, 37,59% argument
+sequence accuracy, 100% OOD recall и 77,50% точности значения для чисел
+словами. Это +4,14 п.п. exact JAL относительно v7. Переобучившийся вариант с
+новым semantic pooling отклонён; encoder и старые головы в выбранном v8
+остались заморожены.
+
+На один раз открытом после выбора v7 test было: 100% schema validity, 18,62%
+exact JAL, 27,24% argument accuracy, 76% OOD recall и 0,34% ложных исполнений.
+V8 подбирался только на validation и повторно на test не проверялся. Эти
+результаты всё ещё запрещают promotion исследовательского checkpoint
+`training_workspace/jsc_runs_v8/legacy_verifier_seed17/best.pt` в runtime.
+Контрольный BiGRU дал 18,62% exact JAL на validation. Ключевая
+четырёхшаговая фраза без пунктуации корректно собрана в
+`open_application → gesture_mode → set_reminder → window_control`, включая
+число «двадцать». До production-гейтов стабильная NLU не заменяется.
+Подробности:
+`ml/jsc/JAL_SPEC_RU.md`,
 `training_workspace/jsc_data/README_RU.md` и
 `training_workspace/JSC_BASELINES_RU.md`.

@@ -23,8 +23,15 @@ class BaselineConfig:
     feedforward_dim: int = 256
     dropout: float = 0.15
     max_source_length: int = 384
-    max_target_length: int = 256
+    max_target_length: int = 384
     pad_id: int = 0
+    copy_mechanism: bool = False
+    num_tools: int = 0
+    num_parameter_labels: int = 0
+    num_span_slots: int = 0
+    semantic_pooling: bool = False
+    execution_verifier: bool = False
+    max_steps: int = 8
 
     def __post_init__(self) -> None:
         if self.architecture not in ARCHITECTURES:
@@ -39,6 +46,17 @@ class BaselineConfig:
             raise ValueError("encoder and decoder need at least one layer")
         if not 0.0 <= self.dropout < 1.0:
             raise ValueError("dropout must be in [0, 1)")
+        if (
+            self.num_tools < 0
+            or self.num_parameter_labels < 0
+            or self.num_span_slots < 0
+            or self.max_steps < 1
+        ):
+            raise ValueError("structured label dimensions are invalid")
+        if self.num_parameter_labels and not self.num_tools:
+            raise ValueError("parameter heads require structured tool heads")
+        if self.num_span_slots and not self.num_tools:
+            raise ValueError("span heads require structured tool heads")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -68,6 +86,27 @@ class JSCBaselineModel(nn.Module):
             self.encoder = _BiGRUEncoder(config)
         else:
             self.encoder = _TransformerEncoder(config)
+        if config.semantic_pooling:
+            self.semantic_attention = nn.Linear(config.d_model, 1, bias=False)
+            self.semantic_projection = nn.Sequential(
+                nn.LayerNorm(config.d_model * 3),
+                nn.Linear(config.d_model * 3, config.d_model),
+                nn.GELU(),
+                nn.Dropout(config.dropout),
+                nn.LayerNorm(config.d_model),
+            )
+        else:
+            self.semantic_attention = None
+            self.semantic_projection = None
+        self.execution_verifier_head = (
+            nn.Sequential(
+                nn.LayerNorm(config.d_model),
+                nn.Dropout(config.dropout),
+                nn.Linear(config.d_model, 2),
+            )
+            if config.execution_verifier
+            else None
+        )
         decoder_layer = nn.TransformerDecoderLayer(
             d_model=config.d_model,
             nhead=config.attention_heads,
@@ -84,11 +123,59 @@ class JSCBaselineModel(nn.Module):
         )
         self.token_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
         self.token_head.weight = self.token_embedding.weight
+        if config.copy_mechanism:
+            self.copy_query = nn.Linear(config.d_model, config.d_model, bias=False)
+            self.copy_gate = nn.Linear(config.d_model * 2, 1)
+        else:
+            self.copy_query = None
+            self.copy_gate = None
         self.act_head = nn.Sequential(
             nn.LayerNorm(config.d_model),
             nn.Dropout(config.dropout),
             nn.Linear(config.d_model, config.num_acts),
         )
+        if config.num_tools:
+            self.step_embeddings = nn.Embedding(config.max_steps, config.d_model)
+            self.step_count_head = nn.Sequential(
+                nn.LayerNorm(config.d_model),
+                nn.Dropout(config.dropout),
+                nn.Linear(config.d_model, config.max_steps + 1),
+            )
+            self.tool_sequence_head = nn.Sequential(
+                nn.LayerNorm(config.d_model),
+                nn.Dropout(config.dropout),
+                nn.Linear(config.d_model, config.num_tools),
+            )
+            self.parameter_head = (
+                nn.Sequential(
+                    nn.LayerNorm(config.d_model),
+                    nn.Dropout(config.dropout),
+                    nn.Linear(config.d_model, config.num_parameter_labels),
+                )
+                if config.num_parameter_labels
+                else None
+            )
+            if config.num_span_slots:
+                self.span_slot_embeddings = nn.Embedding(
+                    config.num_span_slots, config.d_model
+                )
+                self.span_start_query = nn.Linear(config.d_model, config.d_model)
+                self.span_end_query = nn.Linear(config.d_model, config.d_model)
+                self.span_memory = nn.Linear(config.d_model, config.d_model)
+            else:
+                self.span_slot_embeddings = None
+                self.span_start_query = None
+                self.span_end_query = None
+                self.span_memory = None
+        else:
+            self.step_embeddings = None
+            self.step_count_head = None
+            self.tool_sequence_head = None
+            self.parameter_head = None
+            self.span_slot_embeddings = None
+            self.span_start_query = None
+            self.span_end_query = None
+            self.span_memory = None
         self._reset_parameters()
 
     def forward(
@@ -99,8 +186,127 @@ class JSCBaselineModel(nn.Module):
         decoder_mask: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         memory, pooled = self.encode(source_ids, source_mask)
+        semantic_pooled = self._semantic_pooled(memory, pooled, source_mask)
         decoded = self._decode(decoder_input_ids, decoder_mask, memory, source_mask)
-        return self.token_head(decoded), self.act_head(pooled)
+        return (
+            self._token_scores(decoded, memory, source_ids, source_mask),
+            self.act_head(semantic_pooled),
+        )
+
+    def forward_structured(
+        self,
+        source_ids: torch.Tensor,
+        source_mask: torch.Tensor,
+        decoder_input_ids: torch.Tensor,
+        decoder_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        if self.step_count_head is None or self.tool_sequence_head is None:
+            raise RuntimeError("structured heads are disabled")
+        memory, pooled = self.encode(source_ids, source_mask)
+        semantic_pooled = self._semantic_pooled(memory, pooled, source_mask)
+        decoded = self._decode(decoder_input_ids, decoder_mask, memory, source_mask)
+        count_logits, tool_logits = self._structured_scores(semantic_pooled)
+        return (
+            self._token_scores(decoded, memory, source_ids, source_mask),
+            self.act_head(semantic_pooled),
+            count_logits,
+            tool_logits,
+        )
+
+    def forward_schema_conditioned(
+        self,
+        source_ids: torch.Tensor,
+        source_mask: torch.Tensor,
+        decoder_input_ids: torch.Tensor,
+        decoder_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        if self.parameter_head is None:
+            raise RuntimeError("schema-conditioned parameter head is disabled")
+        memory, pooled = self.encode(source_ids, source_mask)
+        semantic_pooled = self._semantic_pooled(memory, pooled, source_mask)
+        decoded = self._decode(decoder_input_ids, decoder_mask, memory, source_mask)
+        count_logits, tool_logits, parameter_logits = self._schema_scores(
+            semantic_pooled, pooled
+        )
+        return (
+            self._token_scores(decoded, memory, source_ids, source_mask),
+            self.act_head(semantic_pooled),
+            count_logits,
+            tool_logits,
+            parameter_logits,
+        )
+
+    def forward_full_semantic(
+        self,
+        source_ids: torch.Tensor,
+        source_mask: torch.Tensor,
+        decoder_input_ids: torch.Tensor,
+        decoder_mask: torch.Tensor,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        if self.parameter_head is None or self.span_slot_embeddings is None:
+            raise RuntimeError("full semantic heads are disabled")
+        memory, pooled = self.encode(source_ids, source_mask)
+        semantic_pooled = self._semantic_pooled(memory, pooled, source_mask)
+        decoded = self._decode(decoder_input_ids, decoder_mask, memory, source_mask)
+        count_logits, tool_logits, parameter_logits = self._schema_scores(
+            semantic_pooled, pooled
+        )
+        start_logits, end_logits = self._span_scores(memory, pooled, source_mask)
+        return (
+            self._token_scores(decoded, memory, source_ids, source_mask),
+            self.act_head(semantic_pooled),
+            count_logits,
+            tool_logits,
+            parameter_logits,
+            start_logits,
+            end_logits,
+        )
+
+    def forward_verified_semantic(
+        self,
+        source_ids: torch.Tensor,
+        source_mask: torch.Tensor,
+        decoder_input_ids: torch.Tensor,
+        decoder_mask: torch.Tensor,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        if self.execution_verifier_head is None:
+            raise RuntimeError("execution verifier head is disabled")
+        if self.parameter_head is None or self.span_slot_embeddings is None:
+            raise RuntimeError("full semantic heads are disabled")
+        memory, pooled = self.encode(source_ids, source_mask)
+        semantic_pooled = self._semantic_pooled(memory, pooled, source_mask)
+        decoded = self._decode(decoder_input_ids, decoder_mask, memory, source_mask)
+        count_logits, tool_logits, parameter_logits = self._schema_scores(
+            semantic_pooled, pooled
+        )
+        start_logits, end_logits = self._span_scores(memory, pooled, source_mask)
+        return (
+            self._token_scores(decoded, memory, source_ids, source_mask),
+            self.act_head(semantic_pooled),
+            count_logits,
+            tool_logits,
+            parameter_logits,
+            start_logits,
+            end_logits,
+            self.execution_verifier_head(semantic_pooled),
+        )
 
     def encode(
         self,
@@ -117,6 +323,29 @@ class JSCBaselineModel(nn.Module):
         pooled = (memory * float_mask).sum(dim=1) / float_mask.sum(dim=1).clamp_min(1.0)
         return memory, pooled
 
+    def _semantic_pooled(
+        self,
+        memory: torch.Tensor,
+        mean_pooled: torch.Tensor,
+        source_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        if self.semantic_attention is None or self.semantic_projection is None:
+            return mean_pooled
+        attention_logits = self.semantic_attention(memory).squeeze(-1)
+        attention_logits = attention_logits.masked_fill(
+            ~source_mask.bool(), torch.finfo(attention_logits.dtype).min
+        )
+        attended = torch.einsum(
+            "bl,bld->bd", attention_logits.softmax(dim=-1), memory
+        )
+        masked_memory = memory.masked_fill(
+            ~source_mask.unsqueeze(-1).bool(), torch.finfo(memory.dtype).min
+        )
+        maximum = masked_memory.max(dim=1).values
+        return self.semantic_projection(
+            torch.cat((mean_pooled, attended, maximum), dim=-1)
+        )
+
     @torch.inference_mode()
     def greedy_decode(
         self,
@@ -132,6 +361,7 @@ class JSCBaselineModel(nn.Module):
         if limit > self.config.max_target_length:
             raise ValueError("decode limit exceeds configured target positions")
         memory, pooled = self.encode(source_ids, source_mask)
+        semantic_pooled = self._semantic_pooled(memory, pooled, source_mask)
         generated = torch.full(
             (source_ids.shape[0], 1),
             bos_id,
@@ -142,13 +372,263 @@ class JSCBaselineModel(nn.Module):
         for _ in range(limit - 1):
             decoder_mask = generated.ne(self.config.pad_id)
             decoded = self._decode(generated, decoder_mask, memory, source_mask)
-            next_ids = self.token_head(decoded[:, -1]).argmax(dim=-1)
+            next_ids = self._token_scores(
+                decoded[:, -1:], memory, source_ids, source_mask
+            )[:, -1].argmax(dim=-1)
             next_ids = torch.where(finished, torch.full_like(next_ids, eos_id), next_ids)
             generated = torch.cat((generated, next_ids.unsqueeze(1)), dim=1)
             finished |= next_ids.eq(eos_id)
             if bool(finished.all()):
                 break
-        return generated, self.act_head(pooled)
+        return generated, self.act_head(semantic_pooled)
+
+    @torch.inference_mode()
+    def greedy_decode_structured(
+        self,
+        source_ids: torch.Tensor,
+        source_mask: torch.Tensor,
+        *,
+        bos_id: int,
+        eos_id: int,
+        max_length: int | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        if self.step_count_head is None or self.tool_sequence_head is None:
+            raise RuntimeError("structured heads are disabled")
+        self.eval()
+        limit = max_length or self.config.max_target_length
+        if limit > self.config.max_target_length:
+            raise ValueError("decode limit exceeds configured target positions")
+        memory, pooled = self.encode(source_ids, source_mask)
+        semantic_pooled = self._semantic_pooled(memory, pooled, source_mask)
+        generated = torch.full(
+            (source_ids.shape[0], 1), bos_id, dtype=torch.long, device=source_ids.device
+        )
+        finished = torch.zeros(source_ids.shape[0], dtype=torch.bool, device=source_ids.device)
+        for _ in range(limit - 1):
+            decoder_mask = generated.ne(self.config.pad_id)
+            decoded = self._decode(generated, decoder_mask, memory, source_mask)
+            next_ids = self._token_scores(
+                decoded[:, -1:], memory, source_ids, source_mask
+            )[:, -1].argmax(dim=-1)
+            next_ids = torch.where(finished, torch.full_like(next_ids, eos_id), next_ids)
+            generated = torch.cat((generated, next_ids.unsqueeze(1)), dim=1)
+            finished |= next_ids.eq(eos_id)
+            if bool(finished.all()):
+                break
+        count_logits, tool_logits = self._structured_scores(semantic_pooled)
+        return generated, self.act_head(semantic_pooled), count_logits, tool_logits
+
+    @torch.inference_mode()
+    def greedy_decode_schema_conditioned(
+        self,
+        source_ids: torch.Tensor,
+        source_mask: torch.Tensor,
+        *,
+        bos_id: int,
+        eos_id: int,
+        max_length: int | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        if self.parameter_head is None:
+            raise RuntimeError("schema-conditioned parameter head is disabled")
+        self.eval()
+        limit = max_length or self.config.max_target_length
+        if limit > self.config.max_target_length:
+            raise ValueError("decode limit exceeds configured target positions")
+        memory, pooled = self.encode(source_ids, source_mask)
+        semantic_pooled = self._semantic_pooled(memory, pooled, source_mask)
+        generated = torch.full(
+            (source_ids.shape[0], 1), bos_id, dtype=torch.long, device=source_ids.device
+        )
+        finished = torch.zeros(source_ids.shape[0], dtype=torch.bool, device=source_ids.device)
+        for _ in range(limit - 1):
+            decoder_mask = generated.ne(self.config.pad_id)
+            decoded = self._decode(generated, decoder_mask, memory, source_mask)
+            next_ids = self._token_scores(
+                decoded[:, -1:], memory, source_ids, source_mask
+            )[:, -1].argmax(dim=-1)
+            next_ids = torch.where(finished, torch.full_like(next_ids, eos_id), next_ids)
+            generated = torch.cat((generated, next_ids.unsqueeze(1)), dim=1)
+            finished |= next_ids.eq(eos_id)
+            if bool(finished.all()):
+                break
+        count_logits, tool_logits, parameter_logits = self._schema_scores(
+            semantic_pooled, pooled
+        )
+        return (
+            generated,
+            self.act_head(semantic_pooled),
+            count_logits,
+            tool_logits,
+            parameter_logits,
+        )
+
+    @torch.inference_mode()
+    def greedy_decode_full_semantic(
+        self,
+        source_ids: torch.Tensor,
+        source_mask: torch.Tensor,
+        *,
+        bos_id: int,
+        eos_id: int,
+        max_length: int | None = None,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        if self.parameter_head is None or self.span_slot_embeddings is None:
+            raise RuntimeError("full semantic heads are disabled")
+        self.eval()
+        generated, act_logits, count_logits, tool_logits, parameter_logits = (
+            self.greedy_decode_schema_conditioned(
+                source_ids,
+                source_mask,
+                bos_id=bos_id,
+                eos_id=eos_id,
+                max_length=max_length,
+            )
+        )
+        memory, pooled = self.encode(source_ids, source_mask)
+        start_logits, end_logits = self._span_scores(memory, pooled, source_mask)
+        return (
+            generated,
+            act_logits,
+            count_logits,
+            tool_logits,
+            parameter_logits,
+            start_logits,
+            end_logits,
+        )
+
+    @torch.inference_mode()
+    def greedy_decode_verified_semantic(
+        self,
+        source_ids: torch.Tensor,
+        source_mask: torch.Tensor,
+        *,
+        bos_id: int,
+        eos_id: int,
+        max_length: int | None = None,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        if self.execution_verifier_head is None:
+            raise RuntimeError("execution verifier head is disabled")
+        outputs = self.greedy_decode_full_semantic(
+            source_ids,
+            source_mask,
+            bos_id=bos_id,
+            eos_id=eos_id,
+            max_length=max_length,
+        )
+        memory, pooled = self.encode(source_ids, source_mask)
+        semantic_pooled = self._semantic_pooled(memory, pooled, source_mask)
+        return (*outputs, self.execution_verifier_head(semantic_pooled))
+
+    def _structured_scores(self, pooled: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        assert self.step_embeddings is not None
+        assert self.step_count_head is not None and self.tool_sequence_head is not None
+        positions = self.step_embeddings.weight.unsqueeze(0)
+        step_states = pooled.unsqueeze(1) + positions
+        return self.step_count_head(pooled), self.tool_sequence_head(step_states)
+
+    def _schema_scores(
+        self,
+        structured_pooled: torch.Tensor,
+        parameter_pooled: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        if self.parameter_head is None:
+            raise RuntimeError("schema-conditioned parameter head is disabled")
+        count_logits, tool_logits = self._structured_scores(structured_pooled)
+        assert self.step_embeddings is not None
+        step_states = (
+            parameter_pooled.unsqueeze(1) + self.step_embeddings.weight.unsqueeze(0)
+        )
+        return count_logits, tool_logits, self.parameter_head(step_states)
+
+    def _span_scores(
+        self,
+        memory: torch.Tensor,
+        pooled: torch.Tensor,
+        source_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if (
+            self.span_slot_embeddings is None
+            or self.span_start_query is None
+            or self.span_end_query is None
+            or self.span_memory is None
+        ):
+            raise RuntimeError("span heads are disabled")
+        assert self.step_embeddings is not None
+        queries = (
+            pooled[:, None, None, :]
+            + self.step_embeddings.weight[None, :, None, :]
+            + self.span_slot_embeddings.weight[None, None, :, :]
+        )
+        keys = self.span_memory(memory)
+        scale = self.config.d_model**0.5
+        start_logits = torch.einsum(
+            "bksd,bld->bksl", self.span_start_query(queries), keys
+        ) / scale
+        end_logits = torch.einsum(
+            "bksd,bld->bksl", self.span_end_query(queries), keys
+        ) / scale
+        invalid = ~source_mask[:, None, None, :].bool()
+        minimum = torch.finfo(start_logits.dtype).min
+        return (
+            start_logits.masked_fill(invalid, minimum),
+            end_logits.masked_fill(invalid, minimum),
+        )
+
+    @property
+    def token_scores_are_log_probabilities(self) -> bool:
+        return self.config.copy_mechanism
+
+    def _token_scores(
+        self,
+        decoded: torch.Tensor,
+        memory: torch.Tensor,
+        source_ids: torch.Tensor,
+        source_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        vocabulary_logits = self.token_head(decoded)
+        if not self.config.copy_mechanism:
+            return vocabulary_logits
+        assert self.copy_query is not None and self.copy_gate is not None
+        attention_scores = torch.matmul(
+            self.copy_query(decoded), memory.transpose(1, 2)
+        ) / (self.config.d_model**0.5)
+        # IDs 0..3 are tokenizer control symbols and must never be copied.
+        copy_mask = source_mask & source_ids.ge(4)
+        attention_scores = attention_scores.masked_fill(
+            ~copy_mask.unsqueeze(1), torch.finfo(attention_scores.dtype).min
+        )
+        attention = attention_scores.softmax(dim=-1)
+        copy_probabilities = torch.zeros_like(vocabulary_logits).scatter_add(
+            2,
+            source_ids.unsqueeze(1).expand(-1, decoded.shape[1], -1),
+            attention,
+        )
+        context = torch.matmul(attention, memory)
+        generation_gate = torch.sigmoid(
+            self.copy_gate(torch.cat((decoded, context), dim=-1))
+        )
+        probabilities = (
+            generation_gate * vocabulary_logits.softmax(dim=-1)
+            + (1.0 - generation_gate) * copy_probabilities
+        )
+        return probabilities.clamp_min(1e-8).log()
 
     def parameter_count(self) -> int:
         return sum(parameter.numel() for parameter in self.parameters())

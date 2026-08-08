@@ -11,8 +11,8 @@
         "ask": 6,
         "cancel": 4,
         "confirm": 2,
-        "dialogue": 23,
-        "execute": 158,
+        "dialogue": 25,
+        "execute": 156,
         "reject": 17
       },
       "categories": {
@@ -25,28 +25,31 @@
         "single": 95
       },
       "examples": 210,
-      "families": 113,
+      "families": 145,
       "file": "evaluation_holdout.jsonl",
-      "sha256": "d7c82a83e4a215906c6bfbd98c2eb72cac55e1f208ad42186bef70ced2d7e0c1",
+      "sha256": "b49875d41f4a0dfaf6d4cf0678f922ae90452b1cf1271dc45ec894941a73c0f8",
       "tools": {
-        "browser_control": 20,
-        "cancel_reminder": 12,
-        "file_control": 13,
-        "get_current_time": 4,
-        "list_applications": 2,
-        "open_application": 41,
-        "set_reminder": 66,
-        "system_control": 11,
-        "window_control": 15
+        "browser_control": 11,
+        "cancel_reminder": 18,
+        "file_control": 15,
+        "gesture_mode": 15,
+        "get_current_time": 13,
+        "list_applications": 6,
+        "list_reminders": 6,
+        "open_application": 29,
+        "set_reminder": 40,
+        "system_control": 9,
+        "window_control": 17,
+        "workspace_control": 13
       }
     },
     "test": {
       "acts": {
         "ask": 8,
         "cancel": 5,
-        "confirm": 3,
-        "dialogue": 29,
-        "execute": 220,
+        "confirm": 5,
+        "dialogue": 31,
+        "execute": 216,
         "reject": 25
       },
       "categories": {
@@ -59,20 +62,22 @@
         "single": 130
       },
       "examples": 290,
-      "families": 141,
+      "families": 183,
       "file": "test.jsonl",
-      "sha256": "a2040ccb1dd17c6e8cd682b8380c7b2892c8303d179e2a591b4b1cb7e723c6ff",
+      "sha256": "2bdb5054a54db0d26891b6887c39566f58a310f900f3a4c796ba3b8f40caa9b7",
       "tools": {
-        "browser_control": 25,
-        "cancel_reminder": 27,
-        "file_control": 19,
-        "get_current_time": 2,
-        "list_applications": 2,
-        "list_reminders": 2,
-        "open_application": 51,
-        "set_reminder": 83,
-        "system_control": 17,
-        "window_control": 28
+        "browser_control": 15,
+        "cancel_reminder": 21,
+        "file_control": 23,
+        "gesture_mode": 21,
+        "get_current_time": 18,
+        "list_applications": 9,
+        "list_reminders": 8,
+        "open_application": 39,
+        "set_reminder": 60,
+        "system_control": 13,
+        "window_control": 23,
+        "workspace_control": 18
       }
     },
     "train": {
@@ -94,20 +99,22 @@
         "single": 650
       },
       "examples": 1400,
-      "families": 301,
+      "families": 467,
       "file": "train.jsonl",
-      "sha256": "5cf1c764a2fbaf0dc405fe4069651198827f1bed34316ffc3d170c5be6a91582",
+      "sha256": "80bfa23eade283d9520f9fefc8b9aac37d35643c1c3dd81f4faf27e0535f1d98",
       "tools": {
-        "browser_control": 42,
-        "cancel_reminder": 63,
-        "file_control": 42,
-        "get_current_time": 4,
-        "list_applications": 4,
-        "list_reminders": 4,
-        "open_application": 199,
-        "set_reminder": 828,
-        "system_control": 26,
-        "window_control": 50
+        "browser_control": 46,
+        "cancel_reminder": 150,
+        "file_control": 49,
+        "gesture_mode": 104,
+        "get_current_time": 43,
+        "list_applications": 22,
+        "list_reminders": 22,
+        "open_application": 228,
+        "set_reminder": 512,
+        "system_control": 33,
+        "window_control": 106,
+        "workspace_control": 49
       }
     },
     "validation": {
@@ -115,8 +122,8 @@
         "ask": 8,
         "cancel": 5,
         "confirm": 3,
-        "dialogue": 30,
-        "execute": 219,
+        "dialogue": 31,
+        "execute": 218,
         "reject": 25
       },
       "categories": {
@@ -129,24 +136,26 @@
         "single": 130
       },
       "examples": 290,
-      "families": 142,
+      "families": 182,
       "file": "validation.jsonl",
-      "sha256": "de31d9013ac53f9ecb6ecae8c4311516da49e6da630351f8f96bbcfa150bd080",
+      "sha256": "183afa35771ccc8cf28c48b453e73365fb9fdcce2f3cf3deb7f5c76eec1a07b3",
       "tools": {
-        "browser_control": 23,
-        "cancel_reminder": 26,
-        "file_control": 15,
-        "get_current_time": 3,
-        "list_applications": 2,
-        "list_reminders": 2,
-        "open_application": 53,
-        "set_reminder": 87,
-        "system_control": 17,
-        "window_control": 27
+        "browser_control": 15,
+        "cancel_reminder": 24,
+        "file_control": 23,
+        "gesture_mode": 21,
+        "get_current_time": 18,
+        "list_applications": 9,
+        "list_reminders": 8,
+        "open_application": 40,
+        "set_reminder": 56,
+        "system_control": 13,
+        "window_control": 23,
+        "workspace_control": 18
       }
     }
   },
   "synthetic_holdout": true,
-  "tool_schema_sha256": "11b868f14799a2af3b33b5abc2aab0c3198952179ba603aa6a48a6d4d80218b4",
-  "version": 3
+  "tool_schema_sha256": "c9faf5b539c7a0f41882a409fb4970ed39bcbc153130ca5c073d212e1c1bca78",
+  "version": 5
 }

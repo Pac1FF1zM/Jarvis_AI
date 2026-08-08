@@ -1,4 +1,4 @@
-"""Regression tests for the leak-resistant JSC Dataset v3 factory."""
+"""Regression tests for the leak-resistant JSC Dataset v5 factory."""
 from __future__ import annotations
 
 import hashlib
@@ -11,6 +11,7 @@ import pytest
 from ml.jsc.data import SPLITS, load_jsc_jsonl, validate_jsc_splits
 from ml.jsc.jal import DialogueAct, JALPlan, ToolCall, ToolSchemaRegistry, dumps
 from tools.registry import ToolRegistry
+from ml.jsc.project_registry import build_project_schema_registry
 from training_workspace.build_jsc_dataset import (
     DATA_DIR,
     TARGETS,
@@ -22,9 +23,7 @@ from training_workspace.build_jsc_dataset import (
 
 @pytest.fixture(scope="module")
 def schemas() -> ToolSchemaRegistry:
-    registry = ToolRegistry()
-    registry.discover("tools")
-    return ToolSchemaRegistry.from_tool_registry(registry)
+    return build_project_schema_registry()
 
 
 def test_committed_corpus_is_reproducible_and_matches_manifest(schemas):
@@ -35,7 +34,7 @@ def test_committed_corpus_is_reproducible_and_matches_manifest(schemas):
     assert repeated_fingerprint == fingerprint == schemas.schema_fingerprint
 
     manifest = json.loads((DATA_DIR / "dataset_manifest.json").read_text(encoding="utf-8"))
-    assert manifest["version"] == 3
+    assert manifest["version"] == 5
     assert manifest["external_sources"] is False
     assert manifest["synthetic_holdout"] is True
     assert manifest["split_policy"] == "no structural-family or exact-model-input overlap"
@@ -73,7 +72,14 @@ def test_all_splits_pass_jal_schema_and_leakage_audit(schemas):
     assert report["train"]["acts"]["cancel"] >= 20
     assert report["validation"]["acts"]["ask"] >= 8
     assert report["test"]["acts"]["ask"] >= 8
-    for tool in ("browser_control", "file_control", "system_control", "window_control"):
+    for tool in (
+        "browser_control",
+        "file_control",
+        "system_control",
+        "window_control",
+        "gesture_mode",
+        "workspace_control",
+    ):
         assert report["train"]["tools"][tool] >= 20
 
 
@@ -106,6 +112,33 @@ def test_structural_scenarios_represent_the_intended_learning_problems(schemas):
         and example.text != example.metadata["clean_text"]
         for example in by_category["asr_noise"]
     )
+    assert any(
+        len(example.target.steps) == 4
+        and tuple(step.tool for step in example.target.steps)
+        == ("open_application", "gesture_mode", "set_reminder", "window_control")
+        and "," not in example.text
+        for example in by_category["compound"]
+    )
+
+
+def test_written_numbers_are_normalized_to_integer_slots_in_every_split(schemas):
+    for split in SPLITS:
+        examples = load_jsc_jsonl(DATA_DIR / f"{split}.jsonl", schemas)
+        written = [
+            example
+            for example in examples
+            if example.metadata.get("number_surface") == "words"
+        ]
+        assert len(written) >= 25
+        assert any("четырнадцать" in example.text for example in written) or split != "evaluation_holdout"
+        for example in written:
+            numeric_values = [
+                value
+                for step in example.target.steps
+                for value in step.arguments.values()
+                if isinstance(value, int) and not isinstance(value, bool)
+            ]
+            assert numeric_values
 
 
 def test_loader_rejects_noncanonical_jal_and_duplicate_model_input(tmp_path, schemas):

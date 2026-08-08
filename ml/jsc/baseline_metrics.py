@@ -18,17 +18,28 @@ def evaluate_program_predictions(
     counts: Counter[str] = Counter()
     category_total: Counter[str] = Counter()
     category_exact: Counter[str] = Counter()
+    target_tool_total: Counter[str] = Counter()
+    target_tool_exact: Counter[str] = Counter()
+    target_tool_present: Counter[str] = Counter()
     failure_reasons: Counter[str] = Counter()
     for example, prediction in zip(examples, predictions):
         target_text = dumps(example.target)
         exact = prediction == target_text
         counts["examples"] += 1
         category_total[example.category] += 1
+        target_tools = {step.tool for step in example.target.steps}
+        target_tool_total.update(target_tools)
+        number_surface = example.metadata.get("number_surface")
+        if number_surface in {"digits", "words"}:
+            counts[f"number_surface_{number_surface}_examples"] += 1
         if example.target.act == DialogueAct.REJECT:
             counts["ood_examples"] += 1
         if exact:
             counts["exact"] += 1
             category_exact[example.category] += 1
+            target_tool_exact.update(target_tools)
+            if number_surface in {"digits", "words"}:
+                counts[f"number_surface_{number_surface}_exact"] += 1
         predicted_plan = None
         try:
             predicted_plan = loads(prediction)
@@ -49,6 +60,16 @@ def evaluate_program_predictions(
             step.tool for step in example.target.steps
         ):
             counts["tool_sequence_correct"] += 1
+        predicted_tools = {step.tool for step in predicted_plan.steps}
+        target_tool_present.update(target_tools & predicted_tools)
+        if tuple(dict(step.arguments) for step in predicted_plan.steps) == tuple(
+            dict(step.arguments) for step in example.target.steps
+        ):
+            counts["argument_sequence_correct"] += 1
+        if number_surface == "words" and _integer_arguments(predicted_plan) == _integer_arguments(
+            example.target
+        ):
+            counts["written_number_value_correct"] += 1
         if (
             example.target.act == DialogueAct.REJECT
             and predicted_plan.act == DialogueAct.REJECT
@@ -68,16 +89,41 @@ def evaluate_program_predictions(
         "schema_valid_rate": counts["schema_valid"] / total,
         "act_accuracy": counts["act_correct"] / total,
         "tool_sequence_accuracy": counts["tool_sequence_correct"] / total,
+        "argument_sequence_accuracy": counts["argument_sequence_correct"] / total,
         "ood_recall": counts["ood_recalled"] / max(counts["ood_examples"], 1),
         "false_execution_rate": counts["false_executions"] / total,
         "execution_precision": counts["correct_executions"]
         / max(counts["predicted_executions"], 1),
+        "written_number_examples": counts["number_surface_words_examples"],
+        "written_number_exact_jal_accuracy": counts["number_surface_words_exact"]
+        / max(counts["number_surface_words_examples"], 1),
+        "written_number_value_accuracy": counts["written_number_value_correct"]
+        / max(counts["number_surface_words_examples"], 1),
+        "digit_number_exact_jal_accuracy": counts["number_surface_digits_exact"]
+        / max(counts["number_surface_digits_examples"], 1),
         "category_exact_jal": {
             category: category_exact[category] / category_total[category]
             for category in sorted(category_total)
         },
+        "target_tool_exact_jal": {
+            tool: target_tool_exact[tool] / target_tool_total[tool]
+            for tool in sorted(target_tool_total)
+        },
+        "target_tool_presence_recall": {
+            tool: target_tool_present[tool] / target_tool_total[tool]
+            for tool in sorted(target_tool_total)
+        },
         "invalid_reasons": dict(failure_reasons.most_common(10)),
     }
+
+
+def _integer_arguments(plan) -> tuple[int, ...]:
+    return tuple(
+        value
+        for step in plan.steps
+        for value in step.arguments.values()
+        if isinstance(value, int) and not isinstance(value, bool)
+    )
 
 
 def _reason_key(error: Exception) -> str:

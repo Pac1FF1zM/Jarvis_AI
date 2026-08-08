@@ -29,12 +29,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--feedforward-dim", type=int, default=256)
     parser.add_argument("--dropout", type=float, default=0.15)
     parser.add_argument("--max-source-length", type=int, default=384)
-    parser.add_argument("--max-target-length", type=int, default=256)
+    parser.add_argument("--max-target-length", type=int, default=384)
     parser.add_argument("--patience", type=int, default=6)
     parser.add_argument("--gradient-clip", type=float, default=1.0)
     parser.add_argument("--warmup-ratio", type=float, default=0.08)
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--no-amp", action="store_true")
+    parser.add_argument("--copy-mechanism", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--structured-heads", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--parameter-heads", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--span-heads", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--semantic-pooling", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--execution-verifier", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--init-checkpoint")
+    parser.add_argument("--freeze-base-for-parameters", action="store_true")
+    parser.add_argument("--freeze-base-for-spans", action="store_true")
+    parser.add_argument("--freeze-base-for-semantics", action="store_true")
     parser.add_argument("--resume")
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--check-only", action="store_true")
@@ -72,6 +82,16 @@ def config_from_args(args: argparse.Namespace) -> TrainingConfig:
         warmup_ratio=args.warmup_ratio,
         num_workers=args.num_workers,
         use_amp=not args.no_amp,
+        copy_mechanism=args.copy_mechanism,
+        structured_heads=args.structured_heads,
+        parameter_heads=args.parameter_heads,
+        span_heads=args.span_heads,
+        semantic_pooling=args.semantic_pooling,
+        execution_verifier=args.execution_verifier,
+        init_checkpoint=args.init_checkpoint,
+        freeze_base_for_parameters=args.freeze_base_for_parameters,
+        freeze_base_for_spans=args.freeze_base_for_spans,
+        freeze_base_for_semantics=args.freeze_base_for_semantics,
         resume=args.resume,
         smoke=compact,
     )
