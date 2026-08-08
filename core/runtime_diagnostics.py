@@ -153,6 +153,7 @@ class RuntimeDiagnosticRunner:
         self._check_python_and_platform()
         self._check_memory_and_disk()
         self._check_runtime_paths()
+        self._check_workspaces()
         torch_module = self._check_torch_and_cuda()
         self._check_nlu(torch_module)
         self._check_gesture(torch_module)
@@ -166,6 +167,23 @@ class RuntimeDiagnosticRunner:
             python_executable=sys.executable,
             platform=platform.platform(),
             checks=tuple(self._checks),
+        )
+
+    def _check_workspaces(self) -> None:
+        if self._platform_name.casefold() != "windows":
+            self._skip(
+                "engine.virtual_desktops",
+                "workspaces",
+                "Виртуальные рабочие столы доступны только в Windows",
+            )
+            return
+        self._package(
+            "engine.virtual_desktops",
+            "workspaces",
+            "pyvda",
+            "pyvda",
+            DiagnosticStatus.FAIL,
+            "Установите pyvda==0.6.0: без него временные рабочие столы режимов недоступны.",
         )
 
     def _add(
@@ -630,6 +648,30 @@ class RuntimeDiagnosticRunner:
         if not module.enabled:
             self._skip("engine.gesture", "gesture", "Распознавание жестов отключено")
             return
+        self._package(
+            "engine.opencv",
+            "gesture",
+            "opencv-python",
+            "cv2",
+            DiagnosticStatus.FAIL,
+            "Установите opencv-python: без него камера жестов недоступна.",
+        )
+        self._package(
+            "engine.pyside6",
+            "gesture",
+            "PySide6",
+            "PySide6",
+            DiagnosticStatus.WARN,
+            "Установите PySide6 для современного интерфейса; иначе используется OpenCV.",
+        )
+        self._package(
+            "engine.gesture_hotkey",
+            "gesture",
+            "pynput",
+            "pynput",
+            DiagnosticStatus.WARN,
+            "Установите pynput для глобальной комбинации Ctrl+Alt+/.",
+        )
         checkpoint = self._resolve(module.model)
         report = self._resolve(str(module.params.get("quality_report", "")))
         expected_hash = str(module.params.get("checkpoint_sha256", "")).strip()
@@ -685,18 +727,47 @@ class RuntimeDiagnosticRunner:
             return
         observer = bool(module.params.get("allow_unapproved_observer", False))
         execution = bool(module.params.get("execution_enabled", False))
-        status = DiagnosticStatus.WARN if observer and not execution else DiagnosticStatus.FAIL
+        safe_labels = {"G01", "G02", "G03", "G04", "G05", "G06"}
+        actions = {
+            str(label)
+            for label in module.params.get("action_allowlist", [])
+        }
+        observer_actions = {
+            str(label)
+            for label in module.params.get("observer_action_allowlist", [])
+        }
+        restricted_safe_test = (
+            observer
+            and execution
+            and bool(actions)
+            and bool(observer_actions)
+            and actions <= safe_labels
+            and observer_actions <= safe_labels
+        )
+        status = (
+            DiagnosticStatus.WARN
+            if observer and (not execution or restricted_safe_test)
+            else DiagnosticStatus.FAIL
+        )
         self._add(
             "engine.gesture",
             "gesture",
             status,
             (
-                "Модель жестов загружается только в безопасном observer-режиме"
+                (
+                    "Observer-модель ограничена тестовыми действиями G01-G06"
+                    if restricted_safe_test
+                    else "Модель жестов загружается только в безопасном observer-режиме"
+                )
                 if status == DiagnosticStatus.WARN
                 else "Неутверждённой модели жестов запрещено выполнять действия"
             ),
             detail=f"{selected_name}; test macro-F1={macro_f1:.4f}",
-            action="Переобучите модель; не включайте execution_enabled до прохождения gates.",
+            action=(
+                "Проведите real-camera тесты; не расширяйте allow-list до прохождения gates."
+                if restricted_safe_test
+                else "Переобучите модель; не включайте execution_enabled до прохождения gates."
+            ),
         )
 
     def _check_voice_input(self) -> Any | None:

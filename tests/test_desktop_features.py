@@ -29,6 +29,34 @@ def test_compound_splitter_only_breaks_at_a_new_command():
     ) == ["открой браузер", "поставь напоминание", "скажи время"]
 
 
+def test_flat_compound_command_routes_all_four_project_actions():
+    parts = split_compound_command(
+        "открой браузер запусти жестовый режим "
+        "напомни через двадцать минут о встрече закрой дискорд"
+    )
+    actions = [route_explicit_command(part) for part in parts]
+
+    assert [action.intent for action in actions if action is not None] == [
+        "open_application",
+        "gesture_mode",
+        "set_reminder",
+        "window_control",
+    ]
+    assert actions[2].slots == {"minutes": 20, "reminder_text": "встрече"}
+
+
+def test_gesture_and_workspace_variants_are_explicitly_routed():
+    assert route_explicit_command("джарвис временно останови жесты") == RoutedAction(
+        "gesture_mode", {"action": "disable", "enabled": False}
+    )
+    assert route_explicit_command("активна ли камера жестов") == RoutedAction(
+        "gesture_mode", {"action": "status"}
+    )
+    assert route_explicit_command("какие рабочие режимы у меня есть") == RoutedAction(
+        "workspace_control", {"action": "list"}
+    )
+
+
 def test_explicit_router_distinguishes_web_and_file_search():
     web = route_explicit_command("найди в интернете погоду в Ташкенте")
     file = route_explicit_command("найди файл диплом")
@@ -39,7 +67,9 @@ def test_explicit_router_distinguishes_web_and_file_search():
     assert file == RoutedAction(
         "file_control", {"action": "find", "query": "диплом"}
     )
-    assert route_explicit_command("не открывай браузер") is None
+    assert route_explicit_command("не открывай браузер") == RoutedAction(
+        "negated_command"
+    )
 
 
 def test_dialogue_correction_reuses_previous_action_type(monkeypatch):

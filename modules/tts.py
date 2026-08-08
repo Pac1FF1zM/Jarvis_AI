@@ -261,6 +261,7 @@ class TTSModule(BaseModule):
         bus.subscribe("interaction_cancelled", self._on_interaction_failed)
         bus.subscribe("interaction_failed", self._on_interaction_failed)
         bus.subscribe("notification_deliver", self._on_response)
+        bus.subscribe("wake_acknowledgement_requested", self._on_wake_acknowledgement)
 
         silero_tts, sounddevice = _resolve_optional_dependencies()
         if silero_tts is None:
@@ -456,6 +457,39 @@ class TTSModule(BaseModule):
                 self._generation += 1
                 self._owner_trace_id = event.trace_id
             self._device_owner_generation = None
+
+    async def _on_wake_acknowledgement(self, event: Event) -> None:
+        """Speak a short wake response without advancing the dialogue lifecycle."""
+        assert self.bus is not None
+        text = str(event.payload.get("text", "")).strip()
+        if not text:
+            return
+        async with self._state_lock:
+            old_session = self._session
+            if old_session is not None:
+                await self._cancel_and_drain_locked(old_session)
+            self._generation += 1
+            session = _SpeechSession(self._generation, event.trace_id, text)
+            self._session = session
+            self._owner_trace_id = event.trace_id
+            self._device_owner_generation = session.generation
+            session.task = asyncio.create_task(self._speak(text, session))
+            self._sync_session_mirrors(session)
+        try:
+            await asyncio.shield(session.task)
+        finally:
+            async with self._state_lock:
+                if self._session is session:
+                    if session.device_cleanup_required:
+                        await self._stop_audio_if_owner_locked(session.generation)
+                    self._session = None
+                    self._device_owner_generation = None
+                    self._clear_session_mirrors(session)
+        self.bus.publish(
+            "wake_acknowledgement_finished",
+            {"text": text},
+            trace_id=event.trace_id,
+        )
 
     async def _on_interaction_failed(self, event: Event) -> None:
         """Stop failed-trace audio before a later interaction can own output."""

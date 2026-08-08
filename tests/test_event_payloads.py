@@ -8,6 +8,8 @@ import pytest
 
 from core.event_bus import Event, EventBus
 from core.event_payloads import (
+    GestureModeChangedPayload,
+    GestureModeRequestedPayload,
     ResponseReadyPayload,
     TranscriptionReadyPayload,
 )
@@ -49,6 +51,21 @@ def test_typed_payload_keeps_mapping_compatibility_for_incremental_migration():
     assert event.payload["text"] == "привет"
     assert event.payload.get("confidence") == pytest.approx(0.75)
     assert dict(event.payload) == {"text": "привет", "confidence": 0.75}
+
+
+def test_gesture_mode_contract_supports_pause_and_status_without_enabled_flag():
+    request = GestureModeRequestedPayload(action="pause", source="voice")
+    changed = GestureModeChangedPayload(
+        armed=True,
+        paused=True,
+        action="pause",
+        source="voice",
+    )
+
+    assert dict(request) == {"action": "pause", "source": "voice"}
+    assert dict(changed)["paused"] is True
+    with pytest.raises(ValueError, match="needs enabled or action"):
+        GestureModeRequestedPayload(source="voice")
 
 
 async def test_wrong_contract_inside_handler_becomes_recoverable_trace_failure():

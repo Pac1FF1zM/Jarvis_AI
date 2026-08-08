@@ -142,9 +142,8 @@ async def run_gesture_mode(
     """Run the webcam gesture model without the voice/assistant pipeline.
 
     This deliberately does not construct the orchestrator, NLU, LLM, STT, TTS,
-    wake-word, memory, reminders, tools or gesture-to-desktop bridge. Predictions
-    are observable in the terminal, but the model's normal quality and execution
-    gates remain authoritative.
+    wake-word, memory or reminders. Predictions are observable in the terminal;
+    only the configured G01-G06 reversible media actions may execute.
     """
     try:
         from modules.gesture_control import GestureControlModule
@@ -185,6 +184,14 @@ async def run_gesture_mode(
     preview_closed = asyncio.Event()
     failure_detail = ""
     observer_only = False
+    configured_actions = frozenset(
+        str(label)
+        for label in configured.params.get("action_allowlist", [])
+    )
+    observer_actions = frozenset(
+        str(label)
+        for label in configured.params.get("observer_action_allowlist", [])
+    )
 
     async def on_mode_changed(event: Any) -> None:
         nonlocal failure_detail, observer_only
@@ -231,6 +238,36 @@ async def run_gesture_mode(
                 suffix=suffix,
             ),
             flush=True,
+        )
+        if execution != "enabled":
+            return
+        label = str(payload.get("label", ""))
+        from modules.gesture_bridge import GESTURE_COMMANDS
+
+        command = GESTURE_COMMANDS.get(label)
+        if (
+            command is None
+            or label not in configured_actions
+            or (observer_only and label not in observer_actions)
+        ):
+            logger.warning(
+                "STANDALONE_GESTURE_ACTION_REFUSED label=%s reason=not_test_allowlisted",
+                label,
+            )
+            return
+        try:
+            from tools.system_control import execute as system_control
+
+            result = await system_control(command.slots)
+        except Exception as exc:  # noqa: BLE001 - test action must not stop camera
+            logger.exception("standalone safe gesture action failed label=%s", label)
+            print(f"Тестовое действие {label} не выполнено: {exc}", flush=True)
+            return
+        logger.info(
+            "STANDALONE_GESTURE_ACTION_EXECUTED label=%s action=%s ok=%s",
+            label,
+            command.slots.get("action"),
+            result.get("ok"),
         )
 
     bus.subscribe("gesture_mode_changed", on_mode_changed)
@@ -283,11 +320,15 @@ async def run_gesture_mode(
         if fatal_runtime.is_set():
             raise GestureModeError(f"камера не запущена: {failure_detail}")
 
-        quality_note = (
-            " Модель работает в observer-режиме и не управляет Windows."
-            if observer_only
-            else ""
-        )
+        if observer_only and bool(configured.params.get("execution_enabled", False)):
+            quality_note = (
+                " Разрешены только тестовые действия G01-G06 из allow-list; "
+                "остальные классы не управляют Windows."
+            )
+        elif observer_only:
+            quality_note = " Модель работает в observer-режиме и не управляет Windows."
+        else:
+            quality_note = ""
         print(
             "Gesture Core активирован. Показывайте жесты в камеру; "
             f"для выхода нажмите Ctrl+C.{quality_note}",
@@ -298,9 +339,8 @@ async def run_gesture_mode(
         stop_requested = shutdown_event or asyncio.Event()
         shutdown_wait = asyncio.create_task(stop_requested.wait())
         failure_wait = asyncio.create_task(fatal_runtime.wait())
-        preview_wait = asyncio.create_task(preview_closed.wait())
         done, pending = await asyncio.wait(
-            {shutdown_wait, failure_wait, preview_wait},
+            {shutdown_wait, failure_wait},
             return_when=asyncio.FIRST_COMPLETED,
         )
         for task in pending:
@@ -334,8 +374,11 @@ async def run_pipeline(
     # Keep runtime engines lazy so ``main.py --doctor`` can still explain a
     # missing/broken Torch, Whisper, Silero or audio installation.
     from memory.long_term import LongTermMemory
+    from memory.conversations import ConversationStore
+    from memory.workspaces import WorkspaceStore
     from memory.short_term import ShortTermMemory
     from core.ml_feedback import MLFeedbackCollector
+    from core.workspace_manager import WorkspaceManager
     from modules.gesture_bridge import GestureActionBridge
     from modules.llm import LLMModule
     from modules.gesture_control import GestureControlModule
@@ -375,10 +418,23 @@ async def run_pipeline(
     await reminder_scheduler.start(
         bus, delivery_enabled=text_input is None and not demo
     )
-    tools = ToolRegistry({"reminder_scheduler": reminder_scheduler})
+    workspace_store = WorkspaceStore(
+        profile_manager.profile_dir(active_profile) / "workspaces.json"
+    )
+    workspace_manager = WorkspaceManager(workspace_store)
+    tools = ToolRegistry(
+        {
+            "reminder_scheduler": reminder_scheduler,
+            "workspace_manager": workspace_manager,
+        }
+    )
     tools.discover("tools")
     short_term = ShortTermMemory.from_config(cfg.memory)
     long_term = LongTermMemory.from_config(cfg.memory, profile_id=active_profile)
+    conversations = ConversationStore(
+        str(cfg.memory.get("db_path", "memory.db")),
+        profile_id=active_profile,
+    )
 
     # Build only the modules the config enables.
     wake_word: Any | None = None
@@ -419,6 +475,7 @@ async def run_pipeline(
                 tools,
                 short_term,
                 long_term=long_term,
+                conversations=conversations,
                 gesture_enabled=False,
             )
         )
@@ -443,6 +500,7 @@ async def run_pipeline(
                     tools,
                     short_term,
                     long_term=long_term,
+                    conversations=conversations,
                     gesture_enabled=cfg.module("gesture").enabled,
                 )
             ),
@@ -466,17 +524,20 @@ async def run_pipeline(
             await reminder_scheduler.stop()
             await feedback_collector.stop()
             long_term.close()
+            conversations.close()
             raise startup_errors[0]
         voice_modules = voice_results
         wake_word = voice_modules[0]
         if cfg.module("gesture").enabled and voice_modules[5] is not None:
-            gesture_bridge = GestureActionBridge()
+            gesture_bridge = GestureActionBridge(tools)
             await gesture_bridge.start(bus)
             modules_started.append(gesture_bridge)
     await orchestrator.start()
 
     # Run the bus in the background.
     run_task = asyncio.create_task(bus.run())
+    if text_input is None and not demo:
+        logger.info("JARVIS_RUNTIME_READY")
 
     completed_cleanly = False
     try:
@@ -557,7 +618,9 @@ async def run_pipeline(
             except Exception:  # noqa: BLE001
                 logger.exception("error stopping %s", getattr(module, "name", "?"))
         await orchestrator.stop()
+        await asyncio.to_thread(workspace_manager.shutdown)
         long_term.close()
+        conversations.close()
         if completed_cleanly:
             logger.info("=== Jarvis stopped cleanly ===")
         else:
@@ -579,6 +642,29 @@ async def _wait_for_state(
     )
 
 
+async def run_controlled_pipeline(config_path: str, stop_file: str | Path) -> None:
+    """Run persistent Jarvis until the desktop Control Center requests stop."""
+    path = Path(stop_file).expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    shutdown = asyncio.Event()
+
+    async def watch() -> None:
+        while not shutdown.is_set():
+            if path.is_file():
+                logger.info("shutdown requested by Control Center file=%s", path)
+                shutdown.set()
+                return
+            await asyncio.sleep(0.2)
+
+    watcher = asyncio.create_task(watch())
+    try:
+        await run_pipeline(config_path, shutdown_event=shutdown)
+    finally:
+        watcher.cancel()
+        await asyncio.gather(watcher, return_exceptions=True)
+        path.unlink(missing_ok=True)
+
+
 def _build_argument_parser() -> argparse.ArgumentParser:
     """Build the small user-facing CLI without initializing runtime engines."""
     parser = argparse.ArgumentParser(
@@ -592,7 +678,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         epilog=(
             "Что умеет:\n"
             "  • открывать приложения, файлы, сайты и настройки Windows;\n"
-            "  • управлять окнами, вкладками, громкостью и музыкой;\n"
+            "  • управлять окнами, вкладками и рабочими пространствами Windows;\n"
             "  • искать в интернете, сообщать время и ставить напоминания;\n"
             "  • запоминать явно указанные факты отдельно для каждого профиля;\n"
             "  • включать отдельный тестовый режим распознавания жестов;\n"
@@ -645,6 +731,11 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="вывести результат --doctor в JSON",
     )
+    settings.add_argument(
+        "--stop-file",
+        metavar="ФАЙЛ",
+        help=argparse.SUPPRESS,
+    )
     calibration = parser.add_argument_group("Калибровка")
     calibration.add_argument(
         "--profile",
@@ -668,6 +759,10 @@ def main() -> None:
     args = parser.parse_args()
     if args.json and not args.doctor:
         parser.error("--json используется только вместе с --doctor")
+    if args.stop_file and any(
+        (args.text, args.demo, args.gesture_mode, args.doctor, args.calibrate_voice, args.profiles)
+    ):
+        parser.error("--stop-file используется только для постоянного режима")
     if (args.profile is not None or args.profile_name is not None) and not args.calibrate_voice:
         parser.error(
             "--profile и --profile-name используются только с --calibrate-voice; "
@@ -721,9 +816,12 @@ def main() -> None:
             pass
         return
     try:
-        asyncio.run(
-            run_pipeline(args.config, text_input=args.text, demo=args.demo)
-        )
+        if args.stop_file:
+            asyncio.run(run_controlled_pipeline(args.config, args.stop_file))
+        else:
+            asyncio.run(
+                run_pipeline(args.config, text_input=args.text, demo=args.demo)
+            )
     except KeyboardInterrupt:
         # Python versions/platform loops differ in whether SIGINT cancels the
         # coroutine first or raises here. Both routes execute run_pipeline's

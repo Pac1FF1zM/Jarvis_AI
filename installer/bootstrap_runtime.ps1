@@ -99,7 +99,8 @@ try {
             "https://download.pytorch.org/whl/cpu"
         }
         Invoke-Native $PythonExe @(
-            "-m", "pip", "install", "torch==2.11.0", "--index-url", $torchIndex
+            "-m", "pip", "install", "torch==2.11.0", "torchvision==0.26.0",
+            "--index-url", $torchIndex
         )
         if ($hasNvidia) {
             $cudaReady = & $PythonExe -c "import torch; print('yes' if torch.cuda.is_available() else 'no')"
@@ -107,6 +108,7 @@ try {
                 Write-Warning "CUDA PyTorch could not use this NVIDIA driver; falling back to CPU PyTorch."
                 Invoke-Native $PythonExe @(
                     "-m", "pip", "install", "--force-reinstall", "torch==2.11.0",
+                    "torchvision==0.26.0",
                     "--index-url", "https://download.pytorch.org/whl/cpu"
                 )
             }

@@ -136,4 +136,7 @@ def load_config(path: str) -> Config:
         config.reminders["db_path"] = str(root / "reminders.db")
         config.profiles["root"] = str(root / "profiles")
         config.feedback["queue_path"] = str(root / "feedback" / "pending.jsonl")
+        gesture = config.modules.get("gesture")
+        if gesture is not None:
+            gesture.params["log_dir"] = str(root / "logs" / "gestures")
     return config

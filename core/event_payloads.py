@@ -338,12 +338,26 @@ class NotificationDeliverPayload(NotificationPayload):
 @dataclass(frozen=True)
 class GestureModeRequestedPayload(EventPayload):
     event_type: ClassVar[str] = "gesture_mode_requested"
-    enabled: bool
+    enabled: bool | None = None
+    action: str | None = None
     source: str = "event"
 
     def __post_init__(self) -> None:
-        if not isinstance(self.enabled, bool):
-            raise TypeError("enabled must be bool")
+        if self.enabled is not None and not isinstance(self.enabled, bool):
+            raise TypeError("enabled must be bool or None")
+        if self.action is not None and self.action not in {
+            "enable", "disable", "pause", "resume", "status", "toggle"
+        }:
+            raise ValueError("unsupported gesture mode action")
+        if self.enabled is None and self.action is None:
+            raise ValueError("gesture mode request needs enabled or action")
+        if self.enabled is not None and self.action not in {None, "enable", "disable"}:
+            raise ValueError("enabled is only compatible with enable/disable")
+        if self.enabled is True and self.action == "disable":
+            raise ValueError("enabled=True contradicts action=disable")
+        if self.enabled is False and self.action == "enable":
+            raise ValueError("enabled=False contradicts action=enable")
+        _require_text("source", self.source)
 
 
 @dataclass(frozen=True)
@@ -351,11 +365,19 @@ class GestureModeChangedPayload(EventPayload):
     event_type: ClassVar[str] = "gesture_mode_changed"
     armed: bool
     source: str
+    action: str | None = None
+    paused: bool = False
     reason: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.armed, bool):
             raise TypeError("armed must be bool")
+        if not isinstance(self.paused, bool):
+            raise TypeError("paused must be bool")
+        if self.action is not None and self.action not in {
+            "enable", "disable", "pause", "resume", "status", "toggle"
+        }:
+            raise ValueError("unsupported gesture mode action")
         _require_text("source", self.source)
 
 

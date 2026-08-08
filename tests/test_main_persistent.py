@@ -92,6 +92,30 @@ async def test_persistent_mode_cancellation_uses_clean_shutdown_path(monkeypatch
     assert not wake.bus._tasks
 
 
+async def test_control_center_stop_file_requests_clean_shutdown(tmp_path, monkeypatch):
+    observed = []
+
+    async def fake_pipeline(config_path, text_input=None, *, demo=False, shutdown_event=None):
+        observed.append((config_path, text_input, demo))
+        await asyncio.wait_for(shutdown_event.wait(), timeout=2.0)
+
+    monkeypatch.setattr(jarvis_main, "run_pipeline", fake_pipeline)
+    stop_file = tmp_path / "control" / "stop.request"
+    task = asyncio.create_task(
+        jarvis_main.run_controlled_pipeline("custom.yaml", stop_file)
+    )
+    for _ in range(100):
+        if stop_file.parent.is_dir():
+            break
+        await asyncio.sleep(0.01)
+    stop_file.write_text("stop\n", encoding="utf-8")
+
+    await asyncio.wait_for(task, timeout=3.0)
+
+    assert observed == [("custom.yaml", None, False)]
+    assert stop_file.exists() is False
+
+
 async def test_voice_modules_initialize_in_parallel(monkeypatch):
     active = 0
     max_active = 0

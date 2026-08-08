@@ -147,8 +147,14 @@ async def execute(params: dict[str, Any]) -> dict[str, Any]:
             destination = path.with_name(new_name)
             if destination.exists():
                 raise ValueError("объект с таким именем уже существует")
+            previous_path = str(path)
             await asyncio.to_thread(path.rename, destination)
-            return {"ok": True, "path": str(destination), "response_text": f"Переименовано в {new_name}."}
+            return {
+                "ok": True,
+                "path": str(destination),
+                "previous_path": previous_path,
+                "response_text": f"Переименовано в {new_name}.",
+            }
         if action == "delete":
             if not params.get("confirmed"):
                 return {"ok": False, "confirmation_required": True, "confirmation": {"tool": "file_control", "params": {"action": "delete", "path": str(path), "confirmed": True}}, "response_text": f"Переместить {path.name} в корзину? Скажите «подтверждаю» или «отмена»."}

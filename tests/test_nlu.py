@@ -18,6 +18,7 @@ from modules.nlu import (
     _apply_runtime_command_guardrails,
     _normalise_transcription_for_nlu,
 )
+from modules.command_router import RoutedAction, route_explicit_command, split_compound_command
 
 
 MODEL_PATH = (
@@ -35,6 +36,33 @@ def test_dataset_splits_have_no_identical_texts():
     assert splits[0].isdisjoint(splits[1])
     assert splits[0].isdisjoint(splits[2])
     assert splits[1].isdisjoint(splits[2])
+
+
+def test_flat_whisper_transcript_is_split_into_ordered_actions_without_commas():
+    text = (
+        "открой браузер запусти жестовый режим "
+        "напомни через двадцать минут о встрече закрой дискорд"
+    )
+    normalized = _normalise_transcription_for_nlu(text)
+    assert split_compound_command(normalized) == [
+        "открой браузер",
+        "запусти жестовый режим",
+        "напомни через 20 минут о встрече",
+        "закрой дискорд",
+    ]
+
+
+def test_context_pronoun_negation_followup_and_correction_are_deterministic():
+    previous = RoutedAction("open_application", {"application": "browser"})
+    assert route_explicit_command("закрой его", previous_action=previous) == RoutedAction(
+        "window_control", {"action": "close", "window": "browser"}
+    )
+    assert route_explicit_command("не закрывай браузер").intent == "negated_command"
+    correction = route_explicit_command("нет не paint открой калькулятор", previous_action=previous)
+    assert correction is not None
+    assert correction.intent == "open_application"
+    assert correction.slots["correction_from"] == "paint"
+    assert correction.slots["application"] == "calculator"
 
 
 def test_frozen_holdout_has_no_exact_development_overlap():

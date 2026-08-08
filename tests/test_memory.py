@@ -7,7 +7,9 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from memory.commands import MemoryCommand, parse_memory_command
+from memory.conversations import ConversationStore, suggest_chat_title
 from memory.long_term import LongTermMemory
+from memory.personal_facts import extract_personal_facts
 from memory.short_term import ShortTermMemory
 
 
@@ -118,14 +120,14 @@ def test_legacy_database_is_migrated_without_losing_facts(tmp_path):
 def test_explicit_notes_are_deduplicated_and_bounded(tmp_path):
     memory = LongTermMemory(str(tmp_path / "memory.db"), max_facts=1)
     try:
-        first = memory.remember("Меня зовут Фирдавс")
-        duplicate = memory.remember("  меня   зовут фирдавс  ")
+        first = memory.remember("Меня зовут Алексей")
+        duplicate = memory.remember("  меня   зовут алексей  ")
         full = memory.remember("Я люблю Python")
         assert first.status == "created"
         assert duplicate.status == "duplicate"
         assert duplicate.fact_id == first.fact_id
         assert full.status == "limit_reached"
-        assert [fact.object for fact in memory.recent_notes()] == ["Меня зовут Фирдавс"]
+        assert [fact.object for fact in memory.recent_notes()] == ["Меня зовут Алексей"]
     finally:
         memory.close()
 
@@ -177,9 +179,9 @@ def test_recall_ignores_generic_question_words(tmp_path):
     memory = LongTermMemory(str(tmp_path / "relevance.db"))
     try:
         memory.remember("у меня есть кот")
-        memory.remember("меня зовут Фирдавс")
+        memory.remember("меня зовут Алексей")
         assert [fact.object for fact in memory.search_notes("как меня зовут")] == [
-            "меня зовут Фирдавс"
+            "меня зовут Алексей"
         ]
     finally:
         memory.close()
@@ -188,7 +190,7 @@ def test_recall_ignores_generic_question_words(tmp_path):
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("Запомни, что меня зовут Фирдавс", MemoryCommand("remember", "меня зовут Фирдавс")),
+        ("Запомни, что меня зовут Алексей", MemoryCommand("remember", "меня зовут Алексей")),
         ("Что ты обо мне знаешь?", MemoryCommand("list")),
         ("Как меня зовут?", MemoryCommand("recall", "Как меня зовут")),
         ("Забудь Ташкент", MemoryCommand("forget", "Ташкент")),
@@ -199,3 +201,51 @@ def test_recall_ignores_generic_question_words(tmp_path):
 )
 def test_memory_command_parser_is_explicit(text, expected):
     assert parse_memory_command(text) == expected
+
+
+def test_important_personal_facts_are_structured_and_profile_scoped(tmp_path):
+    path = tmp_path / "personal.db"
+    alpha = LongTermMemory(str(path), profile_id="alpha")
+    beta = LongTermMemory(str(path), profile_id="beta")
+    try:
+        for fact in extract_personal_facts("Меня зовут Алексей, мне двадцать лет"):
+            alpha.upsert_personal_fact(fact.category, fact.text)
+        assert {fact.predicate: fact.object for fact in alpha.personal_facts()} == {
+            "profile:name": "Пользователя зовут Алексей",
+            "profile:age": "Возраст пользователя: 20",
+        }
+        assert beta.personal_facts() == []
+    finally:
+        alpha.close()
+        beta.close()
+
+
+def test_popular_app_memory_is_physically_limited_to_five(tmp_path):
+    memory = LongTermMemory(str(tmp_path / "apps.db"))
+    try:
+        for name in ("browser", "discord", "paint", "calculator", "notepad"):
+            memory.record_application_use(name)
+        memory.record_application_use("browser")
+        memory.record_application_use("explorer")
+        applications = memory.popular_applications()
+        assert len(applications) == 5
+        assert applications[0] == ("browser", 2)
+    finally:
+        memory.close()
+
+
+def test_chat_history_is_readable_but_separate_from_short_term_context(tmp_path):
+    store = ConversationStore(str(tmp_path / "chats.db"), profile_id="default")
+    try:
+        store.add("user", "открой браузер запусти калькулятор")
+        store.add("assistant", "Команды выполнены.")
+        chats = store.list_chats()
+        assert len(chats) == 1
+        assert chats[0].title == "Несколько команд"
+        assert [message.role for message in store.messages(chats[0].id)] == [
+            "user",
+            "assistant",
+        ]
+        assert suggest_chat_title("Меня зовут Алексей") == "Обо мне"
+    finally:
+        store.close()

@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import logging
+import random
 import threading
 import time
 from collections import deque
@@ -106,6 +107,20 @@ class WakeWordModule(BaseModule):
             params.get("wake_phrase_vad_threshold", 0.3)
         )
         self._wake_phrase_auto_download = bool(params.get("wake_phrase_auto_download", True))
+        configured_aliases = params.get("wake_phrase_aliases") or (
+            "jarvis",
+            "железяка проснись",
+            "доброе утро",
+        )
+        self._wake_phrase_aliases = tuple(str(value).strip() for value in configured_aliases if str(value).strip())
+        configured_responses = params.get("wake_acknowledgements") or (
+            "К вашим услугам, сэр",
+            "Что прикажете делать?",
+        )
+        self._wake_acknowledgements = tuple(str(value).strip() for value in configured_responses if str(value).strip())
+        self._wake_acknowledgement_enabled = bool(
+            params.get("wake_acknowledgement_enabled", False)
+        )
         self._active_session_enabled = bool(params.get("active_session_enabled", True))
         self._active_session_timeout_ms = round(
             float(params.get("active_session_timeout_seconds", 7.0)) * 1000
@@ -142,6 +157,7 @@ class WakeWordModule(BaseModule):
         self._shutdown_requested = threading.Event()
         self._active_trace_id: str | None = None
         self._trace_sources: dict[str, str] = {}
+        self._acknowledgement_waiters: dict[str, asyncio.Event] = {}
         self.real_activation_enabled = False
         self.wake_phrase_activation_enabled = False
 
@@ -174,6 +190,8 @@ class WakeWordModule(BaseModule):
         bus.subscribe("interaction_completed", self._on_interaction_completed)
         bus.subscribe("speech_started", self._on_speech_started)
         bus.subscribe("speech_finished", self._on_speech_finished)
+        if self._wake_acknowledgement_enabled:
+            bus.subscribe("wake_acknowledgement_finished", self._on_acknowledgement_finished)
         self._loop = asyncio.get_running_loop()
         self._shutdown_requested.clear()
         if self._force_simulated:
@@ -299,6 +317,9 @@ class WakeWordModule(BaseModule):
         self._wake_listener_task = None
         self._wake_model = None
         self._trace_sources.clear()
+        for waiter in self._acknowledgement_waiters.values():
+            waiter.set()
+        self._acknowledgement_waiters.clear()
         self._vad_model = None
         self._sounddevice = None
         logger.info("WakeWordModule stopped")
@@ -393,6 +414,25 @@ class WakeWordModule(BaseModule):
             )
             self._trace_sources[wake_event.trace_id] = source
             self._active_trace_id = wake_event.trace_id
+            if (
+                source == "wake_phrase"
+                and self._wake_acknowledgement_enabled
+                and self._wake_acknowledgements
+            ):
+                waiter = asyncio.Event()
+                self._acknowledgement_waiters[wake_event.trace_id] = waiter
+                phrase = random.choice(self._wake_acknowledgements)
+                self.bus.publish(
+                    "wake_acknowledgement_requested",
+                    {"text": phrase},
+                    trace_id=wake_event.trace_id,
+                )
+                try:
+                    await asyncio.wait_for(waiter.wait(), timeout=12.0)
+                except asyncio.TimeoutError:
+                    logger.warning("WAKE_ACKNOWLEDGEMENT_TIMEOUT trace=%s", wake_event.trace_id)
+                finally:
+                    self._acknowledgement_waiters.pop(wake_event.trace_id, None)
             try:
                 result = await asyncio.to_thread(
                     self._record_microphone_sync, speech_start_timeout_ms
@@ -520,6 +560,11 @@ class WakeWordModule(BaseModule):
         # event. Keeping the listener paused closes the race where the wake
         # model could reopen the microphone between playback and follow-up.
         return
+
+    async def _on_acknowledgement_finished(self, event: Event) -> None:
+        waiter = self._acknowledgement_waiters.get(event.trace_id)
+        if waiter is not None:
+            waiter.set()
 
     def _record_microphone_sync(
         self, speech_start_timeout_ms: int | None = None

@@ -194,6 +194,17 @@ class LongTermMemory:
         self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_facts_subject ON facts(profile_id, subject)"
         )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS popular_applications (
+                profile_id TEXT NOT NULL,
+                application TEXT NOT NULL,
+                launch_count INTEGER NOT NULL DEFAULT 1,
+                last_used_at TEXT NOT NULL,
+                PRIMARY KEY(profile_id, application)
+            )
+            """
+        )
         self._conn.commit()
 
     def _ensure_open(self) -> None:
@@ -309,6 +320,12 @@ class LongTermMemory:
         relevant = self.search_notes(query, limit=limit)
         selected: list[MemoryFact] = list(relevant)
         seen = {fact.id for fact in selected}
+        for fact in self.personal_facts():
+            if fact.id not in seen:
+                selected.append(fact)
+                seen.add(fact.id)
+            if len(selected) >= limit:
+                break
         for fact in self.recent_notes(limit=limit):
             if fact.id not in seen:
                 selected.append(fact)
@@ -327,6 +344,96 @@ class LongTermMemory:
             output.append(fact.object)
             used += extra
         return output
+
+    def upsert_personal_fact(self, category: str, text: str) -> int:
+        """Store one important profile fact per category, replacing stale data."""
+        category = _normalise(category).replace(" ", "_")
+        if not re.fullmatch(r"[a-zа-я0-9_]{2,40}", category):
+            raise ValueError("personal fact category is invalid")
+        value = _clean_text(text, name="personal fact", max_chars=self.max_fact_chars)
+        predicate = f"profile:{category}"
+        now = _utc_now()
+        with self._lock:
+            self._ensure_open()
+            row = self._conn.execute(
+                "SELECT id FROM facts WHERE profile_id=? AND predicate=? LIMIT 1",
+                (self.profile_id, predicate),
+            ).fetchone()
+            if row is None:
+                cursor = self._conn.execute(
+                    """
+                    INSERT INTO facts(
+                        profile_id, subject, predicate, object,
+                        normalized_object, created_at, updated_at
+                    ) VALUES (?, 'user', ?, ?, ?, ?, ?)
+                    """,
+                    (self.profile_id, predicate, value, _normalise(value), now, now),
+                )
+                fact_id = int(cursor.lastrowid)
+            else:
+                fact_id = int(row[0])
+                self._conn.execute(
+                    "UPDATE facts SET object=?, normalized_object=?, updated_at=? WHERE id=?",
+                    (value, _normalise(value), now, fact_id),
+                )
+            self._conn.commit()
+        logger.info("PERSONAL_FACT_UPSERTED profile=%s category=%s", self.profile_id, category)
+        return fact_id
+
+    def personal_facts(self) -> list[MemoryFact]:
+        with self._lock:
+            self._ensure_open()
+            rows = self._conn.execute(
+                """
+                SELECT id, subject, predicate, object, created_at, updated_at
+                FROM facts WHERE profile_id=? AND predicate LIKE 'profile:%'
+                ORDER BY updated_at DESC, id DESC
+                """,
+                (self.profile_id,),
+            ).fetchall()
+        return [MemoryFact(*row) for row in rows]
+
+    def record_application_use(self, application: str) -> None:
+        """Keep usage statistics for no more than the five most popular apps."""
+        application = _clean_text(application, name="application", max_chars=120).casefold()
+        now = _utc_now()
+        with self._lock:
+            self._ensure_open()
+            self._conn.execute(
+                """
+                INSERT INTO popular_applications(profile_id, application, launch_count, last_used_at)
+                VALUES (?, ?, 1, ?)
+                ON CONFLICT(profile_id, application) DO UPDATE SET
+                    launch_count=launch_count + 1,
+                    last_used_at=excluded.last_used_at
+                """,
+                (self.profile_id, application, now),
+            )
+            self._conn.execute(
+                """
+                DELETE FROM popular_applications
+                WHERE profile_id=? AND application NOT IN (
+                    SELECT application FROM popular_applications
+                    WHERE profile_id=?
+                    ORDER BY launch_count DESC, last_used_at DESC
+                    LIMIT 5
+                )
+                """,
+                (self.profile_id, self.profile_id),
+            )
+            self._conn.commit()
+
+    def popular_applications(self) -> list[tuple[str, int]]:
+        with self._lock:
+            self._ensure_open()
+            rows = self._conn.execute(
+                """
+                SELECT application, launch_count FROM popular_applications
+                WHERE profile_id=? ORDER BY launch_count DESC, last_used_at DESC LIMIT 5
+                """,
+                (self.profile_id,),
+            ).fetchall()
+        return [(str(name), int(count)) for name, count in rows]
 
     def forget(self, query: str) -> int:
         """Delete user notes matching a non-empty phrase for this profile only."""
@@ -361,8 +468,12 @@ class LongTermMemory:
             cursor = self._conn.execute(
                 "DELETE FROM facts WHERE profile_id=?", (self.profile_id,)
             )
+            apps_cursor = self._conn.execute(
+                "DELETE FROM popular_applications WHERE profile_id=?",
+                (self.profile_id,),
+            )
             self._conn.commit()
-            count = max(0, int(cursor.rowcount))
+            count = max(0, int(cursor.rowcount)) + max(0, int(apps_cursor.rowcount))
         logger.info("PROFILE_MEMORY_CLEARED profile=%s count=%s", self.profile_id, count)
         return count
 

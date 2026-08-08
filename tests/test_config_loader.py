@@ -105,7 +105,10 @@ def test_expected_module_names_is_canonical_set():
 def test_installed_runtime_keeps_user_state_outside_application_dir(
     tmp_path, monkeypatch
 ):
-    config_path = _write_config(tmp_path, "modules: {}\n")
+    config_path = _write_config(
+        tmp_path,
+        "modules:\n  gesture:\n    enabled: true\n    params:\n      log_dir: logs/gestures\n",
+    )
     data_dir = tmp_path / "user-data"
     monkeypatch.setenv("JARVIS_DATA_DIR", str(data_dir))
 
@@ -117,3 +120,6 @@ def test_installed_runtime_keeps_user_state_outside_application_dir(
     )
     assert config.memory["db_path"] == str(data_dir / "memory.db")
     assert config.reminders["db_path"] == str(data_dir / "reminders.db")
+    assert config.module("gesture").params["log_dir"] == str(
+        data_dir / "logs" / "gestures"
+    )

@@ -38,6 +38,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
+import re
 import sqlite3
 from collections.abc import Mapping
 from typing import Any
@@ -52,8 +54,11 @@ from core.event_payloads import (
     ToolResultPayload,
 )
 from core.gpu_lock import GPULock
+from core.russian_numbers import normalize_russian_numbers
 from memory.commands import MemoryCommand, parse_memory_command
+from memory.conversations import ConversationStore
 from memory.long_term import LongTermMemory
+from memory.personal_facts import extract_personal_facts
 from memory.short_term import ShortTermMemory
 from tools.registry import ToolRegistry
 
@@ -107,6 +112,7 @@ class LLMModule(BaseModule):
         short_term: ShortTermMemory,
         *,
         long_term: LongTermMemory | None = None,
+        conversations: ConversationStore | None = None,
         gesture_enabled: bool = False,
     ) -> None:
         super().__init__(config)
@@ -114,6 +120,7 @@ class LLMModule(BaseModule):
         self.tools = tools
         self.short_term = short_term
         self.long_term = long_term
+        self.conversations = conversations
         self._input_event = str(
             self.config.params.get("input_event", "transcription_ready")
         )
@@ -135,7 +142,11 @@ class LLMModule(BaseModule):
         self._server_down: bool = False
         self._pending_confirmation: dict[str, Any] | None = None
         self._gesture_enabled = bool(gesture_enabled)
-        self._pending_gesture_mode: dict[str, bool] = {}
+        self._pending_gesture_mode: dict[str, str] = {}
+        self._gesture_undo_traces: set[str] = set()
+        self._pending_gesture_plan: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._undo_stack: list[dict[str, Any]] = []
+        self._pending_clarification: dict[str, Any] | None = None
 
     async def start(self, bus: EventBus) -> None:
         self.bus = bus
@@ -191,6 +202,11 @@ class LLMModule(BaseModule):
         self._active_tool_tasks.clear()
         self._pending_trace_text.clear()
         self._pending_gesture_mode.clear()
+        self._gesture_undo_traces.clear()
+        for future in self._pending_gesture_plan.values():
+            if not future.done():
+                future.cancel()
+        self._pending_gesture_plan.clear()
         logger.info("LLMModule stopped")
 
     async def _on_trace_closed(self, event: Event) -> None:
@@ -218,6 +234,15 @@ class LLMModule(BaseModule):
     async def _on_transcription(self, event: Event) -> None:
         user_text: str = str(event.payload.get("text", "")).strip()
         self.short_term.add("user", user_text)
+        if self.conversations is not None:
+            await asyncio.to_thread(self.conversations.add, "user", user_text)
+        if self.long_term is not None:
+            for fact in extract_personal_facts(user_text):
+                await asyncio.to_thread(
+                    self.long_term.upsert_personal_fact,
+                    fact.category,
+                    fact.text,
+                )
         self._pending_trace_text[event.trace_id] = user_text
 
         # When the project-owned NLU module is enabled, its learned intent is
@@ -225,6 +250,12 @@ class LLMModule(BaseModule):
         # calls; it remains the free-dialogue/final-wording engine.
         intent = event.payload.get("intent")
         actions = list(event.payload.get("actions") or [])
+        if self._pending_clarification is not None:
+            if intent in {"unknown", "general_chat"}:
+                if await self._continue_clarification(event, user_text):
+                    return
+            else:
+                self._pending_clarification = None
         if self._pending_confirmation is not None and intent not in {"confirm", "decline"}:
             logger.info("PENDING_CONFIRMATION_EXPIRED new_intent=%s", intent)
             self._pending_confirmation = None
@@ -267,14 +298,35 @@ class LLMModule(BaseModule):
         if intent == "get_current_time":
             await self._request_tool(event, "get_current_time", {}, direct_response=True)
             return
+        if intent == "undo":
+            await self._undo_last_action(event)
+            return
+        if intent == "wake_greeting":
+            await self._publish_text(
+                event,
+                random.choice(("К вашим услугам, сэр", "Что прикажете делать?")),
+            )
+            return
+        if intent == "negated_command":
+            await self._publish_text(event, "Хорошо, не буду выполнять это действие.")
+            return
         if intent == "set_reminder":
             slots = dict(event.payload.get("slots") or {})
-            if "reminder_text" not in slots or not (
-                "minutes" in slots or "clock_time" in slots or "due_at" in slots
-            ):
-                await self._publish_text(
-                    event, "Не удалось уверенно разобрать параметры напоминания."
-                )
+            if "reminder_text" not in slots:
+                self._pending_clarification = {
+                    "kind": "set_reminder",
+                    "slots": slots,
+                    "missing": "reminder_text",
+                }
+                await self._publish_text(event, "О чём вам напомнить?")
+                return
+            if not ("minutes" in slots or "clock_time" in slots or "due_at" in slots):
+                self._pending_clarification = {
+                    "kind": "set_reminder",
+                    "slots": slots,
+                    "missing": "time",
+                }
+                await self._publish_text(event, "Когда вам об этом напомнить?")
                 return
             params: dict[str, Any] = {"message": slots["reminder_text"]}
             if "minutes" in slots:
@@ -312,6 +364,9 @@ class LLMModule(BaseModule):
             if "application" not in slots:
                 await self._publish_text(event, "Не удалось разобрать название приложения.")
                 return
+            correction_from = str(slots.get("correction_from") or "")
+            if correction_from:
+                await self._undo_correction_application(correction_from)
             await self._request_tool(
                 event,
                 "open_application",
@@ -323,7 +378,10 @@ class LLMModule(BaseModule):
             await self._request_tool(event, "list_applications", {}, direct_response=True)
             return
         if intent == "gesture_mode":
-            enabled = bool(dict(event.payload.get("slots") or {}).get("enabled"))
+            slots = dict(event.payload.get("slots") or {})
+            action = str(slots.get("action") or "").casefold()
+            if action not in {"enable", "disable", "pause", "resume", "status"}:
+                action = "enable" if bool(slots.get("enabled")) else "disable"
             if not self._gesture_enabled:
                 await self._publish_text(
                     event,
@@ -331,15 +389,26 @@ class LLMModule(BaseModule):
                 )
                 return
             assert self.bus is not None
-            self._pending_gesture_mode[event.trace_id] = enabled
+            self._pending_gesture_mode[event.trace_id] = action
+            enabled = action == "enable" if action in {"enable", "disable"} else None
             self.bus.publish_event(
                 event.child(
                     "gesture_mode_requested",
-                    GestureModeRequestedPayload(enabled=enabled, source="voice"),
+                    GestureModeRequestedPayload(
+                        enabled=enabled,
+                        action=action,
+                        source="voice",
+                    ),
                 )
             )
             return
-        if intent in {"browser_control", "system_control", "window_control", "file_control"}:
+        if intent in {
+            "browser_control",
+            "system_control",
+            "window_control",
+            "file_control",
+            "workspace_control",
+        }:
             await self._request_tool(
                 event,
                 str(intent),
@@ -360,6 +429,51 @@ class LLMModule(BaseModule):
             await self._publish_text(event, "Я не уверен, что правильно понял команду.")
             return
         await self._generate(event, user_text, tool_output=None)
+
+    async def _continue_clarification(self, event: Event, user_text: str) -> bool:
+        pending = self._pending_clarification
+        if pending is None or pending.get("kind") != "set_reminder":
+            return False
+        slots = dict(pending.get("slots") or {})
+        missing = pending.get("missing")
+        if missing == "reminder_text":
+            answer = user_text.strip(" .,!?:;")
+            if not answer:
+                await self._publish_text(event, "Я не расслышал текст напоминания. Повторите, пожалуйста.")
+                return True
+            slots["reminder_text"] = answer
+            if not any(key in slots for key in ("minutes", "clock_time", "due_at")):
+                pending["slots"] = slots
+                pending["missing"] = "time"
+                await self._publish_text(event, "Когда вам об этом напомнить?")
+                return True
+        elif missing == "time":
+            answer = normalize_russian_numbers(user_text.casefold().replace("ё", "е"))
+            relative = re.search(r"(?:через\s+)?(\d+)\s+минут", answer)
+            clock = re.search(r"(?:сегодня\s+|завтра\s+)?(?:в\s+)?(\d{1,2}[.:]\d{2})", answer)
+            if relative:
+                slots["minutes"] = relative.group(1)
+            elif clock:
+                slots["clock_time"] = clock.group(1).replace(".", ":")
+                if "завтра" in answer:
+                    slots["day"] = "завтра"
+                elif "сегодня" in answer:
+                    slots["day"] = "сегодня"
+            else:
+                await self._publish_text(event, "Назовите время, например: «через двадцать минут» или «завтра в 9:30».")
+                return True
+        else:
+            return False
+        self._pending_clarification = None
+        params: dict[str, Any] = {"message": slots["reminder_text"]}
+        if "minutes" in slots:
+            params["minutes"] = int(slots["minutes"])
+        else:
+            params["clock_time"] = slots["clock_time"]
+            if "day" in slots:
+                params["day"] = slots["day"]
+        await self._request_tool(event, "set_reminder", params, direct_response=True)
+        return True
 
     async def _handle_memory_command(
         self, event: Event, command: MemoryCommand
@@ -467,25 +581,65 @@ class LLMModule(BaseModule):
         await self._generate(event, user_text, tool_output=result)
 
     async def _on_gesture_mode_changed(self, event: Event) -> None:
+        plan_future = self._pending_gesture_plan.get(event.trace_id)
+        if plan_future is not None and not plan_future.done():
+            plan_future.set_result(dict(event.payload))
+            return
         requested = self._pending_gesture_mode.pop(event.trace_id, None)
         if requested is None:
             return
-        armed = bool(event.payload.get("armed"))
         reason = str(event.payload.get("reason") or "")
-        if requested and armed and reason == "observer_unapproved_model":
-            text = (
-                "Тестовый режим жестов включен. Модель распознает жесты, "
-                "но управление компьютером отключено из-за низкой точности."
+        is_undo = event.trace_id in self._gesture_undo_traces
+        self._gesture_undo_traces.discard(event.trace_id)
+        if not is_undo and requested in {"enable", "disable"} and reason in {"", "observer_unapproved_model"}:
+            self._undo_stack.append(
+                {
+                    "kind": "gesture_mode",
+                    "action": "disable" if requested == "enable" else "enable",
+                }
             )
-        elif requested and armed:
-            text = "Режим жестов включен. Камера активна; голосовые команды продолжают работать."
-        elif not requested and not armed:
-            text = "Режим жестов выключен. Жду wake word."
-        elif reason == "model_unavailable":
+            self._undo_stack[:] = self._undo_stack[-20:]
+        text = self._gesture_mode_response(requested, event.payload)
+        await self._publish_text(event, text)
+
+    @staticmethod
+    def _gesture_mode_response(requested: str, payload: Mapping[str, Any]) -> str:
+        armed = bool(payload.get("armed"))
+        paused = bool(payload.get("paused", False))
+        reason = str(payload.get("reason") or "")
+        if reason == "model_unavailable":
             text = "Режим жестов не включен: не найдены или не прошли проверку обученные веса."
+        elif reason in {"camera_unavailable", "camera_read_failed"}:
+            text = (
+                "Жестовый режим не включен: камера недоступна. "
+                "Проверьте подключение или запустите диагностику."
+            )
+        elif reason in {"dependency_missing", "preview_unavailable"}:
+            text = (
+                "Жестовый режим не включен: отсутствует необходимый компонент. "
+                "Запустите диагностику Jarvis."
+            )
+        elif reason == "not_active":
+            text = "Жестовый режим сейчас выключен. Сначала включите его."
+        elif requested == "enable" and armed:
+            text = "Жестовый режим активирован"
+        elif requested == "disable" and not armed:
+            text = "Жестовый режим выключен."
+        elif requested == "pause" and armed and paused:
+            text = "Жестовый режим приостановлен. Камера продолжает работать."
+        elif requested == "resume" and armed and not paused:
+            text = "Жестовый режим продолжает работу."
+        elif requested == "status":
+            text = (
+                "Жестовый режим приостановлен, камера активна."
+                if armed and paused
+                else "Жестовый режим активен."
+                if armed
+                else "Жестовый режим выключен."
+            )
         else:
             text = "Не удалось изменить режим жестов."
-        await self._publish_text(event, text)
+        return text
 
     # ------------------------------------------------------------------ #
     # Core generation
@@ -522,6 +676,7 @@ class LLMModule(BaseModule):
         params: dict[str, Any],
         *,
         direct_response: bool = False,
+        record_undo: bool = True,
     ) -> None:
         assert self.bus is not None
         if self.bus.is_trace_closed(event.trace_id):
@@ -552,6 +707,8 @@ class LLMModule(BaseModule):
             active = self._active_tool_tasks.get(event.trace_id)
             if active is not None and active[1] is tool_task:
                 self._active_tool_tasks.pop(event.trace_id, None)
+        if record_undo:
+            await self._record_reversible_action(tool_name, params, result)
         if self.bus.is_trace_closed(event.trace_id):
             logger.info(
                 "TOOL_RESULT_DISCARDED name=%s trace=%s", tool_name, event.trace_id
@@ -567,6 +724,143 @@ class LLMModule(BaseModule):
                 ),
             )
         )
+
+    async def _record_reversible_action(
+        self,
+        tool_name: str,
+        params: dict[str, Any],
+        result: Mapping[str, Any],
+    ) -> None:
+        if result.get("ok") is not True:
+            return
+        record: dict[str, Any] | None = None
+        if tool_name == "open_application" and result.get("application"):
+            application = str(result["application"])
+            record = {
+                "kind": "application",
+                "application": application,
+                "tool": "undo_action",
+                "params": {"action": "close_application", "application": application},
+            }
+            if self.long_term is not None:
+                await asyncio.to_thread(self.long_term.record_application_use, application)
+        elif tool_name == "set_reminder" and isinstance(result.get("reminder"), Mapping):
+            reminder_id = int(result["reminder"]["id"])
+            record = {
+                "kind": "reminder_created",
+                "tool": "cancel_reminder",
+                "params": {"reminder_id": reminder_id},
+            }
+        elif tool_name == "cancel_reminder" and isinstance(result.get("reminder"), Mapping):
+            record = {
+                "kind": "reminder_cancelled",
+                "tool": "undo_action",
+                "params": {
+                    "action": "restore_reminder",
+                    "reminder_id": int(result["reminder"]["id"]),
+                },
+            }
+        elif tool_name == "system_control":
+            inverse = {
+                "volume_up": "volume_down",
+                "volume_down": "volume_up",
+                "volume_mute": "volume_mute",
+            }.get(str(params.get("action")))
+            if inverse:
+                record = {
+                    "kind": "system",
+                    "tool": "system_control",
+                    "params": {"action": inverse, "steps": int(params.get("steps", 1))},
+                }
+        elif tool_name == "browser_control":
+            inverse = {"new_tab": "close_tab", "close_tab": "reopen_tab"}.get(
+                str(params.get("action"))
+            )
+            if inverse:
+                record = {
+                    "kind": "browser",
+                    "tool": "browser_control",
+                    "params": {"action": inverse},
+                }
+        elif tool_name == "file_control":
+            action = str(params.get("action"))
+            if action == "rename" and result.get("path") and result.get("previous_path"):
+                record = {
+                    "kind": "file_rename",
+                    "tool": "undo_action",
+                    "params": {
+                        "action": "restore_rename",
+                        "path": str(result["path"]),
+                        "previous_path": str(result["previous_path"]),
+                    },
+                }
+            elif action == "create_folder" and result.get("path"):
+                record = {
+                    "kind": "folder_created",
+                    "tool": "undo_action",
+                    "params": {"action": "remove_empty_folder", "path": str(result["path"])},
+                }
+        elif tool_name == "window_control" and isinstance(result.get("undo"), Mapping):
+            states = result["undo"].get("states")
+            if isinstance(states, list) and states:
+                record = {
+                    "kind": "window_layout",
+                    "tool": "undo_action",
+                    "params": {"action": "restore_windows", "states": states},
+                }
+        elif tool_name == "workspace_control" and result.get("undo_token"):
+            record = {
+                "kind": "workspace_launch",
+                "tool": "workspace_control",
+                "params": {
+                    "action": "undo_launch",
+                    "undo_token": str(result["undo_token"]),
+                },
+            }
+        if record is not None:
+            self._undo_stack.append(record)
+            self._undo_stack[:] = self._undo_stack[-20:]
+
+    async def _undo_last_action(self, event: Event) -> None:
+        if not self._undo_stack:
+            await self._publish_text(event, "Нет безопасного действия, которое можно отменить.")
+            return
+        record = self._undo_stack.pop()
+        if record.get("kind") == "gesture_mode":
+            action = str(record.get("action", "disable"))
+            assert self.bus is not None
+            self._gesture_undo_traces.add(event.trace_id)
+            self._pending_gesture_mode[event.trace_id] = action
+            self.bus.publish_event(
+                event.child(
+                    "gesture_mode_requested",
+                    GestureModeRequestedPayload(
+                        enabled=action == "enable",
+                        action=action,
+                        source="voice",
+                    ),
+                )
+            )
+            return
+        await self._request_tool(
+            event,
+            str(record["tool"]),
+            dict(record.get("params") or {}),
+            direct_response=True,
+            record_undo=False,
+        )
+
+    async def _undo_correction_application(self, application: str) -> None:
+        for index in range(len(self._undo_stack) - 1, -1, -1):
+            record = self._undo_stack[index]
+            if record.get("kind") != "application" or record.get("application") != application:
+                continue
+            result = await self.tools.execute(
+                str(record["tool"]), dict(record.get("params") or {})
+            )
+            if result.get("ok") is True:
+                self._undo_stack.pop(index)
+            return
 
     async def _request_plan(self, event: Event, actions: list[dict[str, Any]]) -> None:
         """Execute a compound utterance under one lifecycle TOOL_CALL envelope."""
@@ -584,7 +878,7 @@ class LLMModule(BaseModule):
                 return
             plan.append(mapped)
         for tool_name, _params in plan:
-            if not self.tools.has(tool_name):
+            if tool_name != "__gesture_mode__" and not self.tools.has(tool_name):
                 await self._publish_text(event, f"Инструмент {tool_name} недоступен.")
                 return
         if not self.bus.publish_event(
@@ -601,7 +895,11 @@ class LLMModule(BaseModule):
         async def execute_plan() -> dict[str, Any]:
             results: list[dict[str, Any]] = []
             for tool_name, params in plan:
-                result = await self.tools.execute(tool_name, params)
+                if tool_name == "__gesture_mode__":
+                    result = await self._execute_gesture_plan_step(event, params)
+                else:
+                    result = await self.tools.execute(tool_name, params)
+                    await self._record_reversible_action(tool_name, params, result)
                 results.append({"tool": tool_name, "result": result})
                 if result.get("confirmation_required") or result.get("ok") is False:
                     break
@@ -648,6 +946,8 @@ class LLMModule(BaseModule):
             return "list_applications", {}
         if intent == "open_application" and slots.get("application"):
             return "open_application", {"application": slots["application"]}
+        if intent == "gesture_mode":
+            return "__gesture_mode__", slots
         if intent == "list_reminders":
             return "list_reminders", {}
         if intent == "cancel_reminder" and slots.get("reminder_id") is not None:
@@ -659,9 +959,50 @@ class LLMModule(BaseModule):
                     params[key] = int(slots[key]) if key == "minutes" else slots[key]
             if any(key in params for key in ("minutes", "due_at", "clock_time")):
                 return "set_reminder", params
-        if intent in {"browser_control", "system_control", "window_control", "file_control"}:
+        if intent in {
+            "browser_control",
+            "system_control",
+            "window_control",
+            "file_control",
+            "workspace_control",
+        }:
             return intent, slots
         return None
+
+    async def _execute_gesture_plan_step(
+        self, event: Event, slots: dict[str, Any]
+    ) -> dict[str, Any]:
+        if not self._gesture_enabled or self.bus is None:
+            return {"ok": False, "response_text": "Жестовый режим недоступен."}
+        action = str(slots.get("action") or "enable").casefold()
+        if action not in {"enable", "disable", "pause", "resume", "status"}:
+            action = "enable" if bool(slots.get("enabled", True)) else "disable"
+        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
+        self._pending_gesture_plan[event.trace_id] = future
+        enabled = action == "enable" if action in {"enable", "disable"} else None
+        self.bus.publish_event(
+            event.child(
+                "gesture_mode_requested",
+                GestureModeRequestedPayload(enabled=enabled, action=action, source="voice"),
+            )
+        )
+        try:
+            payload = await asyncio.wait_for(future, timeout=15.0)
+        except asyncio.TimeoutError:
+            return {"ok": False, "response_text": "Жестовый режим не ответил вовремя."}
+        finally:
+            self._pending_gesture_plan.pop(event.trace_id, None)
+        text = self._gesture_mode_response(action, payload)
+        success = not payload.get("reason") or payload.get("reason") == "observer_unapproved_model"
+        if success and action in {"enable", "disable"}:
+            self._undo_stack.append(
+                {
+                    "kind": "gesture_mode",
+                    "action": "disable" if action == "enable" else "enable",
+                }
+            )
+            self._undo_stack[:] = self._undo_stack[-20:]
+        return {"ok": bool(success), "response_text": text}
 
     async def _publish_text(self, event: Event, response_text: str) -> None:
         assert self.bus is not None
@@ -669,6 +1010,8 @@ class LLMModule(BaseModule):
             logger.info("RESPONSE_DISCARDED cancelled trace=%s", event.trace_id)
             return
         self.short_term.add("assistant", response_text)
+        if self.conversations is not None:
+            await asyncio.to_thread(self.conversations.add, "assistant", response_text)
         self.bus.publish_event(
             event.child("response_ready", ResponseReadyPayload(text=response_text))
         )

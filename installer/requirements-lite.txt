@@ -8,3 +8,6 @@ pynput==1.8.2
 silero-vad[onnx-cpu]==6.2.1
 onnxruntime==1.23.2
 openwakeword==0.6.0
+opencv-python==4.13.0.92
+PySide6==6.10.2
+pyvda==0.6.0

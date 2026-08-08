@@ -67,8 +67,12 @@ class ToolRegistry:
     # API for the LLM module
     # ------------------------------------------------------------------ #
     def schemas(self) -> list[dict[str, Any]]:
-        """All tool schemas, ready to hand to the LLM for function calling."""
-        return list(self._schemas.values())
+        """User-addressable schemas, excluding runtime-internal helpers."""
+        return [
+            schema
+            for schema in self._schemas.values()
+            if not bool(schema.get("x-internal", False))
+        ]
 
     def names(self) -> list[str]:
         """Sorted list of registered tool names — used for keyword matching."""

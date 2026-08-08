@@ -17,6 +17,7 @@ from core.base_module import BaseModule
 from core.event_bus import Event, EventBus
 from core.event_payloads import CancelRequestedPayload, NLUResultPayload
 from core.gpu_lock import GPULock
+from core.russian_numbers import normalize_russian_numbers
 from ml.nlu.inference import NLUPredictor
 from ml.nlu.schema import NLUResult
 from modules.command_router import RoutedAction, route_explicit_command, split_compound_command
@@ -84,7 +85,7 @@ def _normalise_transcription_for_nlu(text: str) -> str:
     )
     for pattern, replacement in replacements:
         corrected = re.sub(pattern, replacement, corrected, flags=re.IGNORECASE)
-    return re.sub(r"\s+", " ", corrected).strip()
+    return normalize_russian_numbers(re.sub(r"\s+", " ", corrected).strip())
 
 
 def _apply_runtime_command_guardrails(

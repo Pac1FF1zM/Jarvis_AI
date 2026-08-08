@@ -144,6 +144,13 @@ class ReminderScheduler:
                 )
         return reminder
 
+    async def restore(self, reminder_id: int) -> Reminder | None:
+        """Restore a still-future reminder cancelled by the active profile."""
+        reminder_id = int(reminder_id)
+        if reminder_id <= 0:
+            raise ValueError("reminder id must be positive")
+        return await asyncio.to_thread(self._restore_cancelled, reminder_id)
+
     async def _poll_loop(self) -> None:
         try:
             while True:
@@ -312,6 +319,25 @@ class ReminderScheduler:
             connection.execute(
                 "UPDATE reminders SET status='cancelled',cancelled_at=? WHERE id=?",
                 (cancelled_at, reminder_id),
+            )
+            updated = connection.execute(
+                "SELECT * FROM reminders WHERE id=?", (reminder_id,)
+            ).fetchone()
+        assert updated is not None
+        return self._from_row(updated)
+
+    def _restore_cancelled(self, reminder_id: int) -> Reminder | None:
+        now = datetime.now(timezone.utc)
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM reminders WHERE id=? AND profile_id=? AND status='cancelled'",
+                (reminder_id, self.profile_id),
+            ).fetchone()
+            if row is None or self._coerce_datetime(str(row["due_at"])) <= now:
+                return None
+            connection.execute(
+                "UPDATE reminders SET status='pending',cancelled_at=NULL WHERE id=?",
+                (reminder_id,),
             )
             updated = connection.execute(
                 "SELECT * FROM reminders WHERE id=?", (reminder_id,)

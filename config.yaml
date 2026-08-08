@@ -8,28 +8,45 @@ orchestrator:
   interaction_timeout_seconds: 60 # hard failure guard; completion is event-driven
 
 modules:
-  # Gesture Core is a separate webcam pipeline. The current failed-gate model
-  # may be activated by NLU only as an observer; it cannot execute OS actions.
+  # Gesture Core uses the frozen TSN-ResNet18 baseline in a restricted
+  # real-camera test: only six reversible media actions may execute.
   gesture:
     enabled: true
-    device: cpu
-    model: models/gesture/20260730_064148/tiny_3d_cnn.pt
+    device: "cuda"
+    model: checkpoints/tsn_resnet18_seed42/best.pt
     params:
-      quality_report: models/gesture/20260730_064148/report.json
-      checkpoint_sha256: 2a30948dae9347cdbe937f56f4ce4941c17cb4d8836772a19b7a5cff50913356
+      quality_report: reports/evaluation_test.json
+      checkpoint_sha256: 79ce0465bc705180a3beacba42436bdf9a23e693d2a2d143de40631f3c61a0c9
       allow_unapproved_observer: true
       camera_index: 0
       # DirectShow avoids slow/hanging CAP_ANY probing on Windows webcams.
       camera_backend: dshow
-      frames: 32
+      preview_enabled: true
+      preview_window: Jarvis Gesture Core
+      # Global toggle is active only while Jarvis itself is running.
+      toggle_hotkey: "<ctrl>+<alt>+/"
+      camera_start_timeout: 8.0
+      log_dir: logs/gestures
+      log_retention_days: 30
+      log_max_bytes: 104857600
+      log_file_max_bytes: 10485760
+      # Uniformly sample 16 frames from a rolling three-second camera window.
+      frames: 16
+      window_frames: 90
       image_size: 112
-      window_stride: 4
-      confidence_threshold: 0.90
+      resize_size: 128
+      window_stride: 8
+      confidence_threshold: 0.7
       consecutive_windows: 3
       cooldown_seconds: 1.5
+      # A triggered gesture cannot fire again until D0X is observed.
+      require_neutral_rearm: true
       armed_on_start: false
-      # Remains false: report.json has approved=false (test macro-F1 0.0726).
-      execution_enabled: false
+      # Restricted real-camera test: only six reversible media actions execute.
+      # Every other class remains observer-only despite execution_enabled=true.
+      action_allowlist: [G01, G02, G03, G04, G05, G06]
+      observer_action_allowlist: [G01, G02, G03, G04, G05, G06]
+      execution_enabled: true
 
   wake_word:
     enabled: true
@@ -38,6 +55,14 @@ modules:
     params:
       wake_phrase_enabled: true
       wake_phrase_model: hey_jarvis
+      # "Jarvis" is detected acoustically by openWakeWord. The Russian
+      # aliases are also understood whenever a voice session is listening;
+      # dedicated always-on acoustic weights will be added during wake-model training.
+      wake_phrase_aliases: ["Jarvis", "Железяка проснись", "Доброе утро"]
+      wake_acknowledgement_enabled: true
+      wake_acknowledgements:
+        - "К вашим услугам, сэр"
+        - "Что прикажете делать?"
       # Balanced for laptop microphone arrays. Candidate scores are logged so
       # this can be tuned per microphone without guessing.
       wake_phrase_threshold: 0.35
@@ -54,8 +79,8 @@ modules:
   stt:
     enabled: true
     # Uses CUDA + FP16 when PyTorch sees an NVIDIA GPU, otherwise CPU + FP32.
-    device: auto
-    model: small
+    device: "auto"
+    model: "small"
     params:
       language: ru
       download_root: models/openai-whisper
@@ -80,9 +105,9 @@ modules:
   # run on CPU, or use Q4_K_M / smaller. See README §3.
   llm:
     enabled: true
-    device: cpu
+    device: "cpu"
     compute_type: q4_k_m
-    model: qwen2.5:7b-instruct
+    model: "qwen2.5:7b-instruct"
     params:
       # The NLU model owns tool routing. Ollama handles only general dialogue;
       # deterministic tool results are returned directly.
@@ -108,6 +133,8 @@ modules:
       prewarm_texts:
         - "Открываю Браузер."
         - "Открываю Дискорд."
+        - "К вашим услугам, сэр"
+        - "Что прикажете делать?"
       cache_max_entries: 16
       cache_max_chars: 120
 
@@ -138,7 +165,7 @@ feedback:
   max_queue_bytes: 5000000
 
 logging:
-  level: INFO
+  level: "INFO"
   log_file: logs/jarvis.log     # parsed by scripts/analyze_latency.py
   # Every start also gets its own UTF-8 transcript for ML feedback. Unlike
   # jarvis.log, these files are never overwritten by the next session.

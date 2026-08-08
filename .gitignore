@@ -55,6 +55,7 @@ latest_silero_models.yml
 training_workspace/runs/
 training_workspace/export/
 training_workspace/jsc_runs/
+training_workspace/jsc_runs_v*/
 training_workspace/data/private_holdout.jsonl
 training_workspace/data/feedback_train.jsonl
 training_workspace/gesture_data/
@@ -66,6 +67,10 @@ gesture_export/
 installer/cache/
 installer/output/
 installer/.tools/
+
+# Local previews and editable office documents may contain screen/profile metadata
+artifacts/
+docs/*.docx
 
 # Local archives, IDE and OS metadata
 *.zip
