@@ -91,12 +91,21 @@ modules:
     params:
       language: ru
       download_root: models/openai-whisper
+      # Balanced accuracy profile for short, independent voice commands.
+      # A small beam improves recognition without the latency/VRAM cost of
+      # moving from Whisper small to a larger model.
+      temperature: 0.0
+      beam_size: 3
+      patience: 1.0
+      condition_on_previous_text: false
       # Bias mixed Russian/English application names without changing the
       # Russian recognition language. This is a prompt, not another model.
       initial_prompt: >-
-        Команды голосового ассистента Джарвис. Приложения: калькулятор,
-        блокнот, проводник, Paint, Пейнт, Discord, Дискорд, диспетчер задач,
-        браузер.
+        Голосовые команды ассистенту Джарвис: открой, запусти, закрой, найди,
+        напомни, включи, выключи, запусти жестовый режим. Приложения и сайты:
+        браузер, YouTube, Ютуб, Telegram, Телеграм, Discord, Дискорд, Steam,
+        Visual Studio Code, VS Code, ChatGPT, Claude, DeepSeek, калькулятор,
+        блокнот, проводник, Paint, Пейнт, диспетчер задач.
 
   # Own character-level NLU manager. It routes tool/control/dialogue/reject,
   # then predicts intent and slots. All weights and its tokenizer are trained

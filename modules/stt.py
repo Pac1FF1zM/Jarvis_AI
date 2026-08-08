@@ -126,6 +126,16 @@ class STTModule(BaseModule):
         )
         self._device = _resolve_device(config.device)
         self._fp16 = bool(params.get("fp16", self._device == "cuda"))
+        # Each microphone capture is one independent command.  Deterministic
+        # beam search improves short Russian commands, while disabling text
+        # carry-over prevents a previous command from biasing the next one.
+        self._temperature = float(params.get("temperature", 0.0))
+        beam_size = int(params.get("beam_size", 3))
+        self._beam_size = beam_size if beam_size > 0 else None
+        self._patience = float(params.get("patience", 1.0))
+        self._condition_on_previous_text = bool(
+            params.get("condition_on_previous_text", False)
+        )
         self._initial_prompt = str(
             params.get(
                 "initial_prompt",
@@ -164,11 +174,15 @@ class STTModule(BaseModule):
                 raise
 
         logger.info(
-            "STTModule started (mode=%s) device=%s model=%s language=%s",
+            "STTModule started (mode=%s) device=%s model=%s language=%s "
+            "temperature=%.1f beam_size=%s previous_text=%s",
             "real" if self._model is not None else "stub",
             self._device,
             self.config.model,
             self._language,
+            self._temperature,
+            self._beam_size,
+            self._condition_on_previous_text,
         )
 
     async def stop(self) -> None:
@@ -285,16 +299,21 @@ class STTModule(BaseModule):
         """Run official Whisper's blocking ``transcribe`` off the event loop."""
 
         def _sync_transcribe():
-            return self._model.transcribe(
-                audio_array,
-                language=self._language,
-                task="transcribe",
-                fp16=self._fp16,
+            options: dict[str, Any] = {
+                "language": self._language,
+                "task": "transcribe",
+                "fp16": self._fp16,
                 # In OpenAI Whisper ``False`` still renders a tqdm progress
                 # bar. ``None`` disables both per-segment text and the bar.
-                verbose=None,
-                initial_prompt=self._initial_prompt or None,
-            )
+                "verbose": None,
+                "initial_prompt": self._initial_prompt or None,
+                "temperature": self._temperature,
+                "condition_on_previous_text": self._condition_on_previous_text,
+            }
+            if self._beam_size is not None:
+                options["beam_size"] = self._beam_size
+                options["patience"] = self._patience
+            return self._model.transcribe(audio_array, **options)
 
         try:
             async with self.gpu_lock.section("stt"):

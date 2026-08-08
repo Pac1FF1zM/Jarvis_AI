@@ -91,16 +91,44 @@ def test_control_center_window_smoke_without_starting_runtime(monkeypatch):
     assert not window.stop_button.isEnabled()
     assert window.hero_state_label.text() == "СТАНДБАЙ"
 
-    from modules.gesture_ui import EmbeddedGesturePreview
+    from modules.gesture_ui import EmbeddedGesturePreview, GesturePreviewState
+
+    cv2 = pytest.importorskip("cv2")
+    np = pytest.importorskip("numpy")
 
     preview = EmbeddedGesturePreview(
         window.gesture_view.preview_port,
         window.gesture_view.preview_token,
     )
-    preview.open(object())
+    preview.open(cv2)
     app.processEvents()
     assert window.pages.currentIndex() == 4
     assert window.gesture_view.mode_badge.text() == "●  АКТИВЕН"
+
+    # Regression: PySide6 6.10 raises when QImage.fromData receives the JPEG
+    # format as bytes.  Send a real encoded camera frame through the same UDP
+    # path and verify that the embedded surface actually receives a pixmap.
+    preview.render(
+        np.zeros((48, 64, 3), dtype=np.uint8),
+        GesturePreviewState(
+            label="G01",
+            action="тест",
+            confidence=0.95,
+            stable_count=3,
+            stable_required=3,
+            top3=(("G01", 0.95),),
+            last_action="тест",
+            fps=12.0,
+            latency_ms=8.0,
+            camera="0",
+            model="test",
+            status="АКТИВЕН",
+        ),
+    )
+    for _ in range(5):
+        app.processEvents()
+    assert not window.gesture_view.video._source.isNull()
+    assert window.gesture_view.gesture_label.text() == "G01"
     preview.close()
     app.processEvents()
 

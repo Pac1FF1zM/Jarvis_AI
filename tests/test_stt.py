@@ -40,6 +40,10 @@ def _config(device: str = "cpu") -> ModuleConfig:
             "download_root": "models/openai-whisper",
             "fp16": device == "cuda",
             "initial_prompt": "Калькулятор, Пейнт, Дискорд.",
+            "temperature": 0.0,
+            "beam_size": 3,
+            "patience": 1.0,
+            "condition_on_previous_text": False,
         },
     )
 
@@ -162,6 +166,10 @@ async def test_decodable_audio_uses_real_result_and_runs_off_loop(
     assert call["fp16"] is False
     assert call["verbose"] is None
     assert call["initial_prompt"] == "Калькулятор, Пейнт, Дискорд."
+    assert call["temperature"] == 0.0
+    assert call["beam_size"] == 3
+    assert call["patience"] == 1.0
+    assert call["condition_on_previous_text"] is False
     assert all(
         tid != event_loop_thread for tid in fake_whisper.model.transcribe_thread_ids
     )
@@ -203,6 +211,15 @@ def test_project_has_no_faster_whisper_dependency():
     )
     assert "faster-whisper" not in requirements.lower()
     assert "huggingface" not in requirements.lower()
+
+
+def test_beam_search_can_be_disabled(gpu_lock):
+    config = _config()
+    config.params["beam_size"] = 0
+
+    mod = STTModule(config, gpu_lock)
+
+    assert mod._beam_size is None
 
 
 @pytest.mark.parametrize(

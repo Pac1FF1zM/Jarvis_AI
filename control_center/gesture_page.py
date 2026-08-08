@@ -177,7 +177,10 @@ class GestureModePage(QWidget):
                 self._set_badge("●  АКТИВЕН", online=True)
                 self.preview_activated.emit()
             if event == "frame" and jpeg:
-                image = QImage.fromData(jpeg, b"JPG")
+                # PySide6 6.10 rejects the otherwise documented bytes format
+                # argument (``b"JPG"``) with ValueError.  Qt reliably detects
+                # JPEG from its header, so let it auto-detect the format.
+                image = QImage.fromData(jpeg)
                 if not image.isNull():
                     self.video.show_frame(image)
                 self._render_state(metadata)
