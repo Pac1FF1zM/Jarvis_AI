@@ -86,7 +86,7 @@ async def test_isolated_runtime_arms_reports_prediction_and_stops_cleanly(
                 "gesture_action_ready",
                 GestureActionReadyPayload(
                     label="G03",
-                    action_hint="navigate_up",
+                    action_hint="volume_up",
                     confidence=0.96,
                     consecutive_windows=3,
                     execution="observer_unapproved_model",
@@ -98,6 +98,7 @@ async def test_isolated_runtime_arms_reports_prediction_and_stops_cleanly(
                     status="preview_closed", detail="Q, Escape or window close"
                 ),
             )
+            asyncio.get_running_loop().call_later(0.05, shutdown.set)
 
         async def stop(self) -> None:
             stopped.set()
@@ -112,7 +113,7 @@ async def test_isolated_runtime_arms_reports_prediction_and_stops_cleanly(
     assert "Gesture Core активирован" in output
     assert "Gesture Core: camera_ready: camera_index=0" in output
     assert "observer-режиме" in output
-    assert "Жест: G03 (navigate_up), уверенность 96.0%" in output
+    assert "Жест: G03 (volume_up), уверенность 96.0%" in output
     assert "Gesture Core: preview_closed" in output
     assert stopped.is_set()
 
@@ -149,3 +150,90 @@ async def test_isolated_runtime_reports_unavailable_model(tmp_path, monkeypatch)
 
     with pytest.raises(main_module.GestureModeError, match="model_unavailable"):
         await main_module.run_gesture_mode(str(config_path))
+
+
+async def test_isolated_runtime_executes_only_allowlisted_g01_media_test(
+    tmp_path, monkeypatch, capsys
+):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        "\n".join(
+            (
+                "modules:",
+                "  gesture:",
+                "    enabled: true",
+                "    device: cpu",
+                "    model: candidate.pt",
+                "    params:",
+                "      execution_enabled: true",
+                "      action_allowlist: [G01]",
+                "      observer_action_allowlist: [G01]",
+                "logging:",
+                f"  log_file: '{(tmp_path / 'jarvis.log').as_posix()}'",
+                f"  session_log_dir: '{(tmp_path / 'sessions').as_posix()}'",
+                "  console: false",
+            )
+        ),
+        encoding="utf-8",
+    )
+    actions: list[dict] = []
+    shutdown = asyncio.Event()
+
+    async def fake_system_control(params):
+        actions.append(params)
+        return {"ok": True, "response_text": "Переключаю воспроизведение."}
+
+    import tools.system_control as system_control_module
+
+    monkeypatch.setattr(system_control_module, "execute", fake_system_control)
+
+    class FakeGestureControlModule:
+        def __init__(self, config, _gpu_lock) -> None:
+            self.bus = None
+
+        async def start(self, bus) -> None:
+            self.bus = bus
+            bus.subscribe("gesture_mode_requested", self._on_requested)
+
+        async def _on_requested(self, _event) -> None:
+            self.bus.publish(
+                "gesture_mode_changed",
+                GestureModeChangedPayload(
+                    armed=True,
+                    source="standalone_cli",
+                    reason="observer_unapproved_model",
+                ),
+            )
+            self.bus.publish(
+                "gesture_runtime_status",
+                GestureRuntimeStatusPayload(status="camera_ready", detail="camera_index=0"),
+            )
+            self.bus.publish(
+                "gesture_action_ready",
+                GestureActionReadyPayload(
+                    label="G01",
+                    action_hint="media_play_pause",
+                    confidence=0.99,
+                    consecutive_windows=3,
+                    execution="enabled",
+                ),
+            )
+            self.bus.publish(
+                "gesture_runtime_status",
+                GestureRuntimeStatusPayload(status="preview_closed", detail="test"),
+            )
+            asyncio.get_running_loop().call_later(0.05, shutdown.set)
+
+        async def stop(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        gesture_control_module, "GestureControlModule", FakeGestureControlModule
+    )
+
+    await main_module.run_gesture_mode(str(config_path), shutdown_event=shutdown)
+
+    assert actions == [{"action": "media_play_pause"}]
+    output = capsys.readouterr().out
+    assert "Жест: G01 (media_play_pause), уверенность 99.0%" in output
+    assert "остальные классы не управляют Windows" in output

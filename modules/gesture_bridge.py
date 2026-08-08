@@ -1,8 +1,8 @@
-"""Translate approved gesture proposals into ordinary Jarvis command input.
+"""Execute the six approved gesture proposals silently through Jarvis tools.
 
-The bridge intentionally owns no camera and no neural model.  It merely maps a
-small allow-list of harmless, already-supported actions onto the same
-wake/transcribe/think/tool lifecycle used by a voice command.
+The bridge intentionally owns no camera and no neural model. Gesture actions
+do not enter the conversational lifecycle: voice control remains undisturbed
+and TTS never announces a gesture-triggered media key.
 """
 from __future__ import annotations
 
@@ -12,11 +12,6 @@ from typing import Any
 
 from core.base_module import BaseModule
 from core.event_bus import Event, EventBus
-from core.event_payloads import (
-    NLUResultPayload,
-    TranscriptionReadyPayload,
-    WakeWordDetectedPayload,
-)
 
 logger = logging.getLogger("jarvis.module.gesture_bridge")
 
@@ -28,17 +23,15 @@ class GestureCommand:
     slots: dict[str, Any]
 
 
-# Do not map pointer-like or confirmation gestures until they have dedicated
-# desktop semantics and real-camera validation.  These actions are reversible
-# and already have guarded Windows tools.
+# Do not map pointer-like, browser or confirmation gestures. These six actions
+# are reversible and already have guarded Windows-tool implementations.
 GESTURE_COMMANDS: dict[str, GestureCommand] = {
+    "G01": GestureCommand("переключи воспроизведение", "system_control", {"action": "media_play_pause"}),
+    "G02": GestureCommand("переключи звук", "system_control", {"action": "volume_mute"}),
     "G03": GestureCommand("увеличь громкость", "system_control", {"action": "volume_up", "steps": 2}),
     "G04": GestureCommand("уменьши громкость", "system_control", {"action": "volume_down", "steps": 2}),
     "G05": GestureCommand("предыдущий трек", "system_control", {"action": "media_previous"}),
     "G06": GestureCommand("следующий трек", "system_control", {"action": "media_next"}),
-    "G08": GestureCommand("переключи воспроизведение", "system_control", {"action": "media_play_pause"}),
-    "G10": GestureCommand("увеличь масштаб", "browser_control", {"action": "zoom_in"}),
-    "G11": GestureCommand("уменьши масштаб", "browser_control", {"action": "zoom_out"}),
 }
 
 
@@ -47,20 +40,16 @@ class GestureActionBridge(BaseModule):
 
     name = "gesture_bridge"
 
-    def __init__(self) -> None:
+    def __init__(self, tools: Any) -> None:
         super().__init__(config=object())
-        self._pending: dict[str, GestureCommand] = {}
+        self.tools = tools
 
     async def start(self, bus: EventBus) -> None:
         self.bus = bus
         bus.subscribe("gesture_action_ready", self._on_gesture_action)
-        bus.subscribe("thinking_ready", self._on_thinking_ready)
-        bus.subscribe("interaction_cancelled", self._on_trace_closed)
-        bus.subscribe("interaction_failed", self._on_trace_closed)
         logger.info("GestureActionBridge started safe_labels=%s", sorted(GESTURE_COMMANDS))
 
     async def stop(self) -> None:
-        self._pending.clear()
         logger.info("GestureActionBridge stopped")
 
     async def _on_gesture_action(self, event: Event) -> None:
@@ -70,37 +59,18 @@ class GestureActionBridge(BaseModule):
         if command is None:
             logger.info("GESTURE_ACTION_IGNORED label=%s reason=unmapped", event.payload.get("label"))
             return
-        assert self.bus is not None
-        wake = self.bus.publish(
-            "wake_word_detected", WakeWordDetectedPayload(source="gesture")
-        )
-        self._pending[wake.trace_id] = command
-        # This text only advances the shared lifecycle and makes the trace
-        # readable in logs. NLUModule deliberately leaves source=gesture to
-        # this bridge, which supplies the already policy-mapped NLU result.
-        self.bus.publish(
-            "transcription_ready",
-            TranscriptionReadyPayload(text=command.text, confidence=1.0, source="gesture"),
-            trace_id=wake.trace_id,
-        )
-        logger.info("GESTURE_COMMAND_ACCEPTED label=%s trace=%s", event.payload.get("label"), wake.trace_id)
-
-    async def _on_thinking_ready(self, event: Event) -> None:
-        command = self._pending.pop(event.trace_id, None)
-        if command is None or self.bus is None or self.bus.is_trace_closed(event.trace_id):
+        try:
+            result = await self.tools.execute(command.intent, command.slots)
+        except Exception:  # noqa: BLE001 - one media key must not stop recognition
+            logger.exception(
+                "GESTURE_ACTION_FAILED label=%s action=%s",
+                event.payload.get("label"),
+                command.slots.get("action"),
+            )
             return
-        self.bus.publish(
-            "nlu_result",
-            NLUResultPayload(
-                text=command.text,
-                intent=command.intent,
-                slots=command.slots,
-                confidence=1.0,
-                raw_intent=command.intent,
-                intent_confidence=1.0,
-            ),
-            trace_id=event.trace_id,
+        logger.info(
+            "GESTURE_ACTION_EXECUTED label=%s action=%s ok=%s",
+            event.payload.get("label"),
+            command.slots.get("action"),
+            result.get("ok"),
         )
-
-    async def _on_trace_closed(self, event: Event) -> None:
-        self._pending.pop(event.trace_id, None)
