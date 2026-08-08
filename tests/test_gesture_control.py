@@ -106,6 +106,19 @@ def test_headless_opencv_is_detected_before_preview_start():
     assert _opencv_gui_available(HeadlessCV2()) is False
 
 
+def test_auto_device_keeps_installer_usable_with_or_without_cuda(monkeypatch):
+    config = SimpleNamespace(
+        device="auto",
+        model="",
+        params={"preview_enabled": False, "frames": 4, "image_size": 32},
+    )
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    assert GestureControlModule(config, GPULock())._device == "cpu"
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    assert GestureControlModule(config, GPULock())._device == "cuda"
+
+
 def test_preview_shows_raw_prediction_and_q_requests_exit():
     config = SimpleNamespace(
         device="cpu",

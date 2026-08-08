@@ -1,5 +1,5 @@
 #define AppName "Jarvis AI"
-#define AppVersion "0.5.0"
+#define AppVersion "0.6.0"
 #define AppPublisher "Pac1FF1zM"
 
 [Setup]
@@ -37,8 +37,10 @@ Name: "{userappdata}\Jarvis\logs"; Flags: uninsneveruninstall
 
 [Files]
 Source: "..\main.py"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\jarvis_control.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\config.yaml"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\control_center\*.py"; DestDir: "{app}\control_center"; Flags: ignoreversion
 Source: "..\core\*.py"; DestDir: "{app}\core"; Flags: ignoreversion
 Source: "..\memory\*.py"; DestDir: "{app}\memory"; Flags: ignoreversion
 Source: "..\modules\*.py"; DestDir: "{app}\modules"; Flags: ignoreversion
@@ -49,8 +51,17 @@ Source: "..\ml\nlu\inference.py"; DestDir: "{app}\ml\nlu"; Flags: ignoreversion
 Source: "..\ml\nlu\models.py"; DestDir: "{app}\ml\nlu"; Flags: ignoreversion
 Source: "..\ml\nlu\schema.py"; DestDir: "{app}\ml\nlu"; Flags: ignoreversion
 Source: "..\ml\nlu\tokenizer.py"; DestDir: "{app}\ml\nlu"; Flags: ignoreversion
+Source: "..\ml\gesture\__init__.py"; DestDir: "{app}\ml\gesture"; Flags: ignoreversion
+Source: "..\ml\gesture\labels.py"; DestDir: "{app}\ml\gesture"; Flags: ignoreversion
+Source: "..\ml\gesture\models.py"; DestDir: "{app}\ml\gesture"; Flags: ignoreversion
+Source: "..\src\__init__.py"; DestDir: "{app}\src"; Flags: ignoreversion
+Source: "..\src\data\__init__.py"; DestDir: "{app}\src\data"; Flags: ignoreversion
+Source: "..\src\data\transforms.py"; DestDir: "{app}\src\data"; Flags: ignoreversion
+Source: "..\src\models\*.py"; DestDir: "{app}\src\models"; Flags: ignoreversion
 Source: "..\models\nlu_manager_finetuned.pt"; DestDir: "{app}\models"; Flags: ignoreversion
 Source: "..\models\nlu_manager_finetuned.metrics.json"; DestDir: "{app}\models"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\checkpoints\tsn_resnet18_seed42\best.pt"; DestDir: "{app}\checkpoints\tsn_resnet18_seed42"; Flags: ignoreversion
+Source: "..\reports\evaluation_test.json"; DestDir: "{app}\reports"; Flags: ignoreversion
 Source: "requirements-lite.txt"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "requirements-full.txt"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "prepare_whisper.py"; DestDir: "{app}\installer"; Flags: ignoreversion

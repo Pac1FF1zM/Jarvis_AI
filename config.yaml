@@ -12,7 +12,8 @@ modules:
   # real-camera test: only six reversible media actions may execute.
   gesture:
     enabled: true
-    device: "cuda"
+    # CUDA is selected when available; installer CPU fallback remains usable.
+    device: "auto"
     model: checkpoints/tsn_resnet18_seed42/best.pt
     params:
       quality_report: reports/evaluation_test.json

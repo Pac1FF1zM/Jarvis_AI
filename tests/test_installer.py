@@ -45,6 +45,11 @@ def test_setup_does_not_package_private_or_generated_workspace_data():
         assert forbidden not in script
     assert "models\\nlu_manager_finetuned.pt" in script
     assert "ml\\nlu\\inference.py" in script
+    assert "jarvis_control.py" in script
+    assert "control_center\\*.py" in script
+    assert "ml\\gesture\\models.py" in script
+    assert "checkpoints\\tsn_resnet18_seed42\\best.pt" in script
+    assert "reports\\evaluation_test.json" in script
     assert "ml\\nlu\\train.py" not in script
     assert "holdout_v2" not in script
     assert "python-3.12.9-amd64.exe" in script
@@ -99,6 +104,9 @@ def test_installed_launchers_isolate_user_state_and_use_private_python():
     assert "jarvis_data_dir=%appdata%\\jarvis" in launchers
     assert "runtime\\python\\python.exe" in launchers
     assert "enable jarvis full" not in (
+        INSTALLER / "launchers" / "Jarvis.cmd"
+    ).read_text(encoding="utf-8").casefold()
+    assert "jarvis_control.py" in (
         INSTALLER / "launchers" / "Jarvis.cmd"
     ).read_text(encoding="utf-8").casefold()
 

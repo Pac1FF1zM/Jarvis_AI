@@ -134,7 +134,14 @@ class GestureControlModule(BaseModule):
         super().__init__(config)
         params = getattr(config, "params", {}) or {}
         self.gpu_lock = gpu_lock
-        self._device = str(getattr(config, "device", "cpu")).casefold()
+        requested_device = str(getattr(config, "device", "cpu")).casefold()
+        self._device = (
+            "cuda"
+            if requested_device == "auto" and torch.cuda.is_available()
+            else "cpu"
+            if requested_device == "auto"
+            else requested_device
+        )
         self._camera_index = int(params.get("camera_index", 0))
         default_backend = "dshow" if sys.platform == "win32" else "auto"
         self._camera_backend = str(
@@ -223,7 +230,7 @@ class GestureControlModule(BaseModule):
 
     def _validate_settings(self) -> None:
         if self._device not in {"cpu", "cuda"}:
-            raise ValueError("gesture device must be 'cpu' or 'cuda'")
+            raise ValueError("gesture device must be 'auto', 'cpu' or 'cuda'")
         if self._camera_index < 0:
             raise ValueError("gesture camera_index must be >= 0")
         if self._camera_backend not in {"auto", "dshow", "msmf"}:
