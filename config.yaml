@@ -73,6 +73,12 @@ modules:
       # requiring the wake phrase again. Silence returns Jarvis to sleep mode.
       active_session_enabled: true
       active_session_timeout_seconds: 7
+      # Balanced latency profile selected from real-session simulations:
+      # reject one-frame noise spikes, close on 650 ms silence, and prevent a
+      # noisy room from feeding a 15-second clip into Whisper.
+      speech_start_frames: 2
+      end_silence_ms: 650
+      max_duration_ms: 12000
       hotkey: "<ctrl>+<alt>+<space>"
 
   # Official OpenAI Whisper (no Hugging Face dependency or endpoint).

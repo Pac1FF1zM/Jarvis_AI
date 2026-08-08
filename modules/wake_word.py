@@ -95,6 +95,9 @@ class WakeWordModule(BaseModule):
         self._speech_start_timeout_ms = int(
             params.get("speech_start_timeout_ms", 5000)
         )
+        # Keep the library default backwards-compatible for custom configs;
+        # the shipped balanced profile explicitly selects two frames.
+        self._speech_start_frames = int(params.get("speech_start_frames", 1))
         self._min_speech_ms = int(params.get("min_speech_ms", 250))
         self._pre_roll_ms = int(params.get("pre_roll_ms", 320))
         self._max_duration_ms = int(params.get("max_duration_ms", 15000))
@@ -167,6 +170,7 @@ class WakeWordModule(BaseModule):
         for name, value in (
             ("end_silence_ms", self._end_silence_ms),
             ("speech_start_timeout_ms", self._speech_start_timeout_ms),
+            ("speech_start_frames", self._speech_start_frames),
             ("min_speech_ms", self._min_speech_ms),
             ("max_duration_ms", self._max_duration_ms),
         ):
@@ -588,10 +592,14 @@ class WakeWordModule(BaseModule):
         if callable(reset):
             reset()
 
-        pre_roll_blocks = max(1, self._pre_roll_ms * self._sample_rate // 1000 // self._block_size)
+        pre_roll_blocks = max(
+            self._speech_start_frames,
+            self._pre_roll_ms * self._sample_rate // 1000 // self._block_size,
+        )
         pre_roll: deque[bytes] = deque(maxlen=pre_roll_blocks)
         recorded: list[bytes] = []
         speech_started = False
+        speech_candidate_frames = 0
         voiced_samples = 0
         silent_samples = 0
         total_samples = 0
@@ -625,12 +633,16 @@ class WakeWordModule(BaseModule):
                 if not speech_started:
                     pre_roll.append(pcm)
                     if probability >= self._speech_threshold:
-                        speech_started = True
-                        self._notify_speech_capture_started()
-                        voiced_samples = samples
-                        recorded.extend(pre_roll)
-                        pre_roll.clear()
-                    elif total_samples >= start_timeout_samples:
+                        speech_candidate_frames += 1
+                        if speech_candidate_frames >= self._speech_start_frames:
+                            speech_started = True
+                            self._notify_speech_capture_started()
+                            voiced_samples = samples * speech_candidate_frames
+                            recorded.extend(pre_roll)
+                            pre_roll.clear()
+                    else:
+                        speech_candidate_frames = 0
+                    if not speech_started and total_samples >= start_timeout_samples:
                         return None
                     continue
 
@@ -647,6 +659,7 @@ class WakeWordModule(BaseModule):
                         # Reject a click/noise burst and continue waiting for
                         # actual speech within the same bounded activation.
                         speech_started = False
+                        speech_candidate_frames = 0
                         voiced_samples = 0
                         silent_samples = 0
                         recorded.clear()

@@ -197,6 +197,35 @@ async def test_max_duration_caps_recording(bus: EventBus, monkeypatch):
     assert audio.payload["capture_end"] == "max_duration"
 
 
+async def test_two_start_frames_reject_a_single_noise_spike(
+    bus: EventBus, monkeypatch
+):
+    _vad, sounddevice = _install_real_fakes(
+        monkeypatch, [0.9, 0.1, 0.9, 0.9, 0.1, 0.1]
+    )
+    mod = WakeWordModule(
+        _config(
+            speech_start_frames=2,
+            pre_roll_ms=32,
+            min_speech_ms=32,
+            end_silence_ms=64,
+        )
+    )
+    events, audio_ready, run_task = await _start_bus_with_recorders(bus)
+    await mod.start(bus)
+
+    await mod.activate()
+    await asyncio.wait_for(audio_ready.wait(), timeout=1.0)
+    await bus.stop()
+    await run_task
+    await mod.stop()
+
+    audio = next(event for event in events if event.event_type == "audio_captured")
+    assert sounddevice.read_count == 6
+    assert audio.payload["capture_end"] == "vad_silence"
+    assert audio.payload["duration_ms"] == 128
+
+
 async def test_matching_microphone_applies_profile_vad_and_gain(
     bus: EventBus, monkeypatch
 ):
