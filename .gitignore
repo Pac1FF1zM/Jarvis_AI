@@ -62,6 +62,8 @@ training_workspace/data/feedback_train.jsonl
 training_workspace/gesture_data/
 training_workspace/gesture_runs/
 training_workspace/gesture_export/
+training_workspace/jester/runs/
+training_workspace/jester/export/
 gesture_data/
 gesture_runs/
 gesture_export/

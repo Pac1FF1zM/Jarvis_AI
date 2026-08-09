@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-import copy
+import hashlib
 import json
 import math
 import random
@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
+import numpy as np
 import yaml
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from torch import nn
@@ -89,14 +90,63 @@ def _dataset(config: dict[str, Any], records: list[ManifestRecord], training: bo
 
 
 def _loader(config: dict[str, Any], dataset: JesterDataset, batch_size: int, shuffle: bool) -> DataLoader:
+    workers = int(config["train"]["num_workers"])
+    options: dict[str, Any] = {}
+    if workers > 0:
+        options["persistent_workers"] = True
+        options["prefetch_factor"] = int(config["train"].get("prefetch_factor", 2))
     return DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
-        num_workers=int(config["train"]["num_workers"]),
+        num_workers=workers,
         pin_memory=bool(config["train"]["pin_memory"]),
         drop_last=False,
+        worker_init_fn=_seed_worker,
+        **options,
     )
+
+
+def _seed_worker(_: int) -> None:
+    seed = torch.initial_seed() % 2**32
+    random.seed(seed)
+    np.random.seed(seed)
+
+
+def _cpu_state_dict(model: nn.Module) -> dict[str, torch.Tensor]:
+    return {name: value.detach().cpu().clone() for name, value in model.state_dict().items()}
+
+
+def _atomic_torch_save(payload: dict[str, Any], path: Path) -> None:
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    torch.save(payload, temporary)
+    temporary.replace(path)
+
+
+def _rng_state() -> dict[str, Any]:
+    return {
+        "python": random.getstate(),
+        "numpy": np.random.get_state(),
+        "torch": torch.get_rng_state(),
+        "cuda": torch.cuda.get_rng_state_all(),
+    }
+
+
+def _restore_rng_state(state: dict[str, Any]) -> None:
+    random.setstate(state["python"])
+    np.random.set_state(state["numpy"])
+    torch.set_rng_state(state["torch"].cpu())
+    torch.cuda.set_rng_state_all([value.cpu() for value in state["cuda"]])
+
+
+def _records_fingerprint(records: list[ManifestRecord]) -> str:
+    digest = hashlib.sha256()
+    for record in records:
+        digest.update(record.clip_id.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(record.class_id).encode("ascii"))
+        digest.update(b"\n")
+    return digest.hexdigest()
 
 
 def select_safe_batch_size(
@@ -167,6 +217,7 @@ def fit(
     val_records: list[ManifestRecord],
     epochs: int,
     run_dir: Path,
+    resume: bool = True,
 ) -> dict[str, Any]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if device.type != "cuda":
@@ -206,13 +257,40 @@ def fit(
     criterion = nn.CrossEntropyLoss(label_smoothing=float(train_cfg["label_smoothing"]))
     run_dir.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(str(run_dir / "tensorboard"))
+    latest_path = run_dir / "latest.pt"
     best_score = -1.0
     best_state: dict[str, torch.Tensor] | None = None
     history: list[dict[str, Any]] = []
     stale = 0
+    start_epoch = 1
+    resumed_from_epoch = 0
     patience = int(train_cfg["patience"])
+    train_fingerprint = _records_fingerprint(train_records)
+    val_fingerprint = _records_fingerprint(val_records)
+    if resume and latest_path.is_file():
+        state = torch.load(latest_path, map_location=device, weights_only=False)
+        if state.get("kind") != "jarvis_jester_training_state_v1":
+            raise ValueError(f"unsupported resume checkpoint: {latest_path}")
+        if state.get("model_config") != model_config.__dict__:
+            raise ValueError("resume checkpoint model configuration differs from the requested run")
+        if state.get("training_config") != config:
+            raise ValueError("resume checkpoint training configuration differs from the requested run")
+        if state.get("train_fingerprint") != train_fingerprint or state.get("val_fingerprint") != val_fingerprint:
+            raise ValueError("resume checkpoint dataset split differs from the requested run")
+        model.load_state_dict(state["state_dict"], strict=True)
+        optimizer.load_state_dict(state["optimizer_state_dict"])
+        scheduler.load_state_dict(state["scheduler_state_dict"])
+        scaler.load_state_dict(state["scaler_state_dict"])
+        best_score = float(state["best_score"])
+        best_state = {name: value.detach().cpu().clone() for name, value in state["best_state"].items()}
+        history = list(state["history"])
+        stale = int(state["stale"])
+        resumed_from_epoch = int(state["epoch"])
+        start_epoch = resumed_from_epoch + 1
+        _restore_rng_state(state["rng_state"])
+        print(f"JESTER_RESUME model={model_name} epoch={resumed_from_epoch}", flush=True)
     started = time.perf_counter()
-    for epoch in range(1, epochs + 1):
+    for epoch in range(start_epoch, epochs + 1):
         model.train()
         optimizer.zero_grad(set_to_none=True)
         epoch_loss = 0.0
@@ -252,14 +330,37 @@ def fit(
             flush=True,
         )
         score = float(validation["macro_f1"])
+        should_stop = False
         if score > best_score + 1e-6:
             best_score = score
-            best_state = copy.deepcopy(model.state_dict())
+            best_state = _cpu_state_dict(model)
             stale = 0
         else:
             stale += 1
             if stale >= patience:
-                break
+                should_stop = True
+        _atomic_torch_save(
+            {
+                "kind": "jarvis_jester_training_state_v1",
+                "epoch": epoch,
+                "model_config": model_config.__dict__,
+                "training_config": config,
+                "train_fingerprint": train_fingerprint,
+                "val_fingerprint": val_fingerprint,
+                "state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
+                "scaler_state_dict": scaler.state_dict(),
+                "best_score": best_score,
+                "best_state": best_state,
+                "history": history,
+                "stale": stale,
+                "rng_state": _rng_state(),
+            },
+            latest_path,
+        )
+        if should_stop:
+            break
     writer.close()
     if best_state is None:
         raise RuntimeError("training did not produce a checkpoint")
@@ -273,7 +374,7 @@ def fit(
         training_config=config,
     )
     checkpoint_path = run_dir / "best.pt"
-    torch.save(checkpoint, checkpoint_path)
+    _atomic_torch_save(checkpoint, checkpoint_path)
     report = {
         "model": model_name,
         "pretrained": False,
@@ -282,6 +383,7 @@ def fit(
         "gradient_accumulation_steps": accumulation,
         "vram_preflight": vram_preflight,
         "epochs_completed": len(history),
+        "resumed_from_epoch": resumed_from_epoch,
         "best_val_macro_f1": best_score,
         "validation": best_validation,
         "seconds": time.perf_counter() - started,
@@ -292,7 +394,7 @@ def fit(
     return report
 
 
-def benchmark(config_path: Path) -> dict[str, Any]:
+def benchmark(config_path: Path, *, resume: bool = True) -> dict[str, Any]:
     config = load_jester_config(config_path)
     seed = int(config["train"]["seed"])
     seed_everything(seed)
@@ -309,6 +411,7 @@ def benchmark(config_path: Path) -> dict[str, Any]:
             val_records=val_records,
             epochs=int(config["train"]["benchmark_epochs"]),
             run_dir=root / name,
+            resume=resume,
         )
         for name in config["models"]["candidates"]
     ]
@@ -327,11 +430,17 @@ def benchmark(config_path: Path) -> dict[str, Any]:
     return result
 
 
-def train_winner(config_path: Path, model_name: str | None = None) -> dict[str, Any]:
+def train_winner(config_path: Path, model_name: str | None = None, *, resume: bool = True) -> dict[str, Any]:
     config = load_jester_config(config_path)
     seed_everything(int(config["train"]["seed"]))
     manifest = Path(config["data"]["manifest"])
-    selected = model_name or str(config["models"]["winner"])
+    selected = model_name or config["models"].get("winner")
+    if not selected:
+        benchmark_report = Path(config["paths"]["reports"]) / "benchmark.json"
+        if not benchmark_report.is_file():
+            raise RuntimeError("run the candidate benchmark before full training")
+        selected = json.loads(benchmark_report.read_text(encoding="utf-8"))["recommended_winner"]
+    selected = str(selected)
     return fit(
         config,
         model_name=selected,
@@ -339,6 +448,7 @@ def train_winner(config_path: Path, model_name: str | None = None) -> dict[str, 
         val_records=load_manifest(manifest, "val"),
         epochs=int(config["train"]["epochs"]),
         run_dir=Path(config["paths"]["runs"]) / "full" / selected,
+        resume=resume,
     )
 
 
@@ -347,11 +457,12 @@ def main() -> None:
     parser.add_argument("stage", choices=("benchmark", "train"))
     parser.add_argument("--config", type=Path, default=Path("configs/jester_from_scratch.yaml"))
     parser.add_argument("--model", choices=("tiny_3d_cnn", "cnn_bigru", "mobilenet_tsm_attention"))
+    parser.add_argument("--fresh", action="store_true", help="Ignore an existing latest.pt checkpoint.")
     args = parser.parse_args()
     if args.stage == "benchmark":
-        benchmark(args.config)
+        benchmark(args.config, resume=not args.fresh)
     else:
-        print(json.dumps(train_winner(args.config, args.model), ensure_ascii=False, indent=2))
+        print(json.dumps(train_winner(args.config, args.model, resume=not args.fresh), ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

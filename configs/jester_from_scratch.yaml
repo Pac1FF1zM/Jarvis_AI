@@ -11,7 +11,7 @@ data:
 
 train:
   seed: 42
-  batch_size: 8
+  batch_size: 32
   effective_batch_size: 32
   epochs: 30
   benchmark_epochs: 2
@@ -22,7 +22,8 @@ train:
   warmup_epochs: 2
   patience: 6
   amp: true
-  num_workers: 0
+  num_workers: 4
+  prefetch_factor: 2
   pin_memory: true
   max_vram_ratio: 0.86
 
@@ -31,7 +32,7 @@ models:
     - tiny_3d_cnn
     - cnn_bigru
     - mobilenet_tsm_attention
-  winner: mobilenet_tsm_attention
+  winner: null
   dropout: 0.25
 
 paths:

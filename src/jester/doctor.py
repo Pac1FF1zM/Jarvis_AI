@@ -27,6 +27,20 @@ def doctor(config_path: Path) -> dict[str, object]:
     frames_root = Path(config["data"]["frames_root"])
     manifest = Path(config["data"]["manifest"])
     license_acceptance = downloads.parent / "RESEARCH_LICENSE_ACCEPTED.json"
+    reports = Path(config["paths"]["reports"])
+    preflight_report = reports / "preflight.json"
+    rehearsal_report = reports / "rehearsal.json"
+
+    def passed(path: Path) -> bool:
+        if not path.is_file():
+            return False
+        try:
+            return json.loads(path.read_text(encoding="utf-8")).get("status") == "passed"
+        except (OSError, ValueError):
+            return False
+
+    preflight_ready = passed(preflight_report)
+    rehearsal_ready = passed(rehearsal_report)
     free = shutil.disk_usage(Path.cwd()).free
     data_ready = (
         license_acceptance.is_file()
@@ -34,8 +48,9 @@ def doctor(config_path: Path) -> dict[str, object]:
         and frames_root.is_dir()
         and manifest.is_file()
     )
+    training_ready = data_ready and preflight_ready and rehearsal_ready
     report: dict[str, object] = {
-        "status": "ready" if data_ready else "preparing",
+        "status": "ready_for_training" if training_ready else "preparing",
         "python": sys.version.split()[0],
         "torch": torch.__version__,
         "cuda_available": torch.cuda.is_available(),
@@ -48,6 +63,8 @@ def doctor(config_path: Path) -> dict[str, object]:
         "research_license_accepted": license_acceptance.is_file(),
         "frames_extracted": frames_root.is_dir(),
         "manifest_ready": manifest.is_file(),
+        "preflight_ready": preflight_ready,
+        "checkpoint_rehearsal_ready": rehearsal_ready,
     }
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return report

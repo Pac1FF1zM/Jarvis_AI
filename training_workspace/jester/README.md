@@ -41,11 +41,27 @@ SETUP_JESTER_TRAINING.cmd
 .\.venv-jester\Scripts\python.exe -m src.jester.prepare
 .\.venv-jester\Scripts\python.exe -m src.jester.doctor
 .\.venv-jester\Scripts\python.exe -m src.jester.smoke
+.\.venv-jester\Scripts\python.exe -m src.jester.preflight
+.\.venv-jester\Scripts\python.exe -m src.jester.rehearsal
 .\.venv-jester\Scripts\python.exe -m src.jester.training benchmark
-.\.venv-jester\Scripts\python.exe -m src.jester.training train --model mobilenet_tsm_attention
-.\.venv-jester\Scripts\python.exe -m src.jester.evaluate --checkpoint training_workspace/jester/runs/full/mobilenet_tsm_attention/best.pt
-.\.venv-jester\Scripts\python.exe -m src.jester.export --checkpoint training_workspace/jester/runs/full/mobilenet_tsm_attention/best.pt
+.\.venv-jester\Scripts\python.exe -m src.jester.training train
+$winner = (Get-Content reports/jester/benchmark.json | ConvertFrom-Json).recommended_winner
+.\.venv-jester\Scripts\python.exe -m src.jester.evaluate --checkpoint "training_workspace/jester/runs/full/$winner/best.pt"
+.\.venv-jester\Scripts\python.exe -m src.jester.export --checkpoint "training_workspace/jester/runs/full/$winner/best.pt"
 ```
+
+Training writes `latest.pt` atomically after every epoch and resumes it by
+default after interruption. Pass `--fresh` only when intentionally starting a
+new run with the same output directory.
+
+## Verified laptop profile
+
+The preparation audit on the RTX 3050 6 GB selected batch size 32 and four
+Windows DataLoader workers. Real-JPEG throughput was about 34.7 clips/second.
+Peak reserved VRAM at batch 32 was 1.26 GB (`tiny_3d_cnn`), 1.31 GB
+(`cnn_bigru`), and 1.45 GB (`mobilenet_tsm_attention`). The configured winner
+is intentionally empty: full training reads the winner from the completed
+candidate benchmark instead of assuming one in advance.
 
 Do not run the final evaluation until architecture and hyperparameters are
 frozen. Do not mix, distribute, or ship derived weights in Jarvis without a
