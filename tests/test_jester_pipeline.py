@@ -26,8 +26,10 @@ from src.jester.training import (
     _safe_num_workers,
     balanced_subset,
     config_fingerprint,
+    configured_models,
     load_jester_config,
     metrics,
+    portable_config_fingerprint,
     train_winner,
 )
 
@@ -171,7 +173,17 @@ def test_mobilenet_micro_batch_keeps_headroom_on_small_gpu():
 
 
 def test_completed_benchmark_run_is_reused_only_when_fingerprints_match(tmp_path):
-    config = {"train": {"seed": 42}}
+    config = {
+        "data": {"frames_root": "C:/jester", "clip_len": 16},
+        "train": {"seed": 42, "batch_size": 32, "effective_batch_size": 32, "num_workers": 4},
+        "models": {"candidates": ["tiny_3d_cnn"], "winner": "tiny_3d_cnn", "dropout": 0.25},
+        "paths": {"runs": "C:/runs"},
+    }
+    moved_config = json.loads(json.dumps(config))
+    moved_config["data"]["frames_root"] = "D:/licensed/jester"
+    moved_config["train"]["batch_size"] = 16
+    moved_config["train"]["num_workers"] = 12
+    moved_config["paths"]["runs"] = "D:/runs"
     run_dir = tmp_path / "candidate"
     run_dir.mkdir()
     state = {
@@ -196,7 +208,7 @@ def test_completed_benchmark_run_is_reused_only_when_fingerprints_match(tmp_path
     )
 
     reused = _completed_run_report(
-        config,
+        moved_config,
         model_name="tiny_3d_cnn",
         run_dir=run_dir,
         epochs=5,
@@ -229,10 +241,29 @@ def test_worker_count_leaves_windows_commit_headroom():
     ) == [32, 16, 8, 1]
 
 
-def test_benchmark_extends_beyond_warmup():
+def test_benchmark_winner_is_frozen_to_tiny3d():
     config = load_jester_config(Path("configs/jester_from_scratch.yaml"))
     assert config["train"]["benchmark_epochs"] > config["train"]["warmup_epochs"]
-    assert config["models"]["winner"] is None
+    assert configured_models(config) == ("tiny_3d_cnn",)
+    assert config["models"]["winner"] == "tiny_3d_cnn"
+
+
+def test_portable_training_fingerprint_ignores_only_machine_local_tuning():
+    base = load_jester_config(Path("configs/jester_from_scratch.yaml"))
+    moved = json.loads(json.dumps(base))
+    moved["data"]["frames_root"] = "D:/licensed/jester/frames"
+    moved["data"]["manifest"] = "D:/licensed/jester/manifest.jsonl"
+    moved["paths"]["runs"] = "D:/runs"
+    moved["train"]["batch_size"] = 8
+    moved["train"]["num_workers"] = 16
+    moved["train"]["pin_memory"] = False
+    moved["models"]["candidates"] = ["tiny_3d_cnn", "cnn_bigru"]
+
+    changed_semantics = json.loads(json.dumps(moved))
+    changed_semantics["train"]["learning_rate"] *= 2
+
+    assert portable_config_fingerprint(moved) == portable_config_fingerprint(base)
+    assert portable_config_fingerprint(changed_semantics) != portable_config_fingerprint(base)
 
 
 def test_windows_training_launchers_enforce_preparation_order():
@@ -247,7 +278,9 @@ def test_windows_training_launchers_enforce_preparation_order():
     assert "jester.quality_gate" in prepare
     assert "--write-profile configs/jester_hardware.yaml" in prepare
     assert "--require-ready" in benchmark
-    assert "benchmark.json" in training
+    assert "benchmark.json" not in training
+    assert "--model tiny_3d_cnn" in training
+    assert "tiny_3d_cnn" in prepare
 
 
 def test_full_training_rejects_stale_benchmark_report(tmp_path):

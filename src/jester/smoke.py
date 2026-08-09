@@ -10,8 +10,8 @@ import torch
 
 from .dataset import JesterDataset, load_manifest
 from .labels import JESTER_LABELS
-from .models import JesterModelConfig, MODEL_NAMES, build_model, parameter_count
-from .training import load_jester_config
+from .models import JesterModelConfig, build_model, parameter_count
+from .training import configured_models, load_jester_config
 
 
 def smoke(config_path: Path) -> dict[str, object]:
@@ -43,7 +43,7 @@ def smoke(config_path: Path) -> dict[str, object]:
         target = torch.zeros(1, dtype=torch.long, device=device)
         input_source = "synthetic_fallback"
     results = []
-    for name in MODEL_NAMES:
+    for name in configured_models(config):
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
         model = build_model(

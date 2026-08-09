@@ -24,7 +24,7 @@ from torch.utils.tensorboard import SummaryWriter
 from src.utils import seed_everything
 from .dataset import JesterDataset, ManifestRecord, load_manifest
 from .labels import JESTER_LABELS, NEGATIVE_LABELS
-from .models import JesterModelConfig, build_model, parameter_count
+from .models import JesterModelConfig, MODEL_NAMES, build_model, parameter_count
 
 
 def load_jester_config(path: Path) -> dict[str, Any]:
@@ -196,6 +196,48 @@ def config_fingerprint(config: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def configured_models(config: dict[str, Any]) -> tuple[str, ...]:
+    raw = config.get("models", {}).get("candidates") or [config.get("models", {}).get("winner")]
+    names = tuple(dict.fromkeys(str(value) for value in raw if value))
+    if not names:
+        raise ValueError("Jester config must select at least one model")
+    unsupported = [name for name in names if name not in MODEL_NAMES]
+    if unsupported:
+        raise ValueError(f"unsupported Jester models in config: {unsupported}")
+    return names
+
+
+def portable_training_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Strip machine-local tuning while retaining training semantics.
+
+    Record fingerprints independently guarantee the exact train/validation
+    membership. This projection lets a checkpoint move between Windows PCs
+    with different paths, RAM, worker counts and safe CUDA micro-batches.
+    """
+    portable = json.loads(json.dumps(config, ensure_ascii=False))
+    for key in ("downloads", "metadata", "frames_root", "manifest"):
+        portable.get("data", {}).pop(key, None)
+    for key in (
+        "batch_size",
+        "num_workers",
+        "prefetch_factor",
+        "persistent_workers",
+        "pin_memory",
+        "max_vram_ratio",
+        "benchmark_epochs",
+        "benchmark_samples_per_class",
+    ):
+        portable.get("train", {}).pop(key, None)
+    portable.get("models", {}).pop("candidates", None)
+    portable.get("models", {}).pop("winner", None)
+    portable.pop("paths", None)
+    return portable
+
+
+def portable_config_fingerprint(config: dict[str, Any]) -> str:
+    return config_fingerprint(portable_training_config(config))
+
+
 def _batch_candidates(
     requested: int,
     effective: int,
@@ -358,8 +400,11 @@ def fit(
             raise ValueError(f"unsupported resume checkpoint: {latest_path}")
         if state.get("model_config") != model_config.__dict__:
             raise ValueError("resume checkpoint model configuration differs from the requested run")
-        if state.get("training_config") != config:
-            raise ValueError("resume checkpoint training configuration differs from the requested run")
+        saved_portable_fingerprint = state.get("portable_config_fingerprint")
+        if saved_portable_fingerprint is None:
+            saved_portable_fingerprint = portable_config_fingerprint(state.get("training_config", {}))
+        if saved_portable_fingerprint != portable_config_fingerprint(config):
+            raise ValueError("resume checkpoint training semantics differ from the requested run")
         if state.get("train_fingerprint") != train_fingerprint or state.get("val_fingerprint") != val_fingerprint:
             raise ValueError("resume checkpoint dataset split differs from the requested run")
         model.load_state_dict(state["state_dict"], strict=True)
@@ -436,6 +481,7 @@ def fit(
                 "epoch": epoch,
                 "model_config": model_config.__dict__,
                 "training_config": config,
+                "portable_config_fingerprint": portable_config_fingerprint(config),
                 "train_fingerprint": train_fingerprint,
                 "val_fingerprint": val_fingerprint,
                 "state_dict": model.state_dict(),
@@ -464,6 +510,7 @@ def fit(
         best_validation=best_validation,
         history=history,
         training_config=config,
+        portable_config_fingerprint=portable_config_fingerprint(config),
     )
     checkpoint_path = run_dir / "best.pt"
     _atomic_torch_save(checkpoint, checkpoint_path)
@@ -512,7 +559,11 @@ def _completed_run_report(
     valid = (
         state.get("kind") == "jarvis_jester_training_state_v1"
         and int(state.get("epoch", 0)) >= epochs
-        and state.get("training_config") == config
+        and (
+            state.get("portable_config_fingerprint")
+            or portable_config_fingerprint(state.get("training_config", {}))
+        )
+        == portable_config_fingerprint(config)
         and state.get("train_fingerprint") == train_fingerprint
         and state.get("val_fingerprint") == val_fingerprint
         and state.get("model_config", {}).get("name") == model_name
@@ -595,6 +646,8 @@ def train_winner(config_path: Path, model_name: str | None = None, *, resume: bo
             raise RuntimeError("candidate benchmark belongs to a different training configuration")
         selected = benchmark_payload["recommended_winner"]
     selected = str(selected)
+    if selected not in MODEL_NAMES:
+        raise ValueError(f"unsupported Jester winner {selected!r}")
     return fit(
         config,
         model_name=selected,

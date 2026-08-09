@@ -7,8 +7,7 @@ from pathlib import Path
 
 from src.utils import seed_everything
 from .dataset import load_manifest
-from .models import MODEL_NAMES
-from .training import balanced_subset, config_fingerprint, fit, load_jester_config
+from .training import balanced_subset, config_fingerprint, configured_models, fit, load_jester_config
 
 
 def rehearse(config_path: Path) -> dict[str, object]:
@@ -20,7 +19,7 @@ def rehearse(config_path: Path) -> dict[str, object]:
     val_records = balanced_subset(load_manifest(manifest, "val"), 1, seed + 1)
     root = Path(config["paths"]["runs"]) / "rehearsal"
     results = []
-    for model_name in MODEL_NAMES:
+    for model_name in configured_models(config):
         run_dir = root / model_name
         initial = fit(
             config,

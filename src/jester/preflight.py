@@ -16,13 +16,14 @@ from torch.utils.data import DataLoader
 from src.utils import seed_everything
 from .dataset import JesterDataset, load_manifest
 from .labels import JESTER_LABELS
-from .models import JesterModelConfig, MODEL_NAMES, build_model
+from .models import JesterModelConfig, build_model
 from .training import (
     _dataset,
     _safe_num_workers,
     _seed_worker,
     _total_physical_memory_bytes,
     config_fingerprint,
+    configured_models,
     load_jester_config,
     select_safe_batch_size,
 )
@@ -97,7 +98,7 @@ def preflight(
     device = torch.device("cuda")
     batch_config = copy.deepcopy(config)
     batch_config["train"]["num_workers"] = recommended_workers
-    for name in MODEL_NAMES:
+    for name in configured_models(config):
         model = build_model(
             JesterModelConfig(
                 name=name,

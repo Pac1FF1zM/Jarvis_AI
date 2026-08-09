@@ -12,12 +12,12 @@ membership.
    a second 22.8 GB combined archive.
 3. Build one manifest: official train -> `train`, validation -> `val`, and
    test answers -> sealed `test`.
-4. Run an equal-budget, class-balanced five-epoch benchmark of
-   `tiny_3d_cnn`, `cnn_bigru`, and `mobilenet_tsm_attention`.
-5. Select by validation macro-F1. Negative-class recall is reported separately.
-6. Train the selected random-initialized model on full train only; validation
+4. The equal-budget benchmark completed on 2026-08-09. `tiny_3d_cnn` won by
+   validation macro-F1 (`0.1992`, versus `0.0368` and `0.0254`) and is now the
+   only configured training model.
+5. Train `tiny_3d_cnn` from random initialization on full train only; validation
    selects the checkpoint and early stopping. Test is never loaded here.
-7. Open official test exactly once. A preserved final report prevents an
+6. Open official test exactly once. A preserved final report prevents an
    accidental second evaluation. Any downstream use or export remains
    research-only and requires a separate license review.
 
@@ -44,11 +44,9 @@ SETUP_JESTER_TRAINING.cmd
 .\.venv-jester\Scripts\python.exe -m src.jester.preflight
 .\.venv-jester\Scripts\python.exe -m src.jester.rehearsal
 .\.venv-jester\Scripts\python.exe -m src.jester.quality_gate
-.\.venv-jester\Scripts\python.exe -m src.jester.training benchmark
-.\.venv-jester\Scripts\python.exe -m src.jester.training train
-$winner = (Get-Content reports/jester/benchmark.json | ConvertFrom-Json).recommended_winner
-.\.venv-jester\Scripts\python.exe -m src.jester.evaluate --checkpoint "training_workspace/jester/runs/full/$winner/best.pt"
-.\.venv-jester\Scripts\python.exe -m src.jester.export --checkpoint "training_workspace/jester/runs/full/$winner/best.pt"
+.\.venv-jester\Scripts\python.exe -m src.jester.training train --model tiny_3d_cnn
+.\.venv-jester\Scripts\python.exe -m src.jester.evaluate --checkpoint "training_workspace/jester/runs/full/tiny_3d_cnn/best.pt"
+.\.venv-jester\Scripts\python.exe -m src.jester.export --checkpoint "training_workspace/jester/runs/full/tiny_3d_cnn/best.pt"
 ```
 
 For a second Windows PC, install the latest NVIDIA driver and 64-bit Python
@@ -59,18 +57,40 @@ git clone --branch codex/checkpoint-2026-08-09 --single-branch https://github.co
 cd Jarvis_AI
 ```
 
-After making your licensed dataset available locally while keeping it under
-your control, the intended order is:
+The dataset and generated checkpoints are intentionally absent from GitHub.
+Keep them under the license holder's control. Either run the licensed
+downloader on the second PC or copy these prepared local paths without adding
+them to Git:
+
+```text
+data/raw/jester/downloads/
+data/raw/jester/metadata/jester_labels/
+data/raw/jester/frames/20bn-jester-v1/
+data/raw/jester/RESEARCH_LICENSE_ACCEPTED.json
+data/splits/jester/manifest.jsonl
+```
+
+The intended order on the second PC is now only:
 
 ```powershell
 PREPARE_JESTER_TRAINING.cmd
-START_JESTER_BENCHMARK.cmd
 START_JESTER_TRAINING.cmd
 ```
 
 Training writes `latest.pt` atomically after every epoch and resumes it by
-default after interruption. Pass `--fresh` only when intentionally starting a
-new run with the same output directory.
+default after interruption. The resumable checkpoint is:
+
+```text
+training_workspace/jester/runs/full/tiny_3d_cnn/latest.pt
+```
+
+To continue on another PC, copy the complete
+`training_workspace/jester/runs/full/tiny_3d_cnn/` directory and the same
+licensed dataset. Machine-local paths, DataLoader workers, CUDA micro-batch and
+VRAM safety settings may differ; seed, effective batch, optimizer settings,
+frame shape and exact train/validation membership must remain unchanged. Pass
+`--fresh` only when intentionally starting a new run with the same output
+directory.
 
 On a new high-end PC, generate and use a local untracked hardware profile:
 
@@ -79,18 +99,16 @@ On a new high-end PC, generate and use a local untracked hardware profile:
 .\.venv-jester\Scripts\python.exe -m src.jester.rehearsal --config configs/jester_hardware.yaml
 .\.venv-jester\Scripts\python.exe -m src.jester.quality_gate --config configs/jester_hardware.yaml
 .\.venv-jester\Scripts\python.exe -m src.jester.doctor --config configs/jester_hardware.yaml
-.\.venv-jester\Scripts\python.exe -m src.jester.training benchmark --config configs/jester_hardware.yaml
+.\.venv-jester\Scripts\python.exe -m src.jester.training train --config configs/jester_hardware.yaml --model tiny_3d_cnn
 ```
 
 ## Verified laptop profile
 
-The final preparation audit on the RTX 3050 6 GB selected batch size 32 and
-eight Windows DataLoader workers. Real-JPEG throughput was about 78.3
-clips/second with non-persistent worker pools.
-Peak reserved VRAM at batch 32 was 1.26 GB (`tiny_3d_cnn`), 1.31 GB
-(`cnn_bigru`), and 1.45 GB (`mobilenet_tsm_attention`). The configured winner
-is intentionally empty: full training reads the winner from the completed
-candidate benchmark instead of assuming one in advance.
+The completed laptop benchmark used batch size 32. The current preparation
+step chooses a RAM-safe worker count for the active PC and probes only
+`tiny_3d_cnn`. Peak reserved VRAM for Tiny3D was about 1.26 GB at batch 32 on
+the RTX 3050 6 GB. The winner is fixed in the tracked config, so a cloned PC
+does not need the ignored local benchmark report.
 
 Windows workers are intentionally non-persistent. This prevents train and
 validation worker pools from coexisting and exhausting the Windows commit/page

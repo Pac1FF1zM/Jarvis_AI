@@ -15,5 +15,5 @@ if errorlevel 1 exit /b 1
 if errorlevel 1 exit /b 1
 ".venv-jester\Scripts\python.exe" -m src.jester.doctor --config configs/jester_hardware.yaml --require-ready
 if errorlevel 1 exit /b 1
-echo Jester is ready for the candidate benchmark.
+echo Jester is ready for full tiny_3d_cnn training.
 endlocal

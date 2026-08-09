@@ -10,7 +10,7 @@ import torch
 from .dataset import JesterDataset, load_manifest
 from .labels import JESTER_LABELS
 from .models import JesterModelConfig, build_model
-from .training import _loader, config_fingerprint, evaluate_loader, load_jester_config
+from .training import _loader, evaluate_loader, load_jester_config, portable_config_fingerprint
 
 
 def evaluate(config_path: Path, checkpoint_path: Path) -> dict[str, object]:
@@ -26,8 +26,11 @@ def evaluate(config_path: Path, checkpoint_path: Path) -> dict[str, object]:
         raise ValueError("checkpoint is not a from-scratch Jester model")
     if payload.get("labels") != list(JESTER_LABELS):
         raise ValueError("checkpoint label order differs from official Jester labels")
-    if config_fingerprint(payload.get("training_config", {})) != config_fingerprint(config):
-        raise ValueError("checkpoint was trained with a different Jester configuration")
+    saved_fingerprint = payload.get("portable_config_fingerprint")
+    if saved_fingerprint is None:
+        saved_fingerprint = portable_config_fingerprint(payload.get("training_config", {}))
+    if saved_fingerprint != portable_config_fingerprint(config):
+        raise ValueError("checkpoint was trained with different Jester training semantics")
     model = build_model(JesterModelConfig(**payload["model_config"])).to(device)
     model.load_state_dict(payload["state_dict"], strict=True)
     records = load_manifest(Path(config["data"]["manifest"]), "test")

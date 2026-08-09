@@ -31,9 +31,8 @@ train:
 models:
   candidates:
     - tiny_3d_cnn
-    - cnn_bigru
-    - mobilenet_tsm_attention
-  winner: null
+  # Fixed after the equal-budget benchmark completed on 2026-08-09.
+  winner: tiny_3d_cnn
   dropout: 0.25
 
 paths:

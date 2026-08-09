@@ -10,10 +10,7 @@ import torch
 
 from src.utils import seed_everything
 from .dataset import load_manifest
-from .training import balanced_subset, config_fingerprint, fit, load_jester_config
-
-
-QUALITY_MODELS = ("tiny_3d_cnn", "mobilenet_tsm_attention")
+from .training import balanced_subset, config_fingerprint, configured_models, fit, load_jester_config
 
 
 def quality_gate(config_path: Path) -> dict[str, object]:
@@ -26,7 +23,7 @@ def quality_gate(config_path: Path) -> dict[str, object]:
     epochs = 6
     root = Path(config["paths"]["runs"]) / "quality_gate"
     model_reports = []
-    for model_name in QUALITY_MODELS:
+    for model_name in configured_models(config):
         run_dir = root / model_name
         partial = fit(
             config,
