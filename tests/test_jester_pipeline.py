@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 import pytest
 import torch
+import yaml
 
 from src.jester.acquire import MultipartReader, extract_multipart
 from src.jester.dataset import JesterDataset, ManifestRecord, temporal_indices
@@ -17,7 +18,15 @@ from src.jester.download import aligned_resume_size
 from src.jester.labels import JESTER_LABELS
 from src.jester.models import JesterModelConfig, build_model
 from src.jester.prepare import read_labeled_split, read_labels
-from src.jester.training import balanced_subset, metrics
+from src.jester.training import (
+    _atomic_torch_save,
+    _records_fingerprint,
+    balanced_subset,
+    config_fingerprint,
+    load_jester_config,
+    metrics,
+    train_winner,
+)
 
 
 def test_official_label_order_and_metadata_parser(tmp_path):
@@ -116,3 +125,70 @@ def test_resumable_download_discards_only_incomplete_tail(tmp_path):
 
     assert aligned_resume_size(path, expected_size=100, chunk_size=10) == 20
     assert path.stat().st_size == 20
+
+
+def test_atomic_checkpoint_write_leaves_no_temporary_file(tmp_path):
+    output = tmp_path / "latest.pt"
+    _atomic_torch_save({"value": torch.tensor([1, 2, 3])}, output)
+
+    assert torch.equal(torch.load(output, weights_only=True)["value"], torch.tensor([1, 2, 3]))
+    assert not output.with_suffix(".pt.tmp").exists()
+
+
+def test_split_fingerprint_detects_order_and_label_changes():
+    base = [ManifestRecord("1", JESTER_LABELS[0], 0, "train", "1", 3)]
+    changed = [ManifestRecord("1", JESTER_LABELS[1], 1, "train", "1", 3)]
+
+    assert _records_fingerprint(base) != _records_fingerprint(changed)
+    assert _records_fingerprint(base + changed) != _records_fingerprint(changed + base)
+
+
+def test_config_fingerprint_is_order_independent_and_change_sensitive():
+    assert config_fingerprint({"train": {"batch": 32}, "seed": 42}) == config_fingerprint(
+        {"seed": 42, "train": {"batch": 32}}
+    )
+    assert config_fingerprint({"train": {"batch": 32}}) != config_fingerprint(
+        {"train": {"batch": 64}}
+    )
+
+
+def test_benchmark_extends_beyond_warmup():
+    config = load_jester_config(Path("configs/jester_from_scratch.yaml"))
+    assert config["train"]["benchmark_epochs"] > config["train"]["warmup_epochs"]
+    assert config["models"]["winner"] is None
+
+
+def test_windows_training_launchers_enforce_preparation_order():
+    root = Path(__file__).resolve().parents[1]
+    setup = (root / "SETUP_JESTER_TRAINING.cmd").read_text(encoding="utf-8").casefold()
+    prepare = (root / "PREPARE_JESTER_TRAINING.cmd").read_text(encoding="utf-8").casefold()
+    benchmark = (root / "START_JESTER_BENCHMARK.cmd").read_text(encoding="utf-8").casefold()
+    training = (root / "START_JESTER_TRAINING.cmd").read_text(encoding="utf-8").casefold()
+
+    assert "python 3.10 is missing" in setup
+    assert "torch.cuda.is_available" in setup
+    assert "jester.quality_gate" in prepare
+    assert "--write-profile configs/jester_hardware.yaml" in prepare
+    assert "--require-ready" in benchmark
+    assert "benchmark.json" in training
+
+
+def test_full_training_rejects_stale_benchmark_report(tmp_path):
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "benchmark.json").write_text(
+        json.dumps({"recommended_winner": "tiny_3d_cnn", "config_fingerprint": "stale"}),
+        encoding="utf-8",
+    )
+    config = {
+        "data": {"manifest": str(tmp_path / "missing.jsonl")},
+        "train": {"seed": 42, "epochs": 1},
+        "models": {"winner": None},
+        "paths": {"reports": str(reports), "runs": str(tmp_path / "runs")},
+        "evaluation": {},
+    }
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="different training configuration"):
+        train_winner(config_path)

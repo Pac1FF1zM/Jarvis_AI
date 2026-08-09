@@ -14,6 +14,7 @@ from typing import Any
 import torch
 import numpy as np
 import yaml
+import cv2
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from torch import nn
 from torch.utils.data import DataLoader
@@ -93,7 +94,10 @@ def _loader(config: dict[str, Any], dataset: JesterDataset, batch_size: int, shu
     workers = int(config["train"]["num_workers"])
     options: dict[str, Any] = {}
     if workers > 0:
-        options["persistent_workers"] = True
+        # On Windows each spawned worker imports the CUDA-enabled torch DLLs.
+        # Keeping train workers alive while validation workers start can exhaust
+        # the system commit/page file, especially with 8+ workers.
+        options["persistent_workers"] = bool(config["train"].get("persistent_workers", False))
         options["prefetch_factor"] = int(config["train"].get("prefetch_factor", 2))
     return DataLoader(
         dataset,
@@ -111,6 +115,7 @@ def _seed_worker(_: int) -> None:
     seed = torch.initial_seed() % 2**32
     random.seed(seed)
     np.random.seed(seed)
+    cv2.setNumThreads(1)
 
 
 def _cpu_state_dict(model: nn.Module) -> dict[str, torch.Tensor]:
@@ -147,6 +152,11 @@ def _records_fingerprint(records: list[ManifestRecord]) -> str:
         digest.update(str(record.class_id).encode("ascii"))
         digest.update(b"\n")
     return digest.hexdigest()
+
+
+def config_fingerprint(config: dict[str, Any]) -> str:
+    canonical = json.dumps(config, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def select_safe_batch_size(
@@ -189,7 +199,7 @@ def select_safe_batch_size(
 @torch.inference_mode()
 def evaluate_loader(model: nn.Module, loader: DataLoader, device: torch.device, amp: bool) -> dict[str, Any]:
     model.eval()
-    total_loss = 0.0
+    total_loss = torch.zeros((), device=device)
     count = 0
     targets: list[int] = []
     predictions: list[int] = []
@@ -199,12 +209,12 @@ def evaluate_loader(model: nn.Module, loader: DataLoader, device: torch.device, 
         with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=amp):
             logits = model(clips)
             loss = nn.functional.cross_entropy(logits, labels)
-        total_loss += float(loss) * labels.numel()
+        total_loss += loss * labels.numel()
         count += labels.numel()
         targets.extend(labels.cpu().tolist())
         predictions.extend(logits.argmax(1).cpu().tolist())
     result = metrics(targets, predictions)
-    result["loss"] = total_loss / max(count, 1)
+    result["loss"] = float(total_loss) / max(count, 1)
     result["samples"] = count
     return result
 
@@ -218,6 +228,7 @@ def fit(
     epochs: int,
     run_dir: Path,
     resume: bool = True,
+    max_epochs_this_run: int | None = None,
 ) -> dict[str, Any]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if device.type != "cuda":
@@ -290,10 +301,15 @@ def fit(
         _restore_rng_state(state["rng_state"])
         print(f"JESTER_RESUME model={model_name} epoch={resumed_from_epoch}", flush=True)
     started = time.perf_counter()
-    for epoch in range(start_epoch, epochs + 1):
+    end_epoch = epochs
+    if max_epochs_this_run is not None:
+        if max_epochs_this_run < 1:
+            raise ValueError("max_epochs_this_run must be positive")
+        end_epoch = min(epochs, start_epoch + max_epochs_this_run - 1)
+    for epoch in range(start_epoch, end_epoch + 1):
         model.train()
         optimizer.zero_grad(set_to_none=True)
-        epoch_loss = 0.0
+        epoch_loss = torch.zeros((), device=device)
         seen = 0
         for step, (clips, labels) in enumerate(train_loader, 1):
             clips = clips.to(device, non_blocking=True)
@@ -310,12 +326,12 @@ def fit(
                 scaler.update()
                 optimizer.zero_grad(set_to_none=True)
                 scheduler.step()
-            epoch_loss += float(raw_loss.detach()) * labels.numel()
+            epoch_loss += raw_loss.detach() * labels.numel()
             seen += labels.numel()
         validation = evaluate_loader(model, val_loader, device, amp)
         row = {
             "epoch": epoch,
-            "train_loss": epoch_loss / max(seen, 1),
+            "train_loss": float(epoch_loss) / max(seen, 1),
             "validation": validation,
             "lr": optimizer.param_groups[0]["lr"],
         }
@@ -418,6 +434,7 @@ def benchmark(config_path: Path, *, resume: bool = True) -> dict[str, Any]:
     ranking = sorted(reports, key=lambda row: (-float(row["best_val_macro_f1"]), float(row["seconds"])))
     result = {
         "status": "completed",
+        "config_fingerprint": config_fingerprint(config),
         "protocol": "balanced_equal_budget_candidate_benchmark",
         "ranking": ranking,
         "recommended_winner": ranking[0]["model"],
@@ -439,7 +456,10 @@ def train_winner(config_path: Path, model_name: str | None = None, *, resume: bo
         benchmark_report = Path(config["paths"]["reports"]) / "benchmark.json"
         if not benchmark_report.is_file():
             raise RuntimeError("run the candidate benchmark before full training")
-        selected = json.loads(benchmark_report.read_text(encoding="utf-8"))["recommended_winner"]
+        benchmark_payload = json.loads(benchmark_report.read_text(encoding="utf-8"))
+        if benchmark_payload.get("config_fingerprint") != config_fingerprint(config):
+            raise RuntimeError("candidate benchmark belongs to a different training configuration")
+        selected = benchmark_payload["recommended_winner"]
     selected = str(selected)
     return fit(
         config,

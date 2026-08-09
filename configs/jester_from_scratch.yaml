@@ -14,8 +14,8 @@ train:
   batch_size: 32
   effective_batch_size: 32
   epochs: 30
-  benchmark_epochs: 2
-  benchmark_samples_per_class: 160
+  benchmark_epochs: 5
+  benchmark_samples_per_class: 320
   learning_rate: 0.0005
   weight_decay: 0.0001
   label_smoothing: 0.05
@@ -24,6 +24,7 @@ train:
   amp: true
   num_workers: 4
   prefetch_factor: 2
+  persistent_workers: false
   pin_memory: true
   max_vram_ratio: 0.86
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from src.utils import seed_everything
 from .dataset import load_manifest
 from .models import MODEL_NAMES
-from .training import balanced_subset, fit, load_jester_config
+from .training import balanced_subset, config_fingerprint, fit, load_jester_config
 
 
 def rehearse(config_path: Path) -> dict[str, object]:
@@ -52,6 +52,7 @@ def rehearse(config_path: Path) -> dict[str, object]:
         )
     report: dict[str, object] = {
         "status": "passed",
+        "config_fingerprint": config_fingerprint(config),
         "protocol": "one_balanced_real_step_then_resume",
         "train_samples": len(train_records),
         "validation_samples": len(val_records),

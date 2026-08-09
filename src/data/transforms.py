@@ -40,6 +40,8 @@ class ClipTransform:
     def __init__(self, config: ClipTransformConfig, *, training: bool) -> None:
         self.config = config
         self.training = training
+        self.mean = torch.tensor(IMAGENET_MEAN).view(1, 3, 1, 1)
+        self.std = torch.tensor(IMAGENET_STD).view(1, 3, 1, 1)
 
     def _color_jitter(self, clip: torch.Tensor) -> torch.Tensor:
         cfg = self.config
@@ -78,9 +80,7 @@ class ClipTransform:
         clip = F.crop(clip, top, left, crop, crop)
         if self.training:
             clip = self._color_jitter(clip)
-        mean = torch.tensor(IMAGENET_MEAN, dtype=clip.dtype).view(1, 3, 1, 1)
-        std = torch.tensor(IMAGENET_STD, dtype=clip.dtype).view(1, 3, 1, 1)
-        return (clip - mean) / std
+        return (clip - self.mean) / self.std
 
 
 def resize_clip_for_cache(frames: list[np.ndarray], resize_size: int) -> np.ndarray:

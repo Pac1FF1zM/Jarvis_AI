@@ -12,7 +12,7 @@ import torch
 from .acquire import PART_NAMES, PART_SIZES
 from .labels import JESTER_LABELS
 from .prepare import read_labels
-from .training import load_jester_config
+from .training import config_fingerprint, load_jester_config
 
 
 def doctor(config_path: Path) -> dict[str, object]:
@@ -30,17 +30,24 @@ def doctor(config_path: Path) -> dict[str, object]:
     reports = Path(config["paths"]["reports"])
     preflight_report = reports / "preflight.json"
     rehearsal_report = reports / "rehearsal.json"
+    quality_gate_report = reports / "quality_gate.json"
+    expected_config_fingerprint = config_fingerprint(config)
 
     def passed(path: Path) -> bool:
         if not path.is_file():
             return False
         try:
-            return json.loads(path.read_text(encoding="utf-8")).get("status") == "passed"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            return (
+                payload.get("status") == "passed"
+                and payload.get("config_fingerprint") == expected_config_fingerprint
+            )
         except (OSError, ValueError):
             return False
 
     preflight_ready = passed(preflight_report)
     rehearsal_ready = passed(rehearsal_report)
+    quality_gate_ready = passed(quality_gate_report)
     free = shutil.disk_usage(Path.cwd()).free
     data_ready = (
         license_acceptance.is_file()
@@ -48,7 +55,7 @@ def doctor(config_path: Path) -> dict[str, object]:
         and frames_root.is_dir()
         and manifest.is_file()
     )
-    training_ready = data_ready and preflight_ready and rehearsal_ready
+    training_ready = data_ready and preflight_ready and rehearsal_ready and quality_gate_ready
     report: dict[str, object] = {
         "status": "ready_for_training" if training_ready else "preparing",
         "python": sys.version.split()[0],
@@ -65,6 +72,7 @@ def doctor(config_path: Path) -> dict[str, object]:
         "manifest_ready": manifest.is_file(),
         "preflight_ready": preflight_ready,
         "checkpoint_rehearsal_ready": rehearsal_ready,
+        "optimization_quality_gate_ready": quality_gate_ready,
     }
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return report
@@ -73,8 +81,11 @@ def doctor(config_path: Path) -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=Path("configs/jester_from_scratch.yaml"))
+    parser.add_argument("--require-ready", action="store_true")
     args = parser.parse_args()
-    doctor(args.config)
+    report = doctor(args.config)
+    if args.require_ready and report["status"] != "ready_for_training":
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":
