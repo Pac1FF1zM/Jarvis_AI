@@ -8,4 +8,5 @@ if exist "configs\jester_hardware.yaml" set "JARVIS_JESTER_CONFIG=configs/jester
 ".venv-jester\Scripts\python.exe" -m src.jester.doctor --config "%JARVIS_JESTER_CONFIG%" --require-ready
 if errorlevel 1 exit /b 1
 ".venv-jester\Scripts\python.exe" -m src.jester.training benchmark --config "%JARVIS_JESTER_CONFIG%"
-endlocal
+set "JARVIS_JESTER_EXIT=%ERRORLEVEL%"
+endlocal & exit /b %JARVIS_JESTER_EXIT%

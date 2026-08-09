@@ -20,7 +20,10 @@ from src.jester.models import JesterModelConfig, build_model
 from src.jester.prepare import read_labeled_split, read_labels
 from src.jester.training import (
     _atomic_torch_save,
+    _batch_candidates,
+    _completed_run_report,
     _records_fingerprint,
+    _safe_num_workers,
     balanced_subset,
     config_fingerprint,
     load_jester_config,
@@ -150,6 +153,80 @@ def test_config_fingerprint_is_order_independent_and_change_sensitive():
     assert config_fingerprint({"train": {"batch": 32}}) != config_fingerprint(
         {"train": {"batch": 64}}
     )
+
+
+def test_mobilenet_micro_batch_keeps_headroom_on_small_gpu():
+    assert _batch_candidates(
+        32,
+        32,
+        model_name="mobilenet_tsm_attention",
+        total_vram_bytes=6 * 1024**3,
+    ) == [16, 8, 4, 1]
+    assert _batch_candidates(
+        32,
+        32,
+        model_name="mobilenet_tsm_attention",
+        total_vram_bytes=24 * 1024**3,
+    ) == [32, 16, 8, 1]
+
+
+def test_completed_benchmark_run_is_reused_only_when_fingerprints_match(tmp_path):
+    config = {"train": {"seed": 42}}
+    run_dir = tmp_path / "candidate"
+    run_dir.mkdir()
+    state = {
+        "kind": "jarvis_jester_training_state_v1",
+        "epoch": 5,
+        "training_config": config,
+        "train_fingerprint": "train",
+        "val_fingerprint": "val",
+        "model_config": {"name": "tiny_3d_cnn"},
+    }
+    torch.save(state, run_dir / "latest.pt")
+    (run_dir / "report.json").write_text(
+        json.dumps(
+            {
+                "model": "tiny_3d_cnn",
+                "epochs_completed": 5,
+                "seconds": 12.5,
+                "test_split_opened": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    reused = _completed_run_report(
+        config,
+        model_name="tiny_3d_cnn",
+        run_dir=run_dir,
+        epochs=5,
+        train_fingerprint="train",
+        val_fingerprint="val",
+    )
+    rejected = _completed_run_report(
+        config,
+        model_name="tiny_3d_cnn",
+        run_dir=run_dir,
+        epochs=5,
+        train_fingerprint="different",
+        val_fingerprint="val",
+    )
+
+    assert reused is not None and reused["seconds"] == 12.5
+    assert rejected is None
+
+
+def test_worker_count_leaves_windows_commit_headroom():
+    assert _safe_num_workers(8, 8 * 1024**3) == 4
+    assert _safe_num_workers(8, 16 * 1024**3) == 6
+    assert _safe_num_workers(8, 32 * 1024**3) == 8
+    assert _safe_num_workers(0, 8 * 1024**3) == 0
+    assert _batch_candidates(
+        32,
+        32,
+        model_name="tiny_3d_cnn",
+        total_vram_bytes=6 * 1024**3,
+    ) == [32, 16, 8, 1]
 
 
 def test_benchmark_extends_beyond_warmup():

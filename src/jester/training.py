@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import math
@@ -91,7 +92,10 @@ def _dataset(config: dict[str, Any], records: list[ManifestRecord], training: bo
 
 
 def _loader(config: dict[str, Any], dataset: JesterDataset, batch_size: int, shuffle: bool) -> DataLoader:
-    workers = int(config["train"]["num_workers"])
+    workers = _safe_num_workers(
+        int(config["train"]["num_workers"]),
+        _total_physical_memory_bytes(),
+    )
     options: dict[str, Any] = {}
     if workers > 0:
         # On Windows each spawned worker imports the CUDA-enabled torch DLLs.
@@ -109,6 +113,39 @@ def _loader(config: dict[str, Any], dataset: JesterDataset, batch_size: int, shu
         worker_init_fn=_seed_worker,
         **options,
     )
+
+
+def _total_physical_memory_bytes() -> int:
+    if hasattr(ctypes, "windll"):
+        class MemoryStatus(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong),
+                ("dwMemoryLoad", ctypes.c_ulong),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+
+        status = MemoryStatus()
+        status.dwLength = ctypes.sizeof(status)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+            return int(status.ullTotalPhys)
+    return 0
+
+
+def _safe_num_workers(requested: int, total_ram_bytes: int) -> int:
+    """Cap Windows worker fan-out where spawned Torch processes exhaust commit."""
+    if requested <= 0 or total_ram_bytes <= 0:
+        return max(requested, 0)
+    if total_ram_bytes <= 12 * 1024**3:
+        return min(requested, 4)
+    if total_ram_bytes <= 24 * 1024**3:
+        return min(requested, 6)
+    return requested
 
 
 def _seed_worker(_: int) -> None:
@@ -159,32 +196,68 @@ def config_fingerprint(config: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _batch_candidates(
+    requested: int,
+    effective: int,
+    *,
+    model_name: str,
+    total_vram_bytes: int,
+) -> list[int]:
+    """Return deterministic micro-batches with headroom for constrained GPUs.
+
+    MobileNet expands every clip into ``batch * time`` independent frames.  A
+    single synthetic step can fit at batch 32 on a 6-8 GiB Windows GPU and
+    still fail later when CUDA/cuDNN workspaces or desktop applications claim
+    memory.  Keep the effective batch unchanged via gradient accumulation,
+    while capping this architecture's micro-batch on small GPUs.
+    """
+    ceiling = requested
+    if model_name == "mobilenet_tsm_attention" and total_vram_bytes <= 8 * 1024**3:
+        ceiling = min(ceiling, 16)
+    values = (ceiling, ceiling // 2, ceiling // 4, 1)
+    return list(dict.fromkeys(value for value in values if value > 0 and effective % value == 0))
+
+
 def select_safe_batch_size(
     config: dict[str, Any], model: nn.Module, dataset: JesterDataset, device: torch.device
 ) -> tuple[int, dict[str, float | int]]:
     requested = int(config["train"]["batch_size"])
     effective = int(config["train"]["effective_batch_size"])
     limit = float(config["train"]["max_vram_ratio"])
-    candidates = [value for value in (requested, requested // 2, requested // 4, 1) if value > 0 and effective % value == 0]
-    seen: set[int] = set()
+    total = torch.cuda.get_device_properties(device).total_memory
+    model_name = str(getattr(getattr(model, "config", None), "name", type(model).__name__))
+    candidates = _batch_candidates(
+        requested,
+        effective,
+        model_name=model_name,
+        total_vram_bytes=total,
+    )
+    probe_config = dict(config)
+    probe_config["train"] = dict(config["train"])
+    # A one-batch CUDA probe does not benefit from spawned workers. Avoid
+    # leaving a Windows multiprocessing queue alive after the iterator exits.
+    probe_config["train"]["num_workers"] = 0
     last: dict[str, float | int] = {}
     for batch_size in candidates:
-        if batch_size in seen:
-            continue
-        seen.add(batch_size)
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
         try:
-            clips, labels = next(iter(_loader(config, dataset, batch_size, False)))
+            free_before, _ = torch.cuda.mem_get_info(device)
+            clips, labels = next(iter(_loader(probe_config, dataset, batch_size, False)))
             clips = clips.to(device)
             labels = labels.to(device)
             with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=bool(config["train"]["amp"])):
                 loss = nn.functional.cross_entropy(model(clips), labels)
             loss.backward()
             torch.cuda.synchronize()
-            total = torch.cuda.get_device_properties(0).total_memory
             peak = torch.cuda.max_memory_reserved(0)
-            last = {"batch_size": batch_size, "peak_reserved_bytes": peak, "total_bytes": total, "ratio": peak / total}
+            last = {
+                "batch_size": batch_size,
+                "peak_reserved_bytes": peak,
+                "total_bytes": total,
+                "free_before_bytes": free_before,
+                "ratio": peak / total,
+            }
             model.zero_grad(set_to_none=True)
             del clips, labels, loss
             torch.cuda.empty_cache()
@@ -275,6 +348,7 @@ def fit(
     stale = 0
     start_epoch = 1
     resumed_from_epoch = 0
+    elapsed_before_resume = 0.0
     patience = int(train_cfg["patience"])
     train_fingerprint = _records_fingerprint(train_records)
     val_fingerprint = _records_fingerprint(val_records)
@@ -297,6 +371,7 @@ def fit(
         history = list(state["history"])
         stale = int(state["stale"])
         resumed_from_epoch = int(state["epoch"])
+        elapsed_before_resume = float(state.get("elapsed_seconds", 0.0))
         start_epoch = resumed_from_epoch + 1
         _restore_rng_state(state["rng_state"])
         print(f"JESTER_RESUME model={model_name} epoch={resumed_from_epoch}", flush=True)
@@ -371,6 +446,7 @@ def fit(
                 "best_state": best_state,
                 "history": history,
                 "stale": stale,
+                "elapsed_seconds": elapsed_before_resume + time.perf_counter() - started,
                 "rng_state": _rng_state(),
             },
             latest_path,
@@ -397,17 +473,54 @@ def fit(
         "parameters": parameter_count(model),
         "batch_size": batch_size,
         "gradient_accumulation_steps": accumulation,
+        "num_workers": _safe_num_workers(
+            int(train_cfg["num_workers"]),
+            _total_physical_memory_bytes(),
+        ),
         "vram_preflight": vram_preflight,
         "epochs_completed": len(history),
         "resumed_from_epoch": resumed_from_epoch,
         "best_val_macro_f1": best_score,
         "validation": best_validation,
-        "seconds": time.perf_counter() - started,
+        "seconds": elapsed_before_resume + time.perf_counter() - started,
         "checkpoint": str(checkpoint_path.resolve()),
         "test_split_opened": False,
     }
     (run_dir / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return report
+
+
+def _completed_run_report(
+    config: dict[str, Any],
+    *,
+    model_name: str,
+    run_dir: Path,
+    epochs: int,
+    train_fingerprint: str,
+    val_fingerprint: str,
+) -> dict[str, Any] | None:
+    """Reuse a fully verified candidate run without changing its timing."""
+    latest_path = run_dir / "latest.pt"
+    report_path = run_dir / "report.json"
+    if not latest_path.is_file() or not report_path.is_file():
+        return None
+    try:
+        state = torch.load(latest_path, map_location="cpu", weights_only=False)
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+    valid = (
+        state.get("kind") == "jarvis_jester_training_state_v1"
+        and int(state.get("epoch", 0)) >= epochs
+        and state.get("training_config") == config
+        and state.get("train_fingerprint") == train_fingerprint
+        and state.get("val_fingerprint") == val_fingerprint
+        and state.get("model_config", {}).get("name") == model_name
+        and report.get("model") == model_name
+        and int(report.get("epochs_completed", 0)) >= epochs
+        and report.get("test_split_opened") is False
+    )
+    return report if valid else None
 
 
 def benchmark(config_path: Path, *, resume: bool = True) -> dict[str, Any]:
@@ -419,18 +532,39 @@ def benchmark(config_path: Path, *, resume: bool = True) -> dict[str, Any]:
     train_records = balanced_subset(load_manifest(manifest, "train"), per_class, seed)
     val_records = balanced_subset(load_manifest(manifest, "val"), max(32, per_class // 4), seed + 1)
     root = Path(config["paths"]["runs"]) / "benchmark"
-    reports = [
-        fit(
-            config,
-            model_name=name,
-            train_records=train_records,
-            val_records=val_records,
-            epochs=int(config["train"]["benchmark_epochs"]),
-            run_dir=root / name,
-            resume=resume,
+    epochs = int(config["train"]["benchmark_epochs"])
+    train_fingerprint = _records_fingerprint(train_records)
+    val_fingerprint = _records_fingerprint(val_records)
+    reports = []
+    for name in config["models"]["candidates"]:
+        run_dir = root / name
+        completed = (
+            _completed_run_report(
+                config,
+                model_name=name,
+                run_dir=run_dir,
+                epochs=epochs,
+                train_fingerprint=train_fingerprint,
+                val_fingerprint=val_fingerprint,
+            )
+            if resume
+            else None
         )
-        for name in config["models"]["candidates"]
-    ]
+        if completed is not None:
+            print(f"JESTER_REUSE model={name} epoch={epochs}", flush=True)
+            reports.append(completed)
+            continue
+        reports.append(
+            fit(
+                config,
+                model_name=name,
+                train_records=train_records,
+                val_records=val_records,
+                epochs=epochs,
+                run_dir=run_dir,
+                resume=resume,
+            )
+        )
     ranking = sorted(reports, key=lambda row: (-float(row["best_val_macro_f1"]), float(row["seconds"])))
     result = {
         "status": "completed",

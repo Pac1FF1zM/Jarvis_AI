@@ -17,7 +17,15 @@ from src.utils import seed_everything
 from .dataset import JesterDataset, load_manifest
 from .labels import JESTER_LABELS
 from .models import JesterModelConfig, MODEL_NAMES, build_model
-from .training import _dataset, _seed_worker, config_fingerprint, load_jester_config, select_safe_batch_size
+from .training import (
+    _dataset,
+    _safe_num_workers,
+    _seed_worker,
+    _total_physical_memory_bytes,
+    config_fingerprint,
+    load_jester_config,
+    select_safe_batch_size,
+)
 
 
 def _loader_trial(
@@ -77,7 +85,13 @@ def preflight(
         _loader_trial(config, dataset, workers=value, batches=batches)
         for value in worker_candidates
     ]
-    recommended_workers = int(max(worker_trials, key=lambda row: float(row["steady_clips_per_second"]))["workers"])
+    performance_winner_workers = int(
+        max(worker_trials, key=lambda row: float(row["steady_clips_per_second"]))["workers"]
+    )
+    recommended_workers = _safe_num_workers(
+        performance_winner_workers,
+        _total_physical_memory_bytes(),
+    )
 
     batch_trials = []
     device = torch.device("cuda")
@@ -99,6 +113,7 @@ def preflight(
     report: dict[str, object] = {
         "status": "passed",
         "worker_trials": worker_trials,
+        "performance_winner_workers": performance_winner_workers,
         "recommended_workers": recommended_workers,
         "batch_trials": batch_trials,
     }
