@@ -1,0 +1,12 @@
+{
+  "model_id": "nvidia/parakeet-tdt-0.6b-v3",
+  "revision": "541d1f99c6b0c3cd0b11a95167540bb8edefd82b",
+  "license_spdx": "CC-BY-4.0",
+  "source": "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3",
+  "runtime": "transformers==5.15.0",
+  "provider": "cuda",
+  "dtype": "float16",
+  "sample_rate": 16000,
+  "local_expected_path": ".local/parakeet/models/nvidia--parakeet-tdt-0.6b-v3",
+  "execution_policy": "shadow-only; actions are always blocked"
+}

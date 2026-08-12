@@ -56,6 +56,7 @@ APPLICATIONS = (
         uri="discord://",
         aliases=(
             "discord", "дискорд", "дисорд", "дискод", "дискор", "дискорти",
+            "дискорт", "дискот",
         ),
     ),
     ApplicationSpec(
@@ -82,10 +83,36 @@ _UNSAFE_SHORTCUT_WORDS = frozenset(
     {
         "uninstall", "remove", "update", "updater", "repair", "setup",
         "help", "documentation", "readme", "license", "about", "offers",
-        "updates", "website", "деинсталляция", "удалить", "обновление",
+        "updates", "website", "деинсталляция", "деинсталлировать", "удалить", "обновление",
         "обновления", "справка",
     }
 )
+
+# Owner-approved speech aliases for applications whose launch targets are
+# discovered from Windows.  They deliberately map to a canonical slot value;
+# speech never becomes an executable path or command line.
+_DISCOVERED_APPLICATION_GROUPS: dict[str, dict[str, tuple[str, ...]]] = {
+    "visual_studio_code": {
+        "windows_names": ("code", "visual studio code"),
+        "aliases": (
+            "visual studio code",
+            "vs code",
+            "вс код",
+            "вижуал студио код",
+            "визуал студио код",
+            "висуал студио код",
+            "вижу студио код",
+            "в скот",
+            "ваэс код",
+            "вэс код",
+            "код",
+        ),
+    },
+    "telegram": {
+        "windows_names": ("telegram", "telegram desktop"),
+        "aliases": ("telegram", "телеграм", "телеграмм", "телега"),
+    },
+}
 
 
 def normalise_name(value: str) -> str:
@@ -219,12 +246,43 @@ def discover_installed_applications() -> tuple[ApplicationSpec, ...]:
 def available_applications(*, include_discovered: bool = True) -> tuple[ApplicationSpec, ...]:
     if not include_discovered:
         return APPLICATIONS
-    static_names = {normalise_name(item.display_name) for item in APPLICATIONS}
-    dynamic = tuple(
-        item
-        for item in discover_installed_applications()
-        if normalise_name(item.display_name) not in static_names
-    )
+    static_aliases = {
+        normalise_name(candidate)
+        for item in APPLICATIONS
+        for candidate in (item.name, item.display_name, *item.aliases)
+    }
+    dynamic: list[ApplicationSpec] = []
+    added_groups: set[str] = set()
+    for item in discover_installed_applications():
+        item_names = {
+            normalise_name(candidate)
+            for candidate in (item.name, item.display_name, *item.aliases)
+        }
+        if item_names & static_aliases:
+            continue
+        grouped = False
+        for canonical, group in _DISCOVERED_APPLICATION_GROUPS.items():
+            windows_names = {normalise_name(name) for name in group["windows_names"]}
+            if not item_names & windows_names:
+                continue
+            grouped = True
+            if canonical not in added_groups:
+                dynamic.append(
+                    ApplicationSpec(
+                        name=canonical,
+                        display_name=item.display_name,
+                        command=item.command,
+                        url=item.url,
+                        uri=item.uri,
+                        path=item.path,
+                        aliases=group["aliases"],
+                        discovered=True,
+                    )
+                )
+                added_groups.add(canonical)
+            break
+        if not grouped:
+            dynamic.append(item)
     return (*APPLICATIONS, *dynamic)
 
 

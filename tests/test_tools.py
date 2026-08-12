@@ -184,6 +184,29 @@ def test_discord_uses_fixed_windows_uri_instead_of_shell():
     assert discord.uri == "discord://"
 
 
+@pytest.mark.parametrize(
+    ("spoken", "canonical"),
+    (
+        ("дискорт", "discord"),
+        ("дискот", "discord"),
+        ("висуал студио код", "visual_studio_code"),
+        ("вижу студио код", "visual_studio_code"),
+        ("в скот", "visual_studio_code"),
+        ("вс код", "visual_studio_code"),
+        ("ваэс код", "visual_studio_code"),
+        ("вэс код", "visual_studio_code"),
+        ("код", "visual_studio_code"),
+        ("телеграм", "telegram"),
+        ("телеграмм", "telegram"),
+        ("телега", "telegram"),
+    ),
+)
+def test_owner_approved_application_aliases_resolve(spoken, canonical):
+    resolved = resolve_application(spoken)
+    assert resolved is not None
+    assert resolved.name == canonical
+
+
 def test_running_discord_is_activated_without_secondary_instance(monkeypatch):
     opened: list[str] = []
     monkeypatch.setattr(

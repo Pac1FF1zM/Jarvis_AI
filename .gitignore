@@ -76,6 +76,9 @@ artifacts/
 docs/*.docx
 tmp/pdfs/
 
+# Local experimental runtimes, downloaded models, approvals, and private audio.
+.local/
+
 # Local archives, IDE and OS metadata
 *.zip
 .idea/

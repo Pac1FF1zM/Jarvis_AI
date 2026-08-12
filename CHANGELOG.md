@@ -1,5 +1,72 @@
 # Changelog
 
+## [Unreleased] — checkpoint 2026-08-13: Parakeet shadow, semantic safety, Jester runtime
+
+### STT и безопасная диагностика
+
+- Добавлен изолированный live shadow-пайплайн для
+  `nvidia/parakeet-tdt-0.6b-v3` с закреплённой revision и отдельным локальным
+  CUDA/FP16 worker. Он выводит transcript и production NLU в JSON, но не
+  импортирует EventBus, registry инструментов или executor; выполнение всегда
+  помечено `blocked`.
+- Добавлены `SETUP_PARAKEET.cmd` и `TEST_PARAKEET_NLU.cmd`. Скрипты используют
+  только существующий `venv\Scripts\python.exe`; license review, immutable
+  evidence принятия CC-BY-4.0, модель и runtime находятся в `.local/`.
+- Persistent worker прогревается один раз. Decode ограничен 40 новыми токенами;
+  timeout завершает изолированный worker, отбрасывает текущий capture и
+  позволяет следующей реплике запустить чистый процесс.
+- Production Whisper остаётся основным STT. Ошибка, отсутствующий пакет или
+  некорректное аудио теперь fail closed: публикуется пустой transcript с
+  confidence `0.0`, а не синтетическая команда.
+
+### NLU и semantic commit
+
+- Добавлен fail-closed pre-semantic commit gate. Незаконченная мысль ожидает
+  продолжения, отрицание и упоминание/цитата команды отклоняются, а явная
+  самокоррекция сохраняет только последнюю команду.
+- Составные команды стали атомарными: неизвестная или неуверенная часть
+  блокирует весь план. Перечень приложений после одного глагола разворачивается
+  в упорядоченные действия только тогда, когда разрешены все цели.
+- Neural slot `open_application.application` теперь обязательно проходит через
+  production application resolver.
+- Добавлены подтверждённые владельцем варианты произношения VS Code, Telegram
+  и Discord с каноническими slot values `visual_studio_code`, `telegram` и
+  `discord`; дубликаты обнаруженных Windows shortcuts объединяются.
+- Window router канонизирует известные приложения, а discovery дополнительно
+  исключает uninstall shortcuts.
+
+### Fixture contract
+
+- Добавлена versioned canonical schema с relative WAV path, SHA-256,
+  `expected_speech`, human reference, `semantic_scored`, ordered
+  `expected_actions`, risk/acoustic metadata, инструкциями и tags.
+- Валидатор принимает только production intents/slots и PCM16 mono 16 kHz WAV,
+  проверяет checksum, границы пути, длительность и соответствие immutable plan.
+- Recorder показывает акустическое условие перед включением микрофона и имеет
+  команды device test, record-next/all, replay, re-record, delete, progress и
+  validate.
+- Fixture consent/retention отделены от immutable model-license evidence.
+  Private audio, manifests, approvals и модели исключены из Git. Запись и
+  benchmark в этом checkpoint не запускались.
+
+### Gesture Core
+
+- Runtime научился загружать локально обученный Jester Tiny3D checkpoint,
+  проверять его 27 меток и training-time preprocessing.
+- Только `Stop Sign`, `Shaking Hand`, `Thumb Up/Down` и `Swiping Left/Right`
+  переводятся в безопасные `G01`–`G06`; вероятность остальных классов
+  агрегируется в `D0X`.
+- Локальный официальный test report: 14 743 клипа, accuracy 0.7922,
+  macro-F1 0.7871, negative recall 0.8962. Checkpoint и отчёт не добавляются
+  в Git.
+
+### Проверки и документация
+
+- Добавлены regression-тесты для semantic gate, atomic compounds, application
+  aliases, fixture contract/recorder, Parakeet worker recovery и Jester loader.
+- Добавлены руководство по входным данным NLU и отдельный checkpoint-handoff
+  для продолжения работы в новом чате.
+
 ## [0.5.0] — IPN Hand training and custom capture
 
 - Added a reproducible IPN Hand pipeline with subject-disjoint

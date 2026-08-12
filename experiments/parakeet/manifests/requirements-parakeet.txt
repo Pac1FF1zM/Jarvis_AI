@@ -1,0 +1,3 @@
+# Installed into the existing Jarvis venv; PyTorch CUDA is already present.
+transformers==5.15.0
+librosa==0.11.0

@@ -21,6 +21,7 @@ from core.russian_numbers import normalize_russian_numbers
 from ml.nlu.inference import NLUPredictor
 from ml.nlu.schema import NLUResult
 from modules.command_router import RoutedAction, route_explicit_command, split_compound_command
+from modules.semantic_commit import prepare_final_utterance
 from tools._applications import resolve_application
 
 logger = logging.getLogger("jarvis.module.nlu")
@@ -98,6 +99,17 @@ def _apply_runtime_command_guardrails(
     launch an arbitrary executable: correction is allowed only when an
     imperative is present and the requested tail resolves to the fixed list.
     """
+    if result.intent == "open_application":
+        existing = resolve_application(str(result.slots.get("application", "")))
+        if existing is None:
+            result = NLUResult("unknown", result.confidence, {})
+        else:
+            result = NLUResult(
+                "open_application",
+                result.confidence,
+                {"application": existing.name},
+            )
+
     match = None
     for pattern in _OPEN_REQUESTS:
         match = pattern.match(normalised_text)
@@ -257,17 +269,34 @@ class NLUModule(BaseModule):
     async def _process_transcription(self, event: Event) -> None:
         assert self.bus is not None
         text = str(event.payload.get("text", "")).strip()
-        normalised_text = _normalise_transcription_for_nlu(text)
+        gate = prepare_final_utterance(text)
+        normalised_text = _normalise_transcription_for_nlu(gate.route_text or text)
+        if gate.state != "analyze":
+            logger.info(
+                "NLU_COMMIT_BLOCKED trace=%s state=%s reason=%s",
+                event.trace_id,
+                gate.state,
+                gate.reason,
+            )
+            normalised_text = ""
         parts = split_compound_command(normalised_text)
         actions: list[RoutedAction] = []
         try:
-            for part in parts:
+            for part in parts if normalised_text else []:
                 routed = route_explicit_command(part, previous_action=self._last_action)
                 if routed is None:
                     routed = await self._predict_action(part)
                 actions.append(routed)
         except Exception:  # noqa: BLE001 - keep voice pipeline responsive
             logger.exception("NLU inference failed; rejecting turn as unknown")
+            actions = [RoutedAction("unknown", {}, 0.0)]
+        if not actions:
+            actions = [RoutedAction("unknown", {}, 0.0)]
+        if len(actions) > 1 and any(
+            action.intent == "unknown" or action.confidence < self._threshold
+            for action in actions
+        ):
+            logger.info("NLU_COMPOUND_ATOMIC_REJECT trace=%s", event.trace_id)
             actions = [RoutedAction("unknown", {}, 0.0)]
         result_action = actions[0]
         result = NLUResult(result_action.intent, result_action.confidence, result_action.slots)

@@ -10,13 +10,12 @@ fully runnable without it installed:
 - If ``whisper`` is importable AND ``self.config.enabled`` is true, the
   model is loaded **once** in :meth:`STTModule.start` (loading is expensive —
   never per-call) and used for every transcribe.
-- If ``whisper`` is not importable, the module logs an actionable
-  message and stays in stub-only mode: it still handles events, still emits
-  ``transcription_ready``, just with stub text.
+- If ``whisper`` is not importable, the module logs an actionable message and
+  emits an empty final transcript. It never fabricates a command.
 - If the incoming ``audio_captured`` payload is not decodable audio (e.g. the
   literal stub marker bytes that ``modules/wake_word.py`` still publishes while
-  no real microphone exists), the module logs a clear warning and returns the
-  existing stub text/confidence so the demo round-trip keeps working.
+  no real microphone exists), the module logs a clear warning and emits an
+  empty transcript with zero confidence.
 
 CUDA OOM is detected and re-raised with an actionable message. An explicit
 ``cpu`` or ``cuda`` setting is respected; ``auto`` selects CUDA when PyTorch
@@ -51,13 +50,10 @@ from core.gpu_lock import GPULock
 
 logger = logging.getLogger("jarvis.module.stt")
 
-# Stub fallback values — kept identical to the original stub so the demo
-# round-trip's observable output is unchanged when real audio isn't available.
-# The voice demo is configured for Russian, so its synthetic transcript must
-# look like a plausible Whisper result rather than contain a technical prefix
-# that the NLU model can never hear from a microphone.
+# Historical demo string. It is deliberately never emitted by production STT:
+# malformed audio must not fabricate a command.
 STUB_TEXT = "сколько сейчас времени"
-STUB_CONFIDENCE = 0.92
+STUB_CONFIDENCE = 0.0
 
 # Literal sentinel that wake_word.py currently publishes; treated as
 # "not real audio" so the demo path falls back gracefully. Anything that
@@ -114,7 +110,7 @@ class STTModule(BaseModule):
     def __init__(self, config: Any, gpu_lock: GPULock) -> None:
         super().__init__(config)
         self.gpu_lock = gpu_lock
-        # Real model handle, or None when running in stub-only mode.
+        # Real model handle, or None when the optional runtime is unavailable.
         self._model: Any = None
         # numpy is only needed on the real path; import lazily so the module
         # stays importable when only stub mode is used.
@@ -146,7 +142,6 @@ class STTModule(BaseModule):
                 ),
             )
         ).strip()
-
     async def start(self, bus: EventBus) -> None:
         self.bus = bus
         bus.subscribe("audio_captured", self._on_audio)
@@ -154,7 +149,7 @@ class STTModule(BaseModule):
         if _WHISPER is None:
             logger.warning(
                 "openai-whisper not installed — pip install openai-whisper; "
-                "STT will run in stub-only mode"
+                "STT will return empty transcripts"
             )
         elif self.config.enabled:
             # Load the model once. Loading is expensive; never do it per-call.
@@ -176,7 +171,7 @@ class STTModule(BaseModule):
         logger.info(
             "STTModule started (mode=%s) device=%s model=%s language=%s "
             "temperature=%.1f beam_size=%s previous_text=%s",
-            "real" if self._model is not None else "stub",
+            "real" if self._model is not None else "unavailable",
             self._device,
             self.config.model,
             self._language,
@@ -206,7 +201,15 @@ class STTModule(BaseModule):
     # ------------------------------------------------------------------ #
     async def _on_audio(self, event: Event) -> None:
         assert self.bus is not None
-        text, confidence = await self._transcribe(event.payload)
+        if self.bus.is_trace_cancelled(event.trace_id):
+            return
+        try:
+            text, confidence = await self._transcribe(event.payload)
+        except Exception as exc:
+            logger.error("STT failed trace=%s: %s", event.trace_id, exc)
+            text, confidence = "", 0.0
+        if self.bus.is_trace_cancelled(event.trace_id):
+            return
         out = event.child(
             "transcription_ready",
             TranscriptionReadyPayload(text=text, confidence=confidence),
@@ -228,25 +231,21 @@ class STTModule(BaseModule):
         Decision flow:
           - If a real model is loaded AND the audio payload is decodable ->
             real OpenAI Whisper path (via a worker thread).
-          - Otherwise -> graceful fallback to stub values with a clear warning.
+          - Otherwise -> an empty, fail-closed final transcript.
         """
         if self._model is None:
-            # Stub-only mode (OpenAI Whisper missing). Keep the lock acquired
-            # for shape parity with the real path.
+            # Missing STT is an explicit empty result, never a guessed command.
             async with self.gpu_lock.section("stt"):
                 await asyncio.sleep(0.05)
-            return STUB_TEXT, STUB_CONFIDENCE
+            return "", 0.0
 
-        # Real model loaded — try to decode the payload. If it isn't real
-        # audio (stub marker bytes, or decode raises), fall back to stub.
+        # Real model loaded — invalid audio fails closed, never as a command.
         audio_array = self._decode_audio(audio_payload)
         if audio_array is None:
-            logger.warning(
-                "non-decodable audio payload — falling back to stub transcription"
-            )
+            logger.warning("non-decodable audio payload — returning empty transcription")
             async with self.gpu_lock.section("stt"):
                 await asyncio.sleep(0.05)
-            return STUB_TEXT, STUB_CONFIDENCE
+            return "", 0.0
 
         return await self._transcribe_real(audio_array)
 
@@ -254,7 +253,7 @@ class STTModule(BaseModule):
         """Decode payload bytes into a float32 numpy array at 16 kHz.
 
         Returns ``None`` if the payload is the known stub marker or cannot be
-        decoded — the caller falls back to stub transcription in that case.
+        decoded — the caller emits an empty transcript in that case.
         """
         raw: Any = audio_payload.get("audio")
         if raw is None:
@@ -265,7 +264,7 @@ class STTModule(BaseModule):
             np = self._get_numpy()
         except ImportError:
             logger.warning(
-                "numpy not installed — cannot decode audio; falling back to stub"
+                "numpy not installed — cannot decode audio; returning empty transcript"
             )
             return None
 

@@ -30,6 +30,8 @@ from modules.gesture_ui import (
     build_gesture_preview,
     decode_gesture_datagram,
 )
+from src.jester.labels import JESTER_LABELS
+from src.jester.models import JesterModelConfig, build_model as build_jester_model
 
 
 def _candidate_files(tmp_path, *, approved: bool = False):
@@ -213,6 +215,96 @@ def test_tsn_evaluation_report_is_observer_only(tmp_path):
     assert quality.selected_name == tmp_path.name
     assert quality.test_macro_f1 == pytest.approx(0.5858)
     assert quality.failed_gates == ("live webcam action gate pending",)
+
+
+def test_jester_final_evaluation_report_is_observer_only(tmp_path):
+    checkpoint = tmp_path / "best.pt"
+    checkpoint.write_bytes(b"jester checkpoint")
+    report = tmp_path / "final_test.json"
+    report.write_text(
+        json.dumps(
+            {
+                "status": "completed",
+                "protocol": "official_test_once_after_train_validation_selection",
+                "checkpoint": str(checkpoint),
+                "metrics": {
+                    "samples": 14_743,
+                    "macro_f1": 0.7871,
+                    "negative_recall": 0.8962,
+                },
+                "test_split_opened": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = SimpleNamespace(
+        device="cpu",
+        model=str(checkpoint),
+        params={
+            "quality_report": str(report),
+            "checkpoint_sha256": hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
+        },
+    )
+    module = GestureControlModule(config, GPULock())
+
+    quality = module._verify_quality_report(checkpoint)
+
+    assert quality.approved is False
+    assert quality.selected_name == tmp_path.name
+    assert quality.test_macro_f1 == pytest.approx(0.7871)
+    assert quality.failed_gates == ("live webcam action gate pending",)
+
+
+def test_jester_tiny3d_checkpoint_loads_with_training_preprocessing(tmp_path):
+    model_config = JesterModelConfig(name="tiny_3d_cnn", num_classes=len(JESTER_LABELS))
+    payload = build_jester_model(model_config).checkpoint_payload(
+        labels=list(JESTER_LABELS),
+        training_config={
+            "data": {"clip_len": 4, "frame_size": 32, "resize_size": 40}
+        },
+    )
+    checkpoint = tmp_path / "best.pt"
+    torch.save(payload, checkpoint)
+    config = SimpleNamespace(
+        device="cpu",
+        model=str(checkpoint),
+        params={"frames": 4, "image_size": 32, "resize_size": 40},
+    )
+    module = GestureControlModule(config, GPULock())
+
+    model = module._load_checkpoint(checkpoint)
+    clip = module._prepare_clip(np.zeros((4, 40, 60, 3), dtype=np.uint8))
+
+    assert model.training is False
+    assert module._runtime_kind == "jester_tiny3d"
+    assert module._model_name == "tiny_3d_cnn"
+    assert clip.shape == (1, 4, 3, 32, 32)
+    assert float(clip.max()) < 0.0
+
+
+@pytest.mark.parametrize(
+    ("jester_label", "runtime_label"),
+    [("Stop Sign", "G01"), ("Thumb Up", "G03"), ("Drumming Fingers", "D0X")],
+)
+def test_jester_predictions_are_restricted_to_safe_runtime_labels(
+    jester_label, runtime_label
+):
+    class FixedJesterPrediction(torch.nn.Module):
+        def forward(self, clip):
+            logits = torch.full((clip.shape[0], len(JESTER_LABELS)), -12.0)
+            logits[:, JESTER_LABELS.index(jester_label)] = 12.0
+            return logits
+
+    config = SimpleNamespace(device="cpu", model="", params={})
+    module = GestureControlModule(config, GPULock())
+    module._model = FixedJesterPrediction().eval()
+    module._runtime_kind = "jester_tiny3d"
+
+    label, confidence, top3 = module._predict_sync(torch.zeros(1, 4, 3, 32, 32))
+
+    assert label == runtime_label
+    assert confidence == pytest.approx(1.0)
+    assert set(item[0] for item in top3) <= {"D0X", "G01", "G02", "G03", "G04", "G05", "G06"}
 
 
 def test_tsn_checkpoint_loader_accepts_audited_contract(monkeypatch):

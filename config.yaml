@@ -8,16 +8,16 @@ orchestrator:
   interaction_timeout_seconds: 60 # hard failure guard; completion is event-driven
 
 modules:
-  # Gesture Core uses the frozen TSN-ResNet18 baseline in a restricted
+  # Gesture Core uses the locally trained Jester Tiny3D model in a restricted
   # real-camera test: only six reversible media actions may execute.
   gesture:
     enabled: true
     # CUDA is selected when available; installer CPU fallback remains usable.
     device: "auto"
-    model: checkpoints/tsn_resnet18_seed42/best.pt
+    model: training_workspace/jester/runs/full/tiny_3d_cnn/best.pt
     params:
-      quality_report: reports/evaluation_test.json
-      checkpoint_sha256: 79ce0465bc705180a3beacba42436bdf9a23e693d2a2d143de40631f3c61a0c9
+      quality_report: reports/jester/final_test.json
+      checkpoint_sha256: 0c14820042c652c8b51d19c82af57fd0f0706edcf317f1859cf2e461b80f7e07
       allow_unapproved_observer: true
       camera_index: 0
       # DirectShow avoids slow/hanging CAP_ANY probing on Windows webcams.
@@ -31,20 +31,22 @@ modules:
       log_retention_days: 30
       log_max_bytes: 104857600
       log_file_max_bytes: 10485760
-      # Uniformly sample 16 frames from a rolling three-second camera window.
+      # Median Jester clip is 36 frames; sample the training-time 16-frame view
+      # from the same temporal span instead of the old 90-frame IPN window.
       frames: 16
-      window_frames: 90
+      window_frames: 36
       image_size: 112
       resize_size: 128
-      window_stride: 8
+      window_stride: 4
       confidence_threshold: 0.7
       consecutive_windows: 3
       cooldown_seconds: 1.5
       # A triggered gesture cannot fire again until D0X is observed.
       require_neutral_rearm: true
       armed_on_start: false
-      # Restricted real-camera test: only six reversible media actions execute.
-      # Every other class remains observer-only despite execution_enabled=true.
+      # Restricted real-camera test. Mapping:
+      # Stop Sign / Shaking Hand / Thumb Up / Thumb Down / Swiping Left / Right.
+      # All other Jester classes collapse to D0X and can never execute actions.
       action_allowlist: [G01, G02, G03, G04, G05, G06]
       observer_action_allowlist: [G01, G02, G03, G04, G05, G06]
       execution_enabled: true

@@ -21,6 +21,18 @@ IPN_LABELS: tuple[str, ...] = (
 NO_GESTURE_LABEL = "D0X"
 SAFE_RUNTIME_LABELS = frozenset({"G01", "G02", "G03", "G04", "G05", "G06"})
 
+# The Jester classifier remains a 27-class model. Only these six deliberate,
+# reversible gestures are translated into executable Jarvis test actions;
+# every other Jester class is collapsed into D0X by the runtime.
+JESTER_SAFE_RUNTIME_MAP: dict[str, str] = {
+    "Stop Sign": "G01",
+    "Shaking Hand": "G02",
+    "Thumb Up": "G03",
+    "Thumb Down": "G04",
+    "Swiping Left": "G05",
+    "Swiping Right": "G06",
+}
+
 # These names are metadata only.  Runtime actions will require an explicit
 # activation state and temporal confirmation; classification alone must never
 # execute an OS action.

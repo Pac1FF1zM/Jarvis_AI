@@ -32,6 +32,7 @@ from core.event_payloads import (
 from core.gpu_lock import GPULock
 from ml.gesture.labels import (
     IPN_LABELS,
+    JESTER_SAFE_RUNTIME_MAP,
     JARVIS_ACTION_HINTS,
     NO_GESTURE_LABEL,
     SAFE_RUNTIME_LABELS,
@@ -472,6 +473,28 @@ class GestureControlModule(BaseModule):
                 test_macro_f1=macro_f1,
                 failed_gates=("live webcam action gate pending",),
             )
+        if report.get("protocol") == "official_test_once_after_train_validation_selection":
+            if report.get("status") != "completed" or report.get("test_split_opened") is not True:
+                raise ValueError("Jester evaluation report is incomplete")
+            selected_checkpoint = Path(str(report.get("checkpoint", ""))).name
+            if selected_checkpoint != checkpoint.name:
+                raise ValueError("Jester evaluation report does not select this checkpoint")
+            metrics = report.get("metrics")
+            if not isinstance(metrics, dict):
+                raise ValueError("Jester evaluation report is missing metrics")
+            samples = int(metrics.get("samples", 0))
+            macro_f1 = float(metrics.get("macro_f1", -1.0))
+            negative_recall = float(metrics.get("negative_recall", -1.0))
+            if samples != 14_743:
+                raise ValueError("Jester evaluation did not cover the full official test split")
+            if not 0.0 <= macro_f1 <= 1.0 or not 0.0 <= negative_recall <= 1.0:
+                raise ValueError("Jester evaluation report has invalid metrics")
+            return GestureQualityStatus(
+                approved=False,
+                selected_name=checkpoint.parent.name,
+                test_macro_f1=macro_f1,
+                failed_gates=("live webcam action gate pending",),
+            )
         selected = report.get("selected")
         approval = report.get("approval")
         test_metrics = report.get("test")
@@ -516,6 +539,8 @@ class GestureControlModule(BaseModule):
                 payload,
                 expected_experiment=expected_experiment,
             )
+        if kind == "jarvis_jester_from_scratch_v1":
+            return self._load_jester_checkpoint(payload)
         if kind != "jarvis_gesture_from_scratch_v1":
             raise ValueError(f"unsupported gesture checkpoint kind: {kind!r}")
         if payload.get("pretrained") is not False:
@@ -537,6 +562,59 @@ class GestureControlModule(BaseModule):
             raise RuntimeError("gesture config requests CUDA but PyTorch cannot see a CUDA device")
         self._runtime_kind = "legacy_3d"
         self._model_name = model_config.architecture
+        return model.to(self._device).eval()
+
+    def _load_jester_checkpoint(self, payload: dict[str, Any]) -> torch.nn.Module:
+        """Load the audited 27-class Tiny3D checkpoint under a restricted map."""
+        from src.jester.labels import JESTER_LABELS
+        from src.jester.models import JesterModelConfig, build_model as build_jester_model
+
+        if payload.get("pretrained") is not False:
+            raise ValueError("Jester checkpoint must declare pretrained=false")
+        if payload.get("smoke") is True:
+            raise ValueError("synthetic Jester checkpoint cannot control Jarvis")
+        if payload.get("labels") != list(JESTER_LABELS):
+            raise ValueError("Jester checkpoint label order is incompatible with Jarvis")
+        raw_config = payload.get("model_config")
+        state_dict = payload.get("state_dict")
+        if not isinstance(raw_config, dict) or not isinstance(state_dict, dict):
+            raise ValueError("Jester checkpoint is missing model_config or state_dict")
+        model_config = JesterModelConfig(**raw_config)
+        if model_config.name != "tiny_3d_cnn":
+            raise ValueError("Jarvis runtime currently accepts only the audited Tiny3D model")
+        if model_config.num_classes != len(JESTER_LABELS):
+            raise ValueError("Jester checkpoint has an incompatible class count")
+
+        data_config = payload.get("training_config", {}).get("data", {})
+        expected_frames = int(data_config.get("clip_len", self._frames))
+        expected_image_size = int(data_config.get("frame_size", self._image_size))
+        expected_resize_size = int(data_config.get("resize_size", self._resize_size))
+        if self._frames_configured and self._frames != expected_frames:
+            raise ValueError(
+                f"Jester runtime frames={self._frames} but checkpoint requires {expected_frames}"
+            )
+        if self._image_size_configured and self._image_size != expected_image_size:
+            raise ValueError(
+                "Jester runtime image_size="
+                f"{self._image_size} but checkpoint requires {expected_image_size}"
+            )
+        if self._resize_size_configured and self._resize_size != expected_resize_size:
+            raise ValueError(
+                "Jester runtime resize_size="
+                f"{self._resize_size} but checkpoint requires {expected_resize_size}"
+            )
+        self._frames = expected_frames
+        self._image_size = expected_image_size
+        self._resize_size = expected_resize_size
+        if not self._window_frames_configured:
+            self._window_frames = max(self._window_frames, self._frames)
+
+        model = build_jester_model(model_config)
+        model.load_state_dict(state_dict, strict=True)
+        if self._device == "cuda" and not torch.cuda.is_available():
+            raise RuntimeError("gesture config requests CUDA but PyTorch cannot see a CUDA device")
+        self._runtime_kind = "jester_tiny3d"
+        self._model_name = model_config.name
         return model.to(self._device).eval()
 
     def _load_ipn_architecture_checkpoint(
@@ -875,7 +953,7 @@ class GestureControlModule(BaseModule):
                     return
                 camera_frame = frame
                 model_frame = cv2.cvtColor(camera_frame, cv2.COLOR_BGR2RGB)
-                if self._runtime_kind == "ipn_architecture":
+                if self._runtime_kind in {"ipn_architecture", "jester_tiny3d"}:
                     model_frame = self._resize_short_side(cv2, model_frame, self._resize_size)
                 else:
                     model_frame = cv2.resize(
@@ -1132,7 +1210,7 @@ class GestureControlModule(BaseModule):
         logger.info("GESTURE_ACTION_READY label=%s confidence=%.3f", label, confidence)
 
     def _prepare_clip(self, frames: np.ndarray) -> torch.Tensor:
-        if self._runtime_kind == "ipn_architecture":
+        if self._runtime_kind in {"ipn_architecture", "jester_tiny3d"}:
             from src.data.transforms import ClipTransform, ClipTransformConfig
 
             transform = ClipTransform(
@@ -1161,12 +1239,25 @@ class GestureControlModule(BaseModule):
             with torch.autocast(
                 device_type=self._device,
                 dtype=torch.float16,
-                enabled=self._device == "cuda" and self._runtime_kind == "ipn_architecture",
+                enabled=self._device == "cuda" and self._runtime_kind in {
+                    "ipn_architecture", "jester_tiny3d"
+                },
             ):
                 probabilities = self._model(clip.to(self._device)).softmax(dim=1)[0].cpu()
-        scores, indices = probabilities.topk(min(3, len(IPN_LABELS)))
+        output_labels = IPN_LABELS
+        if self._runtime_kind == "jester_tiny3d":
+            from src.jester.labels import JESTER_LABELS
+
+            output_labels = (NO_GESTURE_LABEL, *sorted(SAFE_RUNTIME_LABELS))
+            runtime_probabilities = torch.zeros(len(output_labels), dtype=probabilities.dtype)
+            output_index = {label: index for index, label in enumerate(output_labels)}
+            for source_index, source_label in enumerate(JESTER_LABELS):
+                runtime_label = JESTER_SAFE_RUNTIME_MAP.get(source_label, NO_GESTURE_LABEL)
+                runtime_probabilities[output_index[runtime_label]] += probabilities[source_index]
+            probabilities = runtime_probabilities
+        scores, indices = probabilities.topk(min(3, len(output_labels)))
         top3 = tuple(
-            (IPN_LABELS[int(index)], float(score))
+            (output_labels[int(index)], float(score))
             for score, index in zip(scores, indices, strict=True)
         )
         return top3[0][0], top3[0][1], top3

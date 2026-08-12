@@ -1,0 +1,3 @@
+# Copy to .local/parakeet/benchmarks/manifest.jsonl and replace paths.
+# Do not commit personal audio. Reference values are optional and must be real.
+{"id":"approved-fixture-01","path":"C:/absolute/path/to/approved.wav","reference_text":"","intent":"","slots":{}}

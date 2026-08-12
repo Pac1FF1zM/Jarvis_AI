@@ -53,7 +53,7 @@ def split_compound_command(text: str) -> list[str]:
             for item in _RAW_COMMAND_BOUNDARY.split(part)
             if item.strip(" ,")
         ]
-        return flattened
+        return [item for part in flattened for item in _split_coordinated_applications(part)]
     # Whisper frequently returns a flat string without commas/conjunctions.
     # Finite imperative verbs are reliable action boundaries; infinitives are
     # deliberately excluded so "напомни открыть дверь" remains one reminder.
@@ -64,7 +64,32 @@ def split_compound_command(text: str) -> list[str]:
         and raw[1].casefold().startswith("напомни")
     ):
         raw = [raw[0] + " " + raw[1], *raw[2:]]
-    return raw if len(raw) > 1 else [text.strip()]
+    parts = raw if len(raw) > 1 else [text.strip()]
+    return [item for part in parts for item in _split_coordinated_applications(part)]
+
+
+def _split_coordinated_applications(text: str) -> list[str]:
+    """Expand one explicit open verb over an allow-listed app enumeration.
+
+    This runs only after the utterance has ended.  Every object must resolve
+    independently; a partly unknown list is preserved as one ambiguous phrase
+    instead of guessing or executing its known prefix.
+    """
+    match = re.fullmatch(
+        r"(?P<prefix>(?:(?:джарвис|пожалуйста)\s+)*(?:открой|запусти|включи)"
+        r"(?:\s+(?:приложение|программу))?)\s+(?P<objects>.+)",
+        text.strip(" ,"),
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        return [text]
+    objects = [value.strip(" ,") for value in re.split(r"\s+и\s+|,\s*", match.group("objects"))]
+    if len(objects) < 2 or any(not value for value in objects):
+        return [text]
+    if any(resolve_application(value) is None for value in objects):
+        return [text]
+    prefix = match.group("prefix")
+    return [f"{prefix} {value}" for value in objects]
 
 
 def route_explicit_command(
@@ -467,7 +492,15 @@ def route_explicit_command(
     window_match = re.match(r"^(переключись на|перейди в|сверни|разверни|восстанови|закрой) (?:окно )?(.+)$", value)
     if window_match:
         actions = {"переключись на": "switch", "перейди в": "switch", "сверни": "minimize", "разверни": "maximize", "восстанови": "restore", "закрой": "close"}
-        return RoutedAction("window_control", {"action": actions[window_match.group(1)], "window": window_match.group(2)})
+        target = window_match.group(2)
+        application = resolve_application(target)
+        return RoutedAction(
+            "window_control",
+            {
+                "action": actions[window_match.group(1)],
+                "window": application.name if application is not None else target,
+            },
+        )
 
     file_search = re.match(r"^(?:найди|поищи) (?:файл|папку)\s+(.+)$", value)
     if file_search:

@@ -88,21 +88,23 @@ def fake_whisper(monkeypatch):
 
 async def _run_audio(mod: STTModule, bus: EventBus, trace_id: str = "stt-tr"):
     output: list[Event] = []
+    ready = asyncio.Event()
 
     async def record(event: Event) -> None:
         output.append(event)
+        ready.set()
 
     bus.subscribe("transcription_ready", record)
     run_task = asyncio.create_task(bus.run())
     bus.publish("audio_captured", {"audio": b"x"}, trace_id=trace_id)
-    await asyncio.sleep(0.2)
+    await asyncio.wait_for(ready.wait(), timeout=1.0)
     await bus.stop()
     await run_task
     await mod.stop()
     return output
 
 
-async def test_missing_package_falls_back_with_trace_and_confidence(
+async def test_missing_package_fails_closed_with_trace_and_confidence(
     bus, gpu_lock, monkeypatch, caplog
 ):
     monkeypatch.setattr(stt_mod, "_WHISPER", None)
@@ -113,8 +115,8 @@ async def test_missing_package_falls_back_with_trace_and_confidence(
 
     assert output[0].trace_id == "stt-tr"
     assert output[0].payload == {
-        "text": stt_mod.STUB_TEXT,
-        "confidence": stt_mod.STUB_CONFIDENCE,
+        "text": "",
+        "confidence": 0.0,
     }
     assert "openai-whisper not installed" in caplog.text
 
@@ -182,7 +184,7 @@ async def test_non_decodable_audio_does_not_call_real_model(
     await mod.start(bus)
     with caplog.at_level(logging.WARNING, logger="jarvis.module.stt"):
         output = await _run_audio(mod, bus)
-    assert output[0].payload["text"] == stt_mod.STUB_TEXT
+    assert output[0].payload["text"] == ""
     assert not fake_whisper.model.transcribe_calls
     assert "non-decodable audio payload" in caplog.text
 

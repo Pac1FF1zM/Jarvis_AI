@@ -144,6 +144,31 @@ def test_explicit_phonetic_allowlisted_app_rescues_bad_neural_intent():
         assert rescued.slots == {"application": expected}
 
 
+def test_one_open_verb_expands_only_a_fully_resolved_application_list():
+    from modules.command_router import split_compound_command
+
+    assert split_compound_command("запусти телегу и дискот") == [
+        "запусти телегу",
+        "запусти дискот",
+    ]
+    assert split_compound_command("открой калькулятор и блокнот") == [
+        "открой калькулятор",
+        "открой блокнот",
+    ]
+    assert split_compound_command("открой калькулятор и неизвестную штуку") == [
+        "открой калькулятор и неизвестную штуку"
+    ]
+
+
+def test_window_command_canonicalises_owner_approved_application_alias():
+    from modules.command_router import route_explicit_command
+
+    assert route_explicit_command("закрой телеграмм").slots == {
+        "action": "close",
+        "window": "telegram",
+    }
+
+
 def test_guardrail_never_rescues_non_imperative_or_unknown_application(monkeypatch):
     import tools._applications as applications
 
@@ -286,6 +311,76 @@ async def test_low_confidence_prediction_is_rejected_as_unknown():
     assert output[0].payload["intent"] == "unknown"
     assert output[0].payload["raw_intent"] == "set_reminder"
     assert output[0].payload["slots"] == {}
+
+
+async def test_production_commit_gate_blocks_incomplete_before_prediction():
+    calls = []
+
+    class Predictor:
+        def __init__(self, *_args):
+            pass
+
+        def predict(self, text):
+            calls.append(text)
+            return NLUResult("open_application", 1.0, {"application": "telegram"})
+
+    bus = EventBus()
+    module = NLUModule(
+        ModuleConfig(device="cpu", model=str(MODEL_PATH)),
+        GPULock(),
+        predictor_factory=Predictor,
+    )
+    output = []
+    async def record_partial(event):
+        output.append(event)
+    bus.subscribe("nlu_result", record_partial)
+    await module.start(bus)
+    task = asyncio.create_task(bus.run())
+    bus.publish("transcription_ready", {"text": "запусти телегу и."}, trace_id="partial")
+    bus.publish("thinking_ready", trace_id="partial")
+    await asyncio.sleep(0.1)
+    await bus.stop()
+    await task
+    await module.stop()
+
+    assert calls == []
+    assert output[0].payload["intent"] == "unknown"
+    assert output[0].payload["actions"] == ()
+
+
+async def test_production_compound_is_atomic_when_one_action_is_unknown():
+    class Predictor:
+        def __init__(self, *_args):
+            pass
+
+        def predict(self, _text):
+            return NLUResult("unknown", 0.99, {})
+
+    bus = EventBus()
+    module = NLUModule(
+        ModuleConfig(device="cpu", model=str(MODEL_PATH)),
+        GPULock(),
+        predictor_factory=Predictor,
+    )
+    output = []
+    async def record_atomic(event):
+        output.append(event)
+    bus.subscribe("nlu_result", record_atomic)
+    await module.start(bus)
+    task = asyncio.create_task(bus.run())
+    bus.publish(
+        "transcription_ready",
+        {"text": "открой браузер и запусти неизвестную штуку"},
+        trace_id="atomic",
+    )
+    bus.publish("thinking_ready", trace_id="atomic")
+    await asyncio.sleep(0.1)
+    await bus.stop()
+    await task
+    await module.stop()
+
+    assert output[0].payload["intent"] == "unknown"
+    assert output[0].payload["actions"] == ()
 
 
 async def test_cancel_intent_publishes_control_event_instead_of_nlu_result():
