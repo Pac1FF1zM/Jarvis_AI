@@ -1,6 +1,12 @@
-# Parakeet TDT + production NLU shadow diagnostic
+# Parakeet TDT: experimental production STT and shadow diagnostic
 
-This experiment records one 16 kHz mono microphone capture in memory, sends it
+The production STT module can now send each 16 kHz mono microphone capture to
+the same isolated persistent worker. This path is enabled only when both
+`engine: parakeet` and `experimental_production: true` are present in
+`config.yaml`. It publishes the ordinary Jarvis `transcription_ready` event;
+therefore `main.py` is a real action-capable runtime.
+
+The separate shadow diagnostic records one capture in memory, sends it
 to a persistent local Parakeet worker, and shows the production Jarvis NLU
 interpretation as JSON. It has no EventBus, tool registry, publisher, or action
 executor. Every action in its output is marked `execution: blocked`.
@@ -59,8 +65,29 @@ TEST_PARAKEET_NLU.cmd --wav "C:\absolute\sample.wav"
 TEST_PARAKEET_NLU.cmd --text "открой калькулятор"
 ```
 
-Do not run `main.py` to test this experiment. Parakeet is not wired into the
-production STT module on this branch.
+Use `TEST_PARAKEET_NLU.cmd` when actions must remain impossible. Use `main.py`
+only for an intentional production A/B session, because commands that pass the
+normal semantic/NLU/tool safety gates may execute. Roll back by setting
+`modules.stt.params.engine: whisper`.
+
+## Paired benchmark
+
+`benchmarks/compare_stt.py` runs Parakeet and official Whisper sequentially on
+the same JSONL manifest and reports corpus WER/CER, exact match, latency and
+real-time factor. It contains no executor and never publishes to EventBus:
+
+```bat
+venv\Scripts\python.exe -m experiments.parakeet.benchmarks.compare_stt ^
+  --manifest .local\parakeet\benchmarks\manifest.jsonl ^
+  --provider cuda --whisper-model small ^
+  --output reports\parakeet_vs_whisper.json
+```
+
+The initial public human-speech smoke used 20 FLEURS `ru_ru/dev` clips no longer
+than Jarvis's 12-second capture limit. Parakeet achieved WER 4.40%, mean decode
+1210 ms and RTF 0.133; Whisper small achieved WER 5.35%, mean decode 2149 ms and
+RTF 0.237. This small general-Russian sample supports production testing but is
+not a substitute for owner-approved command fixtures.
 
 ## Fixture status at the checkpoint
 

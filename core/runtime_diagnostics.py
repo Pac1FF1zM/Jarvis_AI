@@ -297,6 +297,24 @@ class RuntimeDiagnosticRunner:
             except (TypeError, ValueError):
                 errors.append("active_session_timeout_seconds должен быть числом")
 
+        stt = self.config.modules.get("stt")
+        if stt is not None and stt.enabled:
+            stt_params = _mapping(stt.params)
+            engine = str(stt_params.get("engine", "whisper")).casefold()
+            if engine not in {"whisper", "parakeet"}:
+                errors.append("stt.params.engine должен быть whisper или parakeet")
+            if engine == "parakeet" and not bool(
+                stt_params.get("experimental_production", False)
+            ):
+                errors.append(
+                    "Parakeet требует stt.params.experimental_production=true"
+                )
+            try:
+                if float(stt_params.get("parakeet_timeout_seconds", 45.0)) <= 0:
+                    errors.append("stt.params.parakeet_timeout_seconds должен быть > 0")
+            except (TypeError, ValueError):
+                errors.append("stt.params.parakeet_timeout_seconds должен быть числом")
+
         if errors:
             self._add(
                 "config.values",
@@ -888,6 +906,58 @@ class RuntimeDiagnosticRunner:
             self._skip("engine.whisper", "stt", "STT отключён в config.yaml")
             self._skip("model.whisper", "stt", "STT отключён в config.yaml")
             return
+        params = _mapping(module.params)
+        engine = str(params.get("engine", "whisper")).casefold()
+        if engine == "parakeet":
+            python_path = self._resolve(
+                params.get("parakeet_python", "venv/Scripts/python.exe")
+            )
+            if python_path.is_file():
+                self._add(
+                    "engine.parakeet",
+                    "stt",
+                    DiagnosticStatus.PASS,
+                    "Изолированный runtime Parakeet найден",
+                    detail=str(python_path),
+                )
+            else:
+                self._add(
+                    "engine.parakeet",
+                    "stt",
+                    DiagnosticStatus.FAIL,
+                    "Изолированный runtime Parakeet не найден",
+                    detail=str(python_path),
+                    action="Выполните SETUP_PARAKEET.cmd --runtime.",
+                )
+            model_dir = self._resolve(
+                params.get(
+                    "parakeet_model_dir",
+                    ".local/parakeet/models/nvidia--parakeet-tdt-0.6b-v3",
+                )
+            )
+            required = ("config.json", "processor_config.json", "model.safetensors")
+            missing = [name for name in required if not (model_dir / name).is_file()]
+            if not missing:
+                self._add(
+                    "model.parakeet",
+                    "stt",
+                    DiagnosticStatus.PASS,
+                    "Закреплённая модель Parakeet найдена локально",
+                    detail=str(model_dir),
+                )
+            else:
+                self._add(
+                    "model.parakeet",
+                    "stt",
+                    DiagnosticStatus.FAIL,
+                    "Снимок модели Parakeet неполон",
+                    detail=f"{model_dir}; отсутствуют: {', '.join(missing)}",
+                    action=(
+                        "Проверьте лицензию через SETUP_PARAKEET.cmd --status, "
+                        "затем выполните --download."
+                    ),
+                )
+            return
         whisper = self._package(
             "engine.whisper",
             "stt",
@@ -896,9 +966,7 @@ class RuntimeDiagnosticRunner:
             DiagnosticStatus.FAIL,
             "Установите openai-whisper из requirements.txt.",
         )
-        download_root = _mapping(module.params).get(
-            "download_root", "models/openai-whisper"
-        )
+        download_root = params.get("download_root", "models/openai-whisper")
         model_path = self._resolve(download_root) / f"{module.model or 'small'}.pt"
         if model_path.is_file() and model_path.stat().st_size > 0:
             size_mib = model_path.stat().st_size / 1024**2

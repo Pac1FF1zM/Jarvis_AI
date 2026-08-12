@@ -6,10 +6,7 @@ executor. It returns semantic frames as data and cannot execute them.
 from __future__ import annotations
 
 import json
-import base64
-import queue
 import subprocess
-import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -23,6 +20,10 @@ from modules.nlu import (
     _normalise_transcription_for_nlu,
 )
 from tools._applications import resolve_application
+from modules.parakeet_client import (
+    DEFAULT_MODEL_DIR as PARAKEET_MODEL_DIR,
+    PersistentParakeetClient,
+)
 
 
 @dataclass(frozen=True)
@@ -96,9 +97,6 @@ class ShadowNLU:
         }
 
 
-PARAKEET_MODEL_DIR = Path(".local/parakeet/models/nvidia--parakeet-tdt-0.6b-v3")
-
-
 def decode_in_child(
     wav: Path,
     *,
@@ -140,141 +138,4 @@ def decode_in_child(
     return json.loads(lines[-1])
 
 
-def _readline_with_timeout(stream: Any, timeout_seconds: float) -> str:
-    result: queue.Queue[str | BaseException] = queue.Queue(maxsize=1)
-
-    def read() -> None:
-        try:
-            result.put(stream.readline())
-        except BaseException as exc:  # Preserve the worker I/O error for the caller.
-            result.put(exc)
-
-    threading.Thread(target=read, daemon=True).start()
-    try:
-        value = result.get(timeout=timeout_seconds)
-    except queue.Empty as exc:
-        raise TimeoutError(f"Parakeet worker did not respond within {timeout_seconds:.1f}s") from exc
-    if isinstance(value, BaseException):
-        raise value
-    return value
-
-
-class PersistentParakeetDecoder:
-    """Keep the isolated model warm while exchanging in-memory WAV payloads."""
-
-    def __init__(
-        self,
-        *,
-        repository_root: Path,
-        timeout_seconds: float = 45.0,
-    ) -> None:
-        self.repository_root = repository_root.resolve()
-        self.timeout_seconds = timeout_seconds
-        self.process: subprocess.Popen[str] | None = None
-        self.startup: dict[str, Any] | None = None
-
-    def start(self) -> dict[str, Any]:
-        jarvis_python = self.repository_root / "venv/Scripts/python.exe"
-        model_dir = self.repository_root / PARAKEET_MODEL_DIR
-        if not jarvis_python.is_file():
-            raise FileNotFoundError(f"Jarvis interpreter not found: {jarvis_python}")
-        command = [
-            str(jarvis_python),
-            "-m",
-            "experiments.parakeet.worker.serve",
-            "--model-dir",
-            str(model_dir),
-        ]
-        self.process = subprocess.Popen(
-            command,
-            cwd=self.repository_root,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            bufsize=1,
-            shell=False,
-        )
-        try:
-            self.startup = self._receive()
-            if self.startup.get("event") != "ready":
-                raise RuntimeError(f"unexpected Parakeet startup response: {self.startup}")
-            return self.startup
-        except Exception:
-            self.close(force=True)
-            raise
-
-    def decode(self, wav_bytes: bytes) -> dict[str, Any]:
-        if not wav_bytes:
-            raise ValueError("captured audio is empty")
-        if self.process is None:
-            self.start()
-        self._send({"op": "decode", "audio_b64": base64.b64encode(wav_bytes).decode("ascii")})
-        try:
-            response = self._receive()
-        except TimeoutError:
-            # A timed-out native/CUDA generation cannot be safely interrupted
-            # in-process. Kill the isolated worker, discard this capture, and
-            # lazily start a clean worker for the next phrase.
-            self.close(force=True)
-            raise
-        if response.get("event") == "error":
-            raise RuntimeError(str(response.get("error", "Parakeet worker error")))
-        if response.get("event") != "result":
-            raise RuntimeError(f"unexpected Parakeet response: {response}")
-        return response
-
-    def _send(self, payload: dict[str, Any]) -> None:
-        process = self.process
-        if process is None or process.stdin is None or process.poll() is not None:
-            raise RuntimeError("Parakeet worker is not running")
-        process.stdin.write(json.dumps(payload, ensure_ascii=True) + "\n")
-        process.stdin.flush()
-
-    def _receive(self) -> dict[str, Any]:
-        process = self.process
-        if process is None or process.stdout is None:
-            raise RuntimeError("Parakeet worker is not running")
-        line = _readline_with_timeout(process.stdout, self.timeout_seconds)
-        if not line:
-            # stdout may reach EOF just before poll() observes process exit.
-            # Wait briefly so the real worker traceback is never hidden by
-            # that race, then drain stderr once the pipe is closed.
-            try:
-                process.wait(timeout=2.0)
-            except subprocess.TimeoutExpired:
-                pass
-            detail = process.stderr.read().strip() if process.stderr is not None else ""
-            raise RuntimeError(f"Parakeet worker exited without a response: {detail}")
-        return json.loads(line)
-
-    def close(self, *, force: bool = False) -> None:
-        process, self.process = self.process, None
-        if process is None:
-            return
-        if not force and process.poll() is None:
-            try:
-                assert process.stdin is not None
-                process.stdin.write('{"op":"close"}\n')
-                process.stdin.flush()
-                process.wait(timeout=3.0)
-            except (BrokenPipeError, subprocess.TimeoutExpired):
-                force = True
-        if force and process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=3.0)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=3.0)
-        for stream in (process.stdin, process.stdout, process.stderr):
-            if stream is not None:
-                stream.close()
-
-    def __enter__(self) -> "PersistentParakeetDecoder":
-        self.start()
-        return self
-
-    def __exit__(self, *_args: object) -> None:
-        self.close()
+PersistentParakeetDecoder = PersistentParakeetClient

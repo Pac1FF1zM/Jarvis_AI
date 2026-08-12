@@ -1,8 +1,19 @@
 # Changelog
 
-## [Unreleased] — checkpoint 2026-08-13: Parakeet shadow, semantic safety, Jester runtime
+## [Unreleased] — 2026-08-13: experimental production Parakeet
 
 ### STT и безопасная диагностика
+
+- Parakeet подключён к основному `STTModule` за двойным config-gate
+  (`engine: parakeet` + `experimental_production: true`). Persistent worker
+  получает production PCM, публикует стандартный `transcription_ready` и
+  корректно закрывается вместе с Jarvis. Откат на Whisper не требует изменения
+  кода.
+- Старый 40-token decode bound, обрезавший длинные русские фразы, увеличен до
+  96 при сохранении верхнего 12-секундного audio bound.
+- Добавлен парный no-action benchmark runner. На 20 публичных human-speech
+  FLEURS `ru_ru/dev` клипах ≤12 с Parakeet получил WER 4,40%, Whisper small —
+  5,35%; mean decode 1210 против 2149 мс соответственно.
 
 - Добавлен изолированный live shadow-пайплайн для
   `nvidia/parakeet-tdt-0.6b-v3` с закреплённой revision и отдельным локальным
@@ -12,10 +23,10 @@
 - Добавлены `SETUP_PARAKEET.cmd` и `TEST_PARAKEET_NLU.cmd`. Скрипты используют
   только существующий `venv\Scripts\python.exe`; license review, immutable
   evidence принятия CC-BY-4.0, модель и runtime находятся в `.local/`.
-- Persistent worker прогревается один раз. Decode ограничен 40 новыми токенами;
+- Persistent worker прогревается один раз. Decode ограничен 96 новыми токенами;
   timeout завершает изолированный worker, отбрасывает текущий capture и
   позволяет следующей реплике запустить чистый процесс.
-- Production Whisper остаётся основным STT. Ошибка, отсутствующий пакет или
+- Whisper остаётся настроенным production baseline. Ошибка, отсутствующий пакет или
   некорректное аудио теперь fail closed: публикуется пустой transcript с
   confidence `0.0`, а не синтетическая команда.
 

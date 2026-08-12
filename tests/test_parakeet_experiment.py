@@ -14,6 +14,12 @@ from experiments.parakeet import fixtures as fixture_mod
 from experiments.parakeet import shadow_pipeline as shadow_mod
 from modules.semantic_commit import prepare_final_utterance
 from experiments.parakeet.benchmarks.no_action import NoActionGuard
+from experiments.parakeet.benchmarks.compare_stt import (
+    error_counts,
+    load_manifest,
+    normalize_text,
+    summarize,
+)
 from experiments.parakeet.scripts import fixture_tool, model_acquisition, shadow_test
 from experiments.parakeet.worker import backend as backend_mod
 
@@ -83,7 +89,7 @@ def test_backend_passes_numpy_audio_to_parakeet_processor(monkeypatch):
     assert backend.transcribe(_wav()) == "тест"
     assert isinstance(observed["audio"][0], np.ndarray)
     assert observed["audio"][0].dtype == np.float32
-    assert observed["generation"]["max_new_tokens"] == 40
+    assert observed["generation"]["max_new_tokens"] == backend_mod.MAX_NEW_TOKENS == 96
 
 
 def test_model_and_revision_are_pinned_consistently():
@@ -189,9 +195,10 @@ def test_shadow_pipeline_has_no_action_pipeline_hooks():
 
 def test_worker_eof_reports_stderr_after_exit(tmp_path):
     decoder = shadow_mod.PersistentParakeetDecoder(repository_root=tmp_path)
+    decoder._stderr_tail.append("real startup failure")
     decoder.process = SimpleNamespace(
         stdout=io.StringIO(""),
-        stderr=io.StringIO("real startup failure"),
+        stderr=io.StringIO(""),
         wait=lambda timeout: 1,
     )
     with pytest.raises(RuntimeError, match="real startup failure"):
@@ -294,3 +301,60 @@ def test_optional_local_model_smoke():
         assert backend.health()["state"] == "ready"
     finally:
         backend.close()
+
+
+def test_benchmark_normalization_and_edit_metrics_are_deterministic():
+    assert normalize_text("  Ёж, ОТКРОЙ Browser! ") == "еж открой browser"
+    counts = error_counts("открой браузер", "открой новый браузер")
+    assert counts["word_errors"] == 1
+    assert counts["reference_words"] == 2
+    assert counts["exact"] == 0
+
+
+def test_benchmark_manifest_requires_real_references_and_audio(tmp_path):
+    audio = tmp_path / "sample.wav"
+    audio.write_bytes(_wav())
+    manifest = tmp_path / "manifest.jsonl"
+    manifest.write_text(
+        json.dumps(
+            {"id": "one", "path": "sample.wav", "reference_text": "тест"},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    assert load_manifest(manifest)[0]["path"] == str(audio.resolve())
+    manifest.write_text(
+        json.dumps({"id": "bad", "path": "sample.wav", "reference_text": ""}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="human reference_text"):
+        load_manifest(manifest)
+
+
+def test_benchmark_summary_uses_corpus_wer_and_latency():
+    rows = [
+        {
+            "word_errors": 1,
+            "reference_words": 2,
+            "char_errors": 1,
+            "reference_chars": 10,
+            "exact": 0,
+            "latency_ms": 100.0,
+            "audio_seconds": 1.0,
+        },
+        {
+            "word_errors": 0,
+            "reference_words": 3,
+            "char_errors": 0,
+            "reference_chars": 12,
+            "exact": 1,
+            "latency_ms": 200.0,
+            "audio_seconds": 2.0,
+        },
+    ]
+    result = summarize("test", rows)
+    assert result["wer"] == pytest.approx(0.2)
+    assert result["cer"] == pytest.approx(1 / 22)
+    assert result["exact_match_rate"] == 0.5
+    assert result["latency_ms"]["median"] == 150.0
+    assert result["rtf"] == pytest.approx(0.1)

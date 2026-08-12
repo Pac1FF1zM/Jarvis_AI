@@ -1,4 +1,4 @@
-"""Tests for the official OpenAI Whisper STT backend.
+"""Tests for the production Whisper and experimental Parakeet STT backends.
 
 All real-engine behavior is mocked: tests never download weights or require a
 GPU. They verify one-time loading, off-loop blocking work, confidence mapping,
@@ -7,9 +7,11 @@ trace propagation, safe stub fallback, and actionable CUDA OOM handling.
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import math
 import threading
+import wave
 from typing import Any
 
 import pytest
@@ -239,3 +241,105 @@ def test_auto_device_selects_cuda_or_cpu(
 
     assert mod._device == expected_device
     assert mod._fp16 is expected_fp16
+
+
+def _parakeet_config(*, approved: bool = True) -> ModuleConfig:
+    return ModuleConfig(
+        device="cpu",
+        model="base",
+        params={
+            "engine": "parakeet",
+            "experimental_production": approved,
+            "parakeet_model_dir": ".local/test-model",
+            "parakeet_python": "venv/Scripts/python.exe",
+            "parakeet_timeout_seconds": 2,
+        },
+    )
+
+
+def test_raw_16khz_pcm_is_wrapped_for_parakeet():
+    pcm = b"\x01\x00" * 160
+    payload = stt_mod._payload_to_pcm_wav(
+        {
+            "audio": pcm,
+            "sample_rate": 16_000,
+            "channels": 1,
+            "sample_width": 2,
+        }
+    )
+
+    assert payload is not None
+    with wave.open(io.BytesIO(payload), "rb") as wav_file:
+        assert wav_file.getparams()[:3] == (1, 2, 16_000)
+        assert wav_file.readframes(160) == pcm
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        {"audio": b"\x00\x00", "sample_rate": 8_000},
+        {"audio": b"\x00\x00", "sample_rate": 16_000, "channels": 2},
+        {"audio": b"\x00", "sample_rate": 16_000},
+        {"audio": b"<stub-pcm-chunks>", "sample_rate": 16_000},
+    ),
+)
+def test_parakeet_rejects_non_production_audio_shapes(payload):
+    assert stt_mod._payload_to_pcm_wav(payload) is None
+
+
+async def test_parakeet_requires_explicit_production_gate(bus, gpu_lock):
+    mod = STTModule(_parakeet_config(approved=False), gpu_lock)
+
+    with pytest.raises(RuntimeError, match="experimental_production"):
+        await mod.start(bus)
+
+
+async def test_parakeet_worker_is_warm_reused_and_closed_off_loop(
+    bus, gpu_lock, monkeypatch
+):
+    event_loop_thread = threading.get_ident()
+    instances = []
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.thread_ids = []
+            self.closed = False
+            instances.append(self)
+
+        def start(self):
+            self.thread_ids.append(threading.get_ident())
+            return {
+                "event": "ready",
+                "model_load_ms": 10,
+                "warm_up_ms": 2,
+                "health": {"model_id": "parakeet", "model_revision": "rev"},
+            }
+
+        def decode(self, wav_bytes):
+            self.thread_ids.append(threading.get_ident())
+            assert wav_bytes.startswith(b"RIFF")
+            return {"event": "result", "text": " открой браузер ", "decode_ms": 4}
+
+        def close(self):
+            self.thread_ids.append(threading.get_ident())
+            self.closed = True
+
+    monkeypatch.setattr(stt_mod, "PersistentParakeetClient", FakeClient)
+    mod = STTModule(_parakeet_config(), gpu_lock)
+    await mod.start(bus)
+    pcm_payload = {
+        "audio": b"\x00\x00" * 160,
+        "sample_rate": 16_000,
+        "channels": 1,
+        "sample_width": 2,
+    }
+
+    assert await mod._transcribe(pcm_payload) == ("открой браузер", 0.0)
+    assert await mod._transcribe(pcm_payload) == ("открой браузер", 0.0)
+    await mod.stop()
+
+    assert len(instances) == 1
+    assert instances[0].kwargs["provider"] == "cpu"
+    assert instances[0].closed is True
+    assert all(thread_id != event_loop_thread for thread_id in instances[0].thread_ids)

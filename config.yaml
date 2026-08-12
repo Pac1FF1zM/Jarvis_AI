@@ -84,13 +84,20 @@ modules:
       max_duration_ms: 12000
       hotkey: "<ctrl>+<alt>+<space>"
 
-  # Official OpenAI Whisper (no Hugging Face dependency or endpoint).
+  # Experimental production A/B candidate. Set engine back to "whisper" for
+  # an immediate rollback; the existing Whisper model/options stay intact.
   stt:
     enabled: true
-    # Uses CUDA + FP16 when PyTorch sees an NVIDIA GPU, otherwise CPU + FP32.
+    # Parakeet uses a pinned, license-approved local snapshot in an isolated
+    # persistent worker. "auto" selects CUDA on this machine.
     device: "auto"
     model: "small"
     params:
+      engine: parakeet
+      experimental_production: true
+      parakeet_model_dir: .local/parakeet/models/nvidia--parakeet-tdt-0.6b-v3
+      parakeet_python: venv/Scripts/python.exe
+      parakeet_timeout_seconds: 45
       language: ru
       download_root: models/openai-whisper
       # Balanced accuracy profile for short, independent voice commands.

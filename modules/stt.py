@@ -1,4 +1,4 @@
-"""STT module — speech-to-text via OpenAI's official Whisper package.
+"""STT module with production Whisper and experimental Parakeet engines.
 
 Subscribes to ``audio_captured``, runs transcription under the shared GPU lock,
 and publishes ``transcription_ready`` as a child event so the trace_id carries
@@ -39,14 +39,18 @@ cache directory.
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import math
+from pathlib import Path
+import wave
 from typing import Any
 
 from core.base_module import BaseModule
 from core.event_bus import EventBus, Event
 from core.event_payloads import TranscriptionReadyPayload
 from core.gpu_lock import GPULock
+from modules.parakeet_client import DEFAULT_MODEL_DIR, PersistentParakeetClient
 
 logger = logging.getLogger("jarvis.module.stt")
 
@@ -116,6 +120,12 @@ class STTModule(BaseModule):
         # stays importable when only stub mode is used.
         self._np: Any = None
         params = getattr(config, "params", {}) or {}
+        self._engine = str(params.get("engine", "whisper")).strip().casefold()
+        if self._engine not in {"whisper", "parakeet"}:
+            raise ValueError("stt.params.engine must be 'whisper' or 'parakeet'")
+        self._experimental_production = bool(
+            params.get("experimental_production", False)
+        )
         self._language = str(params.get("language", "ru"))
         self._download_root = str(
             params.get("download_root", "models/openai-whisper")
@@ -142,11 +152,45 @@ class STTModule(BaseModule):
                 ),
             )
         ).strip()
+        self._parakeet: PersistentParakeetClient | None = None
+        self._parakeet_model_dir = str(
+            params.get("parakeet_model_dir", DEFAULT_MODEL_DIR)
+        )
+        self._parakeet_python = str(
+            params.get("parakeet_python", "venv/Scripts/python.exe")
+        )
+        self._parakeet_timeout = float(params.get("parakeet_timeout_seconds", 45.0))
+        if self._parakeet_timeout <= 0:
+            raise ValueError("stt.params.parakeet_timeout_seconds must be > 0")
+
     async def start(self, bus: EventBus) -> None:
         self.bus = bus
         bus.subscribe("audio_captured", self._on_audio)
 
-        if _WHISPER is None:
+        if self._engine == "parakeet":
+            if not self._experimental_production:
+                raise RuntimeError(
+                    "Parakeet production wiring requires "
+                    "stt.params.experimental_production: true"
+                )
+            self._parakeet = PersistentParakeetClient(
+                repository_root=Path.cwd(),
+                model_dir=self._parakeet_model_dir,
+                python_executable=self._parakeet_python,
+                provider=self._device,
+                timeout_seconds=self._parakeet_timeout,
+            )
+            startup = await asyncio.to_thread(self._parakeet.start)
+            logger.warning(
+                "EXPERIMENTAL_STT_ACTIVE engine=parakeet provider=%s "
+                "model=%s revision=%s load_ms=%.2f warm_up_ms=%.2f",
+                self._device,
+                startup.get("health", {}).get("model_id", "unknown"),
+                startup.get("health", {}).get("model_revision", "unknown"),
+                float(startup.get("model_load_ms") or 0.0),
+                float(startup.get("warm_up_ms") or 0.0),
+            )
+        elif _WHISPER is None:
             logger.warning(
                 "openai-whisper not installed — pip install openai-whisper; "
                 "STT will return empty transcripts"
@@ -169,9 +213,14 @@ class STTModule(BaseModule):
                 raise
 
         logger.info(
-            "STTModule started (mode=%s) device=%s model=%s language=%s "
+            "STTModule started (mode=%s) engine=%s device=%s model=%s language=%s "
             "temperature=%.1f beam_size=%s previous_text=%s",
-            "real" if self._model is not None else "unavailable",
+            (
+                "real"
+                if self._model is not None or self._parakeet is not None
+                else "unavailable"
+            ),
+            self._engine,
             self._device,
             self.config.model,
             self._language,
@@ -181,6 +230,9 @@ class STTModule(BaseModule):
         )
 
     async def stop(self) -> None:
+        if self._parakeet is not None:
+            parakeet, self._parakeet = self._parakeet, None
+            await asyncio.to_thread(parakeet.close)
         logger.info("STTModule stopped")
 
     # ------------------------------------------------------------------ #
@@ -212,7 +264,11 @@ class STTModule(BaseModule):
             return
         out = event.child(
             "transcription_ready",
-            TranscriptionReadyPayload(text=text, confidence=confidence),
+            TranscriptionReadyPayload(
+                text=text,
+                confidence=confidence,
+                source=self._engine if self._engine == "parakeet" else None,
+            ),
         )
         self.bus.publish_event(out)
         logger.info(
@@ -233,6 +289,9 @@ class STTModule(BaseModule):
             real OpenAI Whisper path (via a worker thread).
           - Otherwise -> an empty, fail-closed final transcript.
         """
+        if self._engine == "parakeet":
+            return await self._transcribe_parakeet(audio_payload)
+
         if self._model is None:
             # Missing STT is an explicit empty result, never a guessed command.
             async with self.gpu_lock.section("stt"):
@@ -248,6 +307,31 @@ class STTModule(BaseModule):
             return "", 0.0
 
         return await self._transcribe_real(audio_array)
+
+    async def _transcribe_parakeet(
+        self, audio_payload: dict[str, Any]
+    ) -> tuple[str, float]:
+        """Send a strict 16 kHz mono PCM WAV to the isolated warm worker."""
+        if self._parakeet is None:
+            return "", 0.0
+        wav_bytes = _payload_to_pcm_wav(audio_payload)
+        if wav_bytes is None:
+            logger.warning(
+                "non-decodable Parakeet audio payload — returning empty transcription"
+            )
+            return "", 0.0
+        async with self.gpu_lock.section("stt"):
+            result = await asyncio.to_thread(self._parakeet.decode, wav_bytes)
+        text = str(result.get("text", "")).strip()
+        logger.info(
+            "PARAKEET_DECODE decode_ms=%.2f text_chars=%d",
+            float(result.get("decode_ms") or 0.0),
+            len(text),
+        )
+        # The Transformers TDT adapter does not expose calibrated utterance
+        # confidence. Zero explicitly means "unavailable", not "rejected";
+        # command acceptance is controlled by NLU intent confidence.
+        return text, 0.0
 
     def _decode_audio(self, audio_payload: dict[str, Any]) -> Any:
         """Decode payload bytes into a float32 numpy array at 16 kHz.
@@ -394,6 +478,45 @@ def _bytes_to_float32(np_module: Any, raw: bytes, sample_rate: int) -> Any:
     except Exception:
         pass
     return None
+
+
+def _payload_to_pcm_wav(audio_payload: dict[str, Any]) -> bytes | None:
+    """Normalize Jarvis raw PCM (or an already valid WAV) for Parakeet."""
+    raw = audio_payload.get("audio")
+    if not isinstance(raw, (bytes, bytearray)):
+        return None
+    raw_bytes = bytes(raw)
+    if not raw_bytes or raw_bytes in _STUB_AUDIO_MARKERS:
+        return None
+    sample_rate = int(audio_payload.get("sample_rate", _WHISPER_SAMPLE_RATE))
+    channels = int(audio_payload.get("channels", 1))
+    sample_width = int(audio_payload.get("sample_width", 2))
+    if raw_bytes.startswith(b"RIFF"):
+        try:
+            with wave.open(io.BytesIO(raw_bytes), "rb") as wav_file:
+                valid = (
+                    wav_file.getframerate() == _WHISPER_SAMPLE_RATE
+                    and wav_file.getnchannels() == 1
+                    and wav_file.getsampwidth() == 2
+                    and wav_file.getnframes() > 0
+                )
+            return raw_bytes if valid else None
+        except (wave.Error, EOFError):
+            return None
+    if (
+        sample_rate != _WHISPER_SAMPLE_RATE
+        or channels != 1
+        or sample_width != 2
+        or len(raw_bytes) % 2
+    ):
+        return None
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(_WHISPER_SAMPLE_RATE)
+        wav_file.writeframes(raw_bytes)
+    return output.getvalue()
 
 
 def _resample_linear(

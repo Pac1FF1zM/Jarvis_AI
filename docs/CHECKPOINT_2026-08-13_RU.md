@@ -1,5 +1,8 @@
 # Jarvis — checkpoint и handoff от 13 августа 2026
 
+> Исторический снимок состояния до production wiring. Актуальное продолжение:
+> [Experimental production Parakeet](PARAKEET_PRODUCTION_EXPERIMENT_RU.md).
+
 Этот документ — точка продолжения для нового чата Codex. Он описывает состояние
 ветки `codex/parakeet-shadow-nlu-test` относительно предыдущего checkpoint
 `607e2cb` от 9 августа 2026.

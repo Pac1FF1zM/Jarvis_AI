@@ -299,6 +299,32 @@ def test_invalid_runtime_config_is_reported_before_module_start(tmp_path):
     assert "wake_phrase_vad_threshold" in check.detail
 
 
+def test_doctor_validates_selected_parakeet_runtime_instead_of_whisper(tmp_path):
+    runner = _healthy_runner(tmp_path)
+    interpreter = tmp_path / "venv" / "Scripts" / "python.exe"
+    interpreter.parent.mkdir(parents=True)
+    interpreter.write_bytes(b"runtime")
+    model_dir = tmp_path / ".local" / "parakeet" / "model"
+    model_dir.mkdir(parents=True)
+    for name in ("config.json", "processor_config.json", "model.safetensors"):
+        (model_dir / name).write_bytes(b"present")
+    runner.config.modules["stt"].params.update(
+        {
+            "engine": "parakeet",
+            "experimental_production": True,
+            "parakeet_python": str(interpreter),
+            "parakeet_model_dir": str(model_dir),
+        }
+    )
+
+    report = runner.run()
+    by_id = {check.check_id: check for check in report.checks}
+
+    assert by_id["engine.parakeet"].status == DiagnosticStatus.PASS
+    assert by_id["model.parakeet"].status == DiagnosticStatus.PASS
+    assert "engine.whisper" not in by_id
+
+
 def test_wrong_yaml_value_types_do_not_crash_doctor(tmp_path):
     config = _config(tmp_path)
     config.logging = []  # type: ignore[assignment]

@@ -12,6 +12,10 @@ from typing import Any
 MODEL_ID = "nvidia/parakeet-tdt-0.6b-v3"
 MODEL_REVISION = "541d1f99c6b0c3cd0b11a95167540bb8edefd82b"
 SAMPLE_RATE = 16_000
+# The production microphone already hard-stops at 12 seconds. Russian text
+# needs substantially more subword tokens than the old 40-token English-ish
+# command bound; 96 completes that capture window while remaining bounded.
+MAX_NEW_TOKENS = 96
 
 
 class ParakeetConfigurationError(RuntimeError):
@@ -127,13 +131,13 @@ class ParakeetBackend:
         with torch.inference_mode():
             # Jarvis captures short commands.  Bound decoder work so a noisy
             # or adversarial clip cannot consume the worker indefinitely.
-            # Match the model/runtime's previously effective 40-token command
-            # bound explicitly. This removes the generic generation warning;
-            # longer speech belongs in a dictation backend, not this command UI.
+            # Keep generation bounded in addition to the upstream 12-second
+            # audio bound. This is enough for compound Russian commands without
+            # silently clipping valid transcripts.
             output = model.generate(
                 **inputs,
                 return_dict_in_generate=True,
-                max_new_tokens=40,
+                max_new_tokens=MAX_NEW_TOKENS,
             )
         return _decoded_text(processor.decode(output.sequences, skip_special_tokens=True))
 

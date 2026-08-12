@@ -28,15 +28,41 @@ def isolate_optional_runtime_engines(
     production.  Without this fixture, installing Whisper, Ollama, Silero or
     sounddevice changes integration-test behaviour and can trigger downloads,
     network calls, microphone access or real playback.  Tests for a real code
-    path explicitly replace these ``None`` values with their own fakes.
+    path explicitly replaces these disabled values with its own fakes.
     """
     import modules.llm as llm_module
     import modules.stt as stt_module
     import modules.tts as tts_module
     import modules.wake_word as wake_word_module
 
+    class _DisabledParakeetClient:
+        """Fast offline stand-in for integration tests using production config."""
+
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def start(self):
+            return {
+                "event": "ready",
+                "model_load_ms": 0.0,
+                "warm_up_ms": 0.0,
+                "health": {
+                    "model_id": "pytest-disabled-parakeet",
+                    "model_revision": "offline",
+                },
+            }
+
+        def decode(self, _wav_bytes):
+            return {"event": "result", "text": "", "decode_ms": 0.0}
+
+        def close(self):
+            return None
+
     monkeypatch.setattr(llm_module, "_OLLAMA", None)
     monkeypatch.setattr(stt_module, "_WHISPER", None)
+    monkeypatch.setattr(
+        stt_module, "PersistentParakeetClient", _DisabledParakeetClient
+    )
     monkeypatch.setattr(tts_module, "_SILERO_TTS", None)
     monkeypatch.setattr(tts_module, "_SOUNDDEVICE", None)
     monkeypatch.setattr(wake_word_module, "_SOUNDDEVICE", None)

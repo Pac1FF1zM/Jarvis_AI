@@ -15,14 +15,15 @@ EventBus проверяет обязательные поля и диапазо�
 
 | Область | Текущее состояние |
 |---|---|
-| Основной STT | `openai-whisper small`, подключён в `main.py` |
-| Кандидат STT | Parakeet TDT 0.6B v3 работает только в изолированном shadow-тесте; в Jarvis не включён |
+| Основной STT | experimental production `nvidia/parakeet-tdt-0.6b-v3`; откат на Whisper — `engine: whisper` |
+| Baseline STT | `openai-whisper small`, сохранён в конфиге и парном benchmark runner |
 | NLU | собственная CharCNN + детерминированный router + semantic commit gate |
 | Gesture Core | локально выбран Jester Tiny3D; checkpoint и отчёт не хранятся в Git |
-| Выполнение команд в Parakeet-тесте | всегда `blocked`; EventBus и инструменты не импортируются |
-| Голосовой benchmark | не начат; сравнительный WER/CER ещё не доказан |
+| Выполнение команд | shadow-тест всегда `blocked`; production Parakeet проходит обычные safety-гейты Jarvis |
+| Голосовой benchmark | FLEURS `ru_ru`, 20 парных human-speech записей ≤12 с: Parakeet WER 4,40%, Whisper 5,35% |
 
 Полный handoff для продолжения в новом чате: [checkpoint 2026-08-13](docs/CHECKPOINT_2026-08-13_RU.md).
+Актуальный STT A/B-отчёт: [experimental production Parakeet](docs/PARAKEET_PRODUCTION_EXPERIMENT_RU.md).
 
 ## Что работает сейчас
 
@@ -203,12 +204,16 @@ Train, validation и test сохраняются раздельно в `data/cus
 shortcut/исполняемый файл напрямую и никогда не превращает распознанную речь в
 строку PowerShell, CMD или произвольную shell-команду.
 
-## Безопасная проверка Parakeet + NLU
+## Parakeet: production experiment и безопасный shadow-тест
 
-Parakeet TDT 0.6B v3 — установленный локально кандидат STT, а не замена
-production Whisper. Его отдельный процесс принимает один PCM WAV 16 кГц mono,
-показывает transcript и результат production NLU в JSON и не содержит пути к
-выполнению инструментов.
+Parakeet TDT 0.6B v3 подключён как явно экспериментальный production STT. Его
+закреплённый checkpoint работает в отдельном постоянном процессе, принимает тот
+же PCM 16 кГц mono, что раньше получал Whisper, и публикует стандартный
+`transcription_ready`. Ошибка или timeout дают пустой transcript; скрытого
+fallback и смешивания гипотез нет. Для мгновенного отката измените
+`modules.stt.params.engine` в `config.yaml` с `parakeet` на `whisper`.
+
+Отдельный no-action shadow-контур сохранён для безопасной диагностики:
 
 ```bat
 SETUP_PARAKEET.cmd --status
@@ -216,7 +221,9 @@ TEST_PARAKEET_NLU.cmd --mic
 ```
 
 В live-режиме Enter начинает и завершает одну реплику. Каждое распознанное
-действие помечено `execution: blocked`. Модель, immutable evidence принятия
+действие помечено `execution: blocked`. В отличие от него, обычный `main.py`
+является реальным Jarvis runtime и может выполнять прошедшие safety-гейты
+команды. Модель, immutable evidence принятия
 лицензии и любые будущие private fixtures находятся в `.local/` и не попадают
 в Git. Установка и диагностика подробно описаны в
 [experiments/parakeet/README.md](experiments/parakeet/README.md).
@@ -332,8 +339,8 @@ python main.py --doctor --json   # структурированный отчёт
 
 Doctor ничего не скачивает, не открывает аудиопоток, не включает микрофон и не
 воспроизводит звук. Он проверяет Python и Windows, RAM и диск, доступность
-runtime-путей, собственный NLU checkpoint, PyTorch/CUDA/GPU, Whisper и его
-локальный checkpoint, push-to-talk/VAD, устройства ввода и вывода, Silero TTS,
+runtime-путей, собственный NLU checkpoint, PyTorch/CUDA/GPU, выбранный STT и
+его локальный checkpoint, push-to-talk/VAD, устройства ввода и вывода, Silero TTS,
 сервер Ollama, выбранную модель и совместимость активной калибровки с текущим
 микрофоном.
 
@@ -402,7 +409,7 @@ python main.py --text "нет, я имел в виду Discord"
 
 Каждый запуск автоматически сохраняет отдельный UTF-8 лог в
 `logs/sessions/jarvis_session_*.txt`. Путь печатается при старте как
-`SESSION_LOG_READY`. Файл содержит распознанный Whisper текст, confidence,
+`SESSION_LOG_READY`. Файл содержит распознанный STT-текст, confidence,
 решение NLU, параметры инструмента, ответ и ошибки; его можно прикладывать как
 feedback для подготовки следующего обучающего корпуса. `logs/jarvis.log`
 по-прежнему содержит только последний запуск для анализа задержек.
@@ -525,15 +532,17 @@ memory/     краткосрочная память и SQLite-хранилище
 tests/      unit, regression и end-to-end тесты
 ```
 
-Конфигурация модулей находится в `config.yaml`. Whisper `small` автоматически
-выбирает CUDA/FP16, когда установлен CUDA-вариант PyTorch и доступна NVIDIA GPU;
-с CPU-вариантом PyTorch он запускается на CPU/FP32. Собственная NLU работает на
-CPU, а GPU-доступ моделей сериализуется через `GPULock`.
+Конфигурация модулей находится в `config.yaml`. Сейчас `stt.params.engine`
+выбирает экспериментальный Parakeet; обязательный флаг
+`experimental_production: true` не даёт включить его случайно. Whisper `small`
+остаётся полностью настроенным baseline. Собственная NLU работает на CPU, а
+GPU-доступ моделей сериализуется через `GPULock`.
 
 ## Пока не реализовано
 
-- парный STT benchmark на одном и том же аудио с human-authored reference;
-- production-подключение Parakeet или другого нового STT — решение не принято;
+- парный benchmark на приватном корпусе именно боевых команд владельца (публичный
+  FLEURS smoke уже выполнен, но не заменяет этот acceptance gate);
+- окончательное promotion/rollback-решение после production A/B сессий;
 - дообучение NLU на подтверждённом корпусе реальных STT-искажений;
 - произвольная автоматизация интерфейса внутри любого приложения (клики по
   неизвестным кнопкам, заполнение форм и чтение содержимого экрана);
