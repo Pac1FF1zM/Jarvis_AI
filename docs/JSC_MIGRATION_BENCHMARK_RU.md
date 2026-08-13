@@ -2,7 +2,7 @@
 
 ## Итог
 
-**JSC v8 пока нельзя ставить вместо NLU в production.** На отдельном migration development-наборе constrained JSC получил 18.75% Exact JAL против 20.75% у production NLU и не прошёл 6 из 8 обязательных проверок.
+**JSC v8 пока нельзя ставить вместо NLU в production.** На отдельном migration development-наборе constrained JSC получил 16.75% Exact JAL против 18.50% у production NLU и не прошёл 6 из 8 обязательных проверок.
 
 При этом Structured JSC подтверждён как правильное направление: без autoregressive JSON он сохранил тот же Exact JAL, обеспечил 100% валидность схемы и нулевой opposite-action rate, резко сократив latency.
 
@@ -18,17 +18,17 @@
 
 | System | Exact JAL | Tool sequence | Arguments | Schema valid | False execution | Opposite action |
 |---|---:|---:|---:|---:|---:|---:|
-| production_nlu | 20.75% | 33.50% | 29.75% | 100.00% | 1.50% | 4.50% |
-| jsc_v8_raw | 4.25% | 14.00% | 7.50% | 58.25% | 4.50% | 0.75% |
-| jsc_v8_constrained | 18.75% | 30.75% | 27.25% | 100.00% | 3.00% | 0.00% |
-| jsc_v8_structured_only | 18.75% | 32.75% | 30.25% | 100.00% | 0.00% | 0.00% |
+| production_nlu | 18.50% | 31.25% | 27.50% | 100.00% | 1.50% | 4.50% |
+| jsc_v8_raw | 4.00% | 12.25% | 7.25% | 57.50% | 4.50% | 0.75% |
+| jsc_v8_constrained | 16.75% | 28.50% | 25.25% | 100.00% | 3.00% | 0.00% |
+| jsc_v8_structured_only | 16.75% | 30.75% | 28.25% | 100.00% | 0.00% | 0.00% |
 
 ## Миграционные пороги для constrained JSC
 
 | Проверка | Результат | Порог | Статус |
 |---|---:|---:|:---:|
-| Exact JAL, весь набор | 18.75% | 84.00% | FAIL |
-| Одиночные команды | 27.50% | 87.00% | FAIL |
+| Exact JAL, весь набор | 16.75% | 84.00% | FAIL |
+| Одиночные команды | 18.75% | 87.00% | FAIL |
 | Планы на 2–3 действия | 8.14% | 85.00% | FAIL |
 | Планы на 4–5 действий | 2.50% | 82.00% | FAIL |
 | Multi-turn | 0.00% | 87.00% | FAIL |
@@ -40,16 +40,16 @@
 
 | System | 1 действие | 2–3 действия | 4–5 действий | Multi-turn | ASR noise |
 |---|---:|---:|---:|---:|---:|
-| production_nlu | 30.46% | 9.30% | 5.00% | 0.00% | 80.00% |
-| jsc_v8_constrained | 29.89% | 8.14% | 2.50% | 0.00% | 60.00% |
-| jsc_v8_structured_only | 29.89% | 8.14% | 2.50% | 0.00% | 60.00% |
+| production_nlu | 25.29% | 9.30% | 5.00% | 0.00% | 73.33% |
+| jsc_v8_constrained | 25.29% | 8.14% | 2.50% | 0.00% | 56.67% |
+| jsc_v8_structured_only | 25.29% | 8.14% | 2.50% | 0.00% | 56.67% |
 
 ## Latency и JSON-декодер
 
-- Production NLU, CPU, single request p95: 90.76 мс.
-- JSC autoregressive JSON, GPU, single request p95: 3031.60 мс.
-- JSC structured-only, GPU, single request p95: 9.87 мс.
-- Structured-only быстрее полного декодера примерно в 307 раз по p95.
+- Production NLU, CPU, single request p95: 52.04 мс.
+- JSC autoregressive JSON, GPU, single request p95: 933.20 мс.
+- JSC structured-only, GPU, single request p95: 5.24 мс.
+- Structured-only быстрее полного декодера примерно в 178 раз по p95.
 - 28 эталонных планов превысили лимит JSON-декодера 384 токенов; максимум составил 444 токенов.
 
 ## Что показал Data-first аудит v8
@@ -62,8 +62,8 @@
 
 ## Сравнение кандидатов
 
-- Оба решили правильно: 48; только NLU: 35; только JSC: 27; ни один: 290.
-- Главная ошибка constrained JSC: неверный dialogue act — 244 случаев.
+- Оба решили правильно: 40; только NLU: 34; только JSC: 27; ни один: 299.
+- Главная ошибка constrained JSC: неверный dialogue act — 252 случаев.
 - У production NLU opposite-action rate равен 4.50%; у structured JSC — 0.00%.
 
 ## Решение

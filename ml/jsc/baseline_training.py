@@ -84,6 +84,7 @@ class TrainingConfig:
     init_checkpoint: str | None = None
     resume: str | None = None
     smoke: bool = False
+    final_generation_metrics: bool = True
 
     def __post_init__(self) -> None:
         if self.architecture not in ARCHITECTURES:
@@ -459,12 +460,20 @@ def train_baseline(config: TrainingConfig) -> dict[str, Any]:
         raise RuntimeError("training produced no best checkpoint")
     best = torch.load(best_path, map_location=device, weights_only=False)
     model.load_state_dict(best["model_state"])
-    validation_final = _final_metrics(
-        model,
-        context.validation,
-        context,
-        device,
-        config,
+    validation_final = (
+        _final_metrics(
+            model,
+            context.validation,
+            context,
+            device,
+            config,
+        )
+        if config.final_generation_metrics
+        else {
+            "teacher_forced": dict(best["validation_teacher_forced"]),
+            "generation": None,
+            "constrained_generation": None,
+        }
     )
     report = {
         "format_version": 1,
@@ -504,6 +513,7 @@ def train_baseline(config: TrainingConfig) -> dict[str, Any]:
             "freeze_base_for_parameters": config.freeze_base_for_parameters,
             "freeze_base_for_spans": config.freeze_base_for_spans,
             "freeze_base_for_semantics": config.freeze_base_for_semantics,
+            "final_generation_metrics": config.final_generation_metrics,
         },
         "device": str(device),
         "elapsed_seconds": round(time.perf_counter() - started, 3),
@@ -1491,7 +1501,7 @@ def _run_signature(
     context: TrainingContext,
     model_config: BaselineConfig,
 ) -> str:
-    ignored = {"output_dir", "device", "resume"}
+    ignored = {"output_dir", "device", "resume", "final_generation_metrics"}
     training = {key: value for key, value in asdict(config).items() if key not in ignored}
     payload = {
         "training": training,

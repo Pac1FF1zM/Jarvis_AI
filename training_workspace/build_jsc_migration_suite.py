@@ -62,7 +62,7 @@ def _row(
 
 def _single_rows() -> list[JSCExample]:
     open_frames = (
-        "открой {app}",
+        "открой мне {app} сейчас",
         "запусти приложение {app}",
         "мне нужен {app}, открой его",
         "подготовь {app} к работе",
@@ -296,7 +296,7 @@ def _asr_rows() -> list[JSCExample]:
         ("открой visual studio code", "открой вскод", "visual_studio_code", "open"),
         ("закрой discord", "закрой дискот", "discord", "close"),
         ("открой discord", "открой дискод", "discord", "open"),
-        ("открой paint", "открой пейнт", "paint", "open"),
+        ("открой paint", "открой пейнт пожалуйста", "paint", "open"),
         ("закрой paint", "закрой паинт", "paint", "close"),
         ("открой калькулятор", "отпрой калькулятор", "calculator", "open"),
         ("закрой telegram", "закрой телегу", "telegram", "close"),

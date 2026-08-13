@@ -415,6 +415,75 @@ def _run_jsc(
     return raw_predictions, constrained_predictions, structured_predictions, timing
 
 
+def predict_structured_jal(
+    examples: Sequence[JSCExample],
+    checkpoint_path: Path,
+    registry: Any,
+    device: torch.device,
+    batch_size: int = 32,
+    execution_threshold: float = 0.85,
+    verifier_threshold: float = 0.50,
+    span_threshold: float = 0.45,
+) -> tuple[list[str], dict[str, Any]]:
+    """Run the non-autoregressive JSC path for fast scaling experiments."""
+    model, tokenizer, config, _checkpoint = _load_jsc(checkpoint_path, device, registry)
+    rows = _inference_rows(examples, tokenizer, config.max_source_length)
+    loader = DataLoader(
+        rows,
+        batch_size=batch_size,
+        shuffle=False,
+        collate_fn=_inference_collate(tokenizer.pad_id),
+    )
+    examples_by_scenario = {example.scenario_id: example for example in examples}
+    parameter_labels = build_parameter_labels(registry)
+    tool_labels = ("<none>", *registry.tool_names)
+    predictions: list[str] = []
+    timings: list[float] = []
+    decisions: Counter[str] = Counter()
+    for batch in loader:
+        source_ids = batch["source_ids"].to(device)
+        source_mask = batch["source_mask"].to(device)
+        ordered = [examples_by_scenario[str(value)] for value in batch["scenario_id"]]
+        _sync(device)
+        started = time.perf_counter()
+        outputs = model.predict_verified_semantic_heads(source_ids, source_mask)
+        _sync(device)
+        timings.append((time.perf_counter() - started) * 1000.0)
+        act, count, tools, parameters, starts, ends, verifier = outputs
+        constrained = constrain_jal_predictions(
+            [_REJECT] * len(ordered),
+            act.cpu(),
+            registry,
+            execution_threshold=execution_threshold,
+            utterances=[example.text for example in ordered],
+            step_count_logits=count.cpu(),
+            tool_logits=tools.cpu(),
+            tool_labels=tool_labels,
+            parameter_logits=parameters.cpu(),
+            parameter_labels=parameter_labels,
+            span_start_logits=starts.cpu(),
+            span_end_logits=ends.cpu(),
+            span_slots=SPAN_ARGUMENTS,
+            span_sources=[serialize_source(example) for example in ordered],
+            span_threshold=span_threshold,
+            execution_verifier_logits=verifier.cpu(),
+            execution_verifier_threshold=verifier_threshold,
+        )
+        predictions.extend(constrained.predictions)
+        decisions.update(constrained.decisions)
+    per_example = [
+        duration / min(batch_size, len(examples) - index * batch_size)
+        for index, duration in enumerate(timings)
+    ]
+    return predictions, {
+        "device": str(device),
+        "batch_size": batch_size,
+        "batch": _latency_summary(timings),
+        "amortized_per_example": _latency_summary(per_example),
+        "decisions": dict(decisions),
+    }
+
+
 def _canonical_application(value: Any) -> str:
     resolved = resolve_application(str(value))
     return resolved.name if resolved is not None else str(value).casefold().strip()

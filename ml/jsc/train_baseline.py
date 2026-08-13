@@ -48,6 +48,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--resume")
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--check-only", action="store_true")
+    parser.add_argument(
+        "--final-generation-metrics",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
     return parser
 
 
@@ -94,6 +99,7 @@ def config_from_args(args: argparse.Namespace) -> TrainingConfig:
         freeze_base_for_semantics=args.freeze_base_for_semantics,
         resume=args.resume,
         smoke=compact,
+        final_generation_metrics=args.final_generation_metrics,
     )
 
 

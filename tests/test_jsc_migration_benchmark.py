@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 from argparse import Namespace
+from pathlib import Path
 
 import pytest
 
-from ml.jsc.data import JSCExample
+from ml.jsc.data import JSCExample, load_jsc_jsonl
 from ml.jsc.jal import DialogueAct, JALPlan, ToolCall, dumps, loads
 from ml.jsc.project_registry import build_project_schema_registry
 from training_workspace.jsc_migration_benchmark import (
@@ -124,3 +125,22 @@ def test_migration_suite_has_balanced_two_to_five_step_coverage():
     } == {2: 40, 3: 40, 4: 40, 5: 40}
     assert sum(row.category == "multi_turn" for row in rows) == 40
     assert sum(row.category == "asr_noise" for row in rows) == 30
+
+
+def test_migration_suite_has_no_exact_train_or_validation_leakage():
+    registry = build_project_schema_registry()
+    reference = [
+        *load_jsc_jsonl(
+            Path("training_workspace/jsc_data/train.jsonl"),
+            registry,
+            expected_split="train",
+        ),
+        *load_jsc_jsonl(
+            Path("training_workspace/jsc_data/validation.jsonl"),
+            registry,
+            expected_split="validation",
+        ),
+    ]
+    reference_signatures = {row.input_signature for row in reference}
+
+    assert not {row.input_signature for row in build()} & reference_signatures
