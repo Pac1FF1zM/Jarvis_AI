@@ -15,7 +15,10 @@ from ml.jsc.structured_codec import (
 )
 from ml.jsc.structured_labels import build_parameter_labels
 from ml.jsc.structured_model import StructuredJSCConfig, StructuredJSCModel
-from ml.jsc.structured_features import serialize_structured_source
+from ml.jsc.structured_features import (
+    serialize_structured_source,
+    structured_segment_targets,
+)
 from ml.jsc.structured_decoding import assemble_verified_explicit_execution
 
 
@@ -56,6 +59,57 @@ def test_structured_model_has_only_direct_program_heads():
         (2, 5),
     ]
     sum(value.float().mean() for value in outputs).backward()
+
+
+def test_segmented_router_predicts_boundaries_and_ordered_tools():
+    config = StructuredJSCConfig(
+        vocab_size=40,
+        num_acts=len(ACT_LABELS),
+        num_tools=13,
+        num_parameter_labels=10,
+        num_span_slots=len(STRUCTURED_SPAN_ARGUMENTS),
+        num_missing_labels=20,
+        num_reasons=5,
+        d_model=32,
+        encoder_layers=1,
+        step_layers=1,
+        attention_heads=4,
+        feedforward_dim=64,
+        dropout=0.0,
+        max_source_length=32,
+        segmented_router=True,
+    )
+    model = StructuredJSCModel(config)
+    source = torch.tensor([[1, 7, 8, 9, 10, 2]])
+    mask = source.ne(0)
+    segments = torch.tensor([[-1, 0, 0, 1, 1, -1]])
+
+    outputs = model(source, mask, conditioning_segment_ids=segments)
+
+    assert len(outputs) == 10
+    assert outputs[2].shape == (1, 8, 13)
+    assert outputs[9].shape == source.shape
+    assert hasattr(model, "segment_tool_head")
+    assert hasattr(model, "boundary_head")
+    sum(value.float().mean() for value in outputs).backward()
+
+
+def test_compound_segment_targets_align_coordinated_applications():
+    source = (
+        "USER:закрой калькулятор, проводник и пейнт\n"
+        "ROUTE_0:window_control\nROUTE_1:window_control\nROUTE_2:window_control"
+    )
+
+    segment_ids, boundaries, supervised = structured_segment_targets(source, 3)
+
+    user_offset = source.index("USER:") + len("USER:")
+    starts = [index - 1 - user_offset for index, value in enumerate(boundaries) if value]
+    assert starts == [0, source[user_offset:].index("проводник"), source[user_offset:].index("пейнт")]
+    assert segment_ids[user_offset + 1] == 0
+    assert segment_ids[user_offset + source[user_offset:].index("проводник") + 1] == 1
+    assert segment_ids[user_offset + source[user_offset:].index("пейнт") + 1] == 2
+    assert supervised[1] is True
+    assert supervised[-2] is True
 
 
 def test_integer_argument_span_uses_normalized_source_annotation():

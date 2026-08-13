@@ -105,6 +105,21 @@ modules:
     params:
       confidence_threshold: 0.55
 
+  # Experimental observer. It receives the same finalized transcription as
+  # production NLU, writes a comparable JAL prediction and never executes it.
+  jsc_shadow:
+    enabled: true
+    device: cpu
+    model: training_workspace/jsc_structured_runs_v5/runs/seed17/best.pt
+    params:
+      log_path: logs/jsc_shadow.jsonl
+      thresholds:
+        execution_threshold: 0.65
+        verifier_threshold: 0.70
+        parameter_threshold: 0.35
+        span_threshold: 0.20
+        missing_threshold: 0.35
+
   # Ollama qwen2.5:7b-instruct. Full 7B GPU offload will NOT fit in 3GB;
   # run on CPU, or use Q4_K_M / smaller. See README §3.
   llm:

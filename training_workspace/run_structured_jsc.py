@@ -36,7 +36,7 @@ from training_workspace.jsc_migration_benchmark import (
 
 
 DEFAULT_SEEDS = (17, 29, 41)
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 PREVIOUS_DIRECT_STRUCTURED_REFERENCE = {
     "commit": "9753746",
     "selected_seed_migration_exact_jal": 0.12,
@@ -301,7 +301,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     report = {
         "format_version": FORMAT_VERSION,
         "architecture": {
-            "name": "structured_jsc_no_json",
+            "name": "structured_jsc_segmented_router",
             "autoregressive_decoder": False,
             "generated_json": False,
             "direct_heads": [
@@ -313,6 +313,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "missing_slots",
                 "reason",
                 "execution_verifier",
+                "action_boundaries",
+                "segment_tool_router",
             ],
         },
         "protocol": {
@@ -486,7 +488,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("training_workspace/jsc_migration_data/development.jsonl"),
     )
     parser.add_argument(
-        "--output-root", type=Path, default=Path("training_workspace/jsc_structured_runs_v5")
+        "--output-root", type=Path, default=Path("training_workspace/jsc_structured_runs_v6")
     )
     parser.add_argument("--seeds", nargs="+", type=int, default=DEFAULT_SEEDS)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")

@@ -383,6 +383,7 @@ async def run_pipeline(
     from modules.llm import LLMModule
     from modules.gesture_control import GestureControlModule
     from modules.nlu import NLUModule
+    from modules.jsc_shadow import JSCShadowModule
     from modules.reminders import ReminderScheduler
     from modules.stt import STTModule
     from modules.text_output import TextOutputModule
@@ -468,6 +469,7 @@ async def run_pipeline(
 
     if text_input is not None:
         await start_if("nlu", lambda mc: NLUModule(mc, gpu_lock))
+        await start_if("jsc_shadow", lambda mc: JSCShadowModule(mc))
         await start_if(
             "llm", lambda mc: LLMModule(
                 mc,
@@ -493,6 +495,7 @@ async def run_pipeline(
             ),
             start_if("stt", lambda mc: STTModule(mc, gpu_lock)),
             start_if("nlu", lambda mc: NLUModule(mc, gpu_lock)),
+            start_if("jsc_shadow", lambda mc: JSCShadowModule(mc)),
             start_if(
                 "llm", lambda mc: LLMModule(
                     mc,
@@ -528,7 +531,7 @@ async def run_pipeline(
             raise startup_errors[0]
         voice_modules = voice_results
         wake_word = voice_modules[0]
-        if cfg.module("gesture").enabled and voice_modules[5] is not None:
+        if cfg.module("gesture").enabled and voice_modules[6] is not None:
             gesture_bridge = GestureActionBridge(tools)
             await gesture_bridge.start(bus)
             modules_started.append(gesture_bridge)

@@ -26,7 +26,10 @@ from .structured_codec import (
     build_missing_labels,
     decode_structured_jal,
 )
-from .structured_features import serialize_structured_source
+from .structured_features import (
+    serialize_structured_source,
+    structured_segment_targets,
+)
 from .structured_labels import build_parameter_labels
 from .structured_model import StructuredJSCConfig, StructuredJSCModel
 from .tokenizer import JSCCharTokenizer
@@ -59,6 +62,7 @@ class StructuredTrainingConfig:
     missing_threshold: float = 0.45
     resume: str | None = None
     smoke: bool = False
+    segmented_router: bool = True
 
     def __post_init__(self) -> None:
         if self.device not in {"auto", "cpu", "cuda"}:
@@ -151,6 +155,7 @@ def train_structured(config: StructuredTrainingConfig) -> dict[str, Any]:
         dropout=config.dropout,
         max_source_length=config.max_source_length,
         pad_id=context.tokenizer.pad_id,
+        segmented_router=config.segmented_router,
     )
     model = StructuredJSCModel(model_config).to(device)
     output = Path(config.output_dir)
@@ -288,8 +293,12 @@ def train_structured(config: StructuredTrainingConfig) -> dict[str, Any]:
         model, context.validation, context, device, config.batch_size, config
     )
     report = {
-        "format_version": 1,
-        "architecture": "structured_jsc_no_json",
+        "format_version": 2 if model.config.segmented_router else 1,
+        "architecture": (
+            "structured_jsc_segmented_router"
+            if model.config.segmented_router
+            else "structured_jsc_no_json"
+        ),
         "seed": config.seed,
         "parameters": model.parameter_count(),
         "best_epoch": best_epoch,
@@ -397,7 +406,9 @@ def cache_structured_checkpoint_logits(
     )
     by_id = {example.scenario_id: example for example in examples}
     ordered_examples: list[JSCExample] = []
-    chunks: list[list[torch.Tensor]] = [[] for _ in range(9)]
+    chunks: list[list[torch.Tensor]] = [
+        [] for _ in range(10 if model.config.segmented_router else 9)
+    ]
     for batch in loader:
         outputs = model(
             batch["source_ids"].to(resolved), batch["source_mask"].to(resolved)
@@ -408,7 +419,8 @@ def cache_structured_checkpoint_logits(
     maximum_source_width = max(
         value.shape[-1] for index in (4, 5) for value in chunks[index]
     )
-    for index in (4, 5):
+    variable_width_outputs = (4, 5, 9) if len(chunks) > 9 else (4, 5)
+    for index in variable_width_outputs:
         chunks[index] = [
             F.pad(
                 value,
@@ -563,7 +575,16 @@ def _epoch(
             dtype=torch.bfloat16 if device.type == "cuda" else torch.float32,
             enabled=device.type == "cuda" and config.use_amp,
         ):
-            outputs = model(source, mask, conditioning_tool_ids=tools)
+            outputs = model(
+                source,
+                mask,
+                conditioning_tool_ids=tools,
+                conditioning_segment_ids=(
+                    batch["segment_ids"].to(device)
+                    if model.config.segmented_router
+                    else None
+                ),
+            )
             loss_parts = _loss(outputs, batch, device, weights)
             loss = sum(loss_parts.values())
         if training:
@@ -593,7 +614,7 @@ def _loss(
     device: torch.device,
     weights: Mapping[str, torch.Tensor],
 ) -> dict[str, torch.Tensor]:
-    act, count, tools, parameters, starts, ends, verifier, missing, reason = outputs
+    act, count, tools, parameters, starts, ends, verifier, missing, reason = outputs[:9]
     acts = batch["act"].to(device)
     counts = batch["step_count"].to(device)
     tool_targets = batch["tool_ids"].to(device)
@@ -638,6 +659,20 @@ def _loss(
             pos_weight=weights["missing_pos"],
         )
         result["missing"] = raw[missing_mask].mean()
+    if len(outputs) > 9:
+        boundary_mask = batch["boundary_mask"].to(device)
+        if boundary_mask.any():
+            targets = batch["boundary_targets"].to(device)
+            positives = targets[boundary_mask].sum()
+            negatives = boundary_mask.sum() - positives
+            positive_weight = (negatives / positives.clamp_min(1.0)).clamp(
+                1.0, 32.0
+            )
+            result["boundary"] = 0.75 * F.binary_cross_entropy_with_logits(
+                outputs[9][boundary_mask],
+                targets[boundary_mask],
+                pos_weight=positive_weight,
+            )
     return result
 
 
@@ -680,6 +715,26 @@ def _collate(context: _Context):
         batch["missing_targets"] = missing_targets
         batch["missing_mask"] = missing_mask
         batch["reason_targets"] = torch.tensor(reason_targets, dtype=torch.long)
+        width = int(batch["source_ids"].shape[1])
+        segment_rows: list[list[int]] = []
+        boundary_rows: list[list[float]] = []
+        boundary_mask_rows: list[list[bool]] = []
+        for row, scenario_id in zip(rows, batch["scenario_id"]):
+            example = examples[scenario_id]
+            segments, boundaries, supervised = structured_segment_targets(
+                str(row["source_text"]), len(example.target.steps)
+            )
+            padding = width - len(segments)
+            segment_rows.append(segments + [-1] * padding)
+            boundary_rows.append(boundaries + [0.0] * padding)
+            boundary_mask_rows.append(supervised + [False] * padding)
+        batch["segment_ids"] = torch.tensor(segment_rows, dtype=torch.long)
+        batch["boundary_targets"] = torch.tensor(
+            boundary_rows, dtype=torch.float32
+        )
+        batch["boundary_mask"] = torch.tensor(
+            boundary_mask_rows, dtype=torch.bool
+        )
         return batch
 
     return collate
@@ -778,7 +833,7 @@ def _train_loader(dataset, examples, collate, config, epoch):
 def _save_checkpoint(path, model, model_config, context, config, epoch, signature):
     torch.save(
         {
-            "format_version": 1,
+            "format_version": 2 if model.config.segmented_router else 1,
             "kind": "jsc_structured_inference",
             "model_config": model_config.to_dict(),
             "model_state": {

@@ -24,7 +24,9 @@ logger = logging.getLogger("jarvis.config")
 # Canonical set of module names the orchestrator/modules expect to find.
 # Fix #5: any ``modules:`` entry not in this set is logged as a warning at
 # load time so typos surface immediately.
-EXPECTED_MODULE_NAMES = frozenset({"gesture", "wake_word", "stt", "nlu", "llm", "tts"})
+EXPECTED_MODULE_NAMES = frozenset(
+    {"gesture", "wake_word", "stt", "nlu", "jsc_shadow", "llm", "tts"}
+)
 
 
 @dataclass
@@ -139,4 +141,7 @@ def load_config(path: str) -> Config:
         gesture = config.modules.get("gesture")
         if gesture is not None:
             gesture.params["log_dir"] = str(root / "logs" / "gestures")
+        jsc_shadow = config.modules.get("jsc_shadow")
+        if jsc_shadow is not None:
+            jsc_shadow.params["log_path"] = str(root / "logs" / "jsc_shadow.jsonl")
     return config

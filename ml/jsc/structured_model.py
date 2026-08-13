@@ -26,6 +26,7 @@ class StructuredJSCConfig:
     max_source_length: int = 384
     max_steps: int = 8
     pad_id: int = 0
+    segmented_router: bool = False
 
     def __post_init__(self) -> None:
         dimensions = (
@@ -117,7 +118,20 @@ class StructuredJSCModel(nn.Module):
         self.reason_head = _classification_head(config, config.num_reasons)
         self.step_count_head = _classification_head(config, config.max_steps + 1)
         self.execution_verifier_head = _classification_head(config, 2)
-        self.tool_head = nn.Linear(config.d_model, config.num_tools)
+        if config.segmented_router:
+            self.boundary_head = nn.Linear(config.d_model, 1)
+            self.segment_projection = nn.Sequential(
+                nn.LayerNorm(config.d_model * 2),
+                nn.Linear(config.d_model * 2, config.d_model),
+                nn.GELU(),
+                nn.Dropout(config.dropout),
+                nn.LayerNorm(config.d_model),
+            )
+            # Tool selection is intentionally isolated from argument/span
+            # heads: one pooled command segment owns one ordered tool choice.
+            self.segment_tool_head = nn.Linear(config.d_model, config.num_tools)
+        else:
+            self.tool_head = nn.Linear(config.d_model, config.num_tools)
         self.parameter_head = nn.Linear(config.d_model, config.num_parameter_labels)
         self.missing_head = nn.Linear(config.d_model, config.num_missing_labels)
         self.span_slot_embeddings = nn.Embedding(config.num_span_slots, config.d_model)
@@ -132,20 +146,34 @@ class StructuredJSCModel(nn.Module):
         source_mask: torch.Tensor,
         *,
         conditioning_tool_ids: torch.Tensor | None = None,
-    ) -> tuple[
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-        torch.Tensor,
-    ]:
+        conditioning_segment_ids: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, ...]:
         memory, pooled = self.encode(source_ids, source_mask)
         step_states = self._step_states(memory, pooled, source_mask)
-        tool_logits = self.tool_head(step_states)
+        act_logits = self.act_head(pooled)
+        count_logits = self.step_count_head(pooled)
+        boundary_logits: torch.Tensor | None = None
+        if self.config.segmented_router:
+            boundary_logits = self.boundary_head(memory).squeeze(-1)
+            boundary_logits = boundary_logits.masked_fill(
+                ~source_mask.bool(), torch.finfo(boundary_logits.dtype).min
+            )
+            segment_ids = (
+                self._predicted_segment_ids(
+                    boundary_logits, count_logits, source_mask
+                )
+                if conditioning_segment_ids is None
+                else conditioning_segment_ids
+            )
+            segment_states = self._segment_states(
+                memory, step_states, source_mask, segment_ids
+            )
+            routed_states = self.segment_projection(
+                torch.cat((step_states, segment_states), dim=-1)
+            )
+            tool_logits = self.segment_tool_head(routed_states)
+        else:
+            tool_logits = self.tool_head(step_states)
         tool_ids = (
             tool_logits.argmax(dim=-1)
             if conditioning_tool_ids is None
@@ -155,9 +183,9 @@ class StructuredJSCModel(nn.Module):
             torch.cat((step_states, self.tool_embeddings(tool_ids)), dim=-1)
         )
         starts, ends = self._span_scores(memory, conditioned, source_mask)
-        return (
-            self.act_head(pooled),
-            self.step_count_head(pooled),
+        outputs = (
+            act_logits,
+            count_logits,
             tool_logits,
             self.parameter_head(conditioned),
             starts,
@@ -166,6 +194,7 @@ class StructuredJSCModel(nn.Module):
             self.missing_head(conditioned),
             self.reason_head(pooled),
         )
+        return outputs if boundary_logits is None else (*outputs, boundary_logits)
 
     def encode(
         self, source_ids: torch.Tensor, source_mask: torch.Tensor
@@ -223,6 +252,52 @@ class StructuredJSCModel(nn.Module):
         invalid = ~source_mask[:, None, None, :].bool()
         minimum = torch.finfo(starts.dtype).min
         return starts.masked_fill(invalid, minimum), ends.masked_fill(invalid, minimum)
+
+    def _segment_states(
+        self,
+        memory: torch.Tensor,
+        step_states: torch.Tensor,
+        source_mask: torch.Tensor,
+        segment_ids: torch.Tensor,
+    ) -> torch.Tensor:
+        if segment_ids.shape != source_mask.shape:
+            raise ValueError("conditioning_segment_ids must match source shape")
+        states = []
+        for index in range(self.config.max_steps):
+            selected = segment_ids.eq(index) & source_mask.bool()
+            weights = selected.unsqueeze(-1).to(memory.dtype)
+            count = weights.sum(1)
+            pooled = (memory * weights).sum(1) / count.clamp_min(1.0)
+            pooled = torch.where(count.gt(0), pooled, step_states[:, index])
+            states.append(pooled)
+        return torch.stack(states, dim=1)
+
+    def _predicted_segment_ids(
+        self,
+        boundary_logits: torch.Tensor,
+        count_logits: torch.Tensor,
+        source_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        result = torch.full_like(source_mask, -1, dtype=torch.long)
+        counts = count_logits.argmax(-1).clamp(0, self.config.max_steps)
+        for row in range(boundary_logits.shape[0]):
+            valid = source_mask[row].bool().clone()
+            valid[0] = False
+            valid_indices = valid.nonzero(as_tuple=False).flatten()
+            if valid_indices.numel():
+                valid[valid_indices[-1]] = False  # EOS
+            count = min(int(counts[row]), int(valid.sum()))
+            if count < 1:
+                continue
+            scores = boundary_logits[row].masked_fill(
+                ~valid, torch.finfo(boundary_logits.dtype).min
+            )
+            starts = scores.topk(count).indices.sort().values
+            final = int(valid_indices[-1]) if valid_indices.numel() else source_mask.shape[1]
+            for segment, start in enumerate(starts.tolist()):
+                end = int(starts[segment + 1]) if segment + 1 < count else final
+                result[row, start:end] = segment
+        return result
 
     def _reset_parameters(self) -> None:
         for parameter in self.parameters():
