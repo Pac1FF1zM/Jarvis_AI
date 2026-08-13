@@ -10,7 +10,9 @@ from dataclasses import dataclass
 from typing import Iterable
 
 
-_NON_USER_WINDOW_TITLES = frozenset({"Default IME", "MSCTFIME UI"})
+_NON_USER_WINDOW_TITLES = frozenset(
+    {"Default IME", "MSCTFIME UI", "Program Manager"}
+)
 
 
 @dataclass(frozen=True)
@@ -392,11 +394,12 @@ def find_window(query: str) -> WindowInfo | None:
     if not needle:
         return None
     needles = {needle}
-    # Window titles and executable names are often English even when Whisper
-    # and the NLU correctly produce a Russian application alias (for example
-    # ``дискорд`` -> ``Discord.exe``). Reuse the launcher's safe
-    # allow-list to add only its canonical application name; arbitrary speech
-    # still cannot become a process name or command line.
+    executable_needles: set[str] = set()
+    # Window titles and executable names are often different from the
+    # canonical NLU slot (for example ``visual_studio_code`` -> ``Code.exe``
+    # and ``calculator`` -> ``Калькулятор``). Reuse only the launcher's safe
+    # allow-list metadata; arbitrary speech still cannot become a process name
+    # or command line.
     try:
         from ._applications import resolve_application
 
@@ -404,7 +407,27 @@ def find_window(query: str) -> WindowInfo | None:
     except (ImportError, OSError):
         application = None
     if application is not None:
-        needles.add(application.name.casefold())
+        needles.update(
+            candidate.casefold()
+            for candidate in (
+                application.name,
+                application.name.replace("_", " "),
+                application.display_name,
+            )
+            if candidate
+        )
+        launch_paths = [application.path]
+        if application.command:
+            launch_paths.append(application.command[0])
+        for launch_path in launch_paths:
+            if not launch_path:
+                continue
+            filename = os.path.basename(launch_path).casefold()
+            executable_needles.add(filename)
+            stem, _extension = os.path.splitext(filename)
+            if stem:
+                executable_needles.add(stem)
+        needles.update(executable_needles)
     windows = [
         row for row in list_windows() if row.title not in _NON_USER_WINDOW_TITLES
     ]
@@ -419,8 +442,21 @@ def find_window(query: str) -> WindowInfo | None:
     ]
     if len(title_matches) == 1:
         return title_matches[0]
+    if application is not None and title_matches:
+        executables = {row.executable.casefold() for row in title_matches}
+        if len(executables) == 1:
+            return title_matches[0]
     if title_matches:
         return None
+    exact_executable = [
+        row for row in windows if row.executable.casefold() in executable_needles
+    ]
+    if exact_executable:
+        # An allow-listed application identity is not ambiguous merely because
+        # it owns several top-level windows. EnumWindows returns them in Z
+        # order, so act on the foremost one. Non-user shell surfaces such as
+        # Program Manager were filtered above.
+        return exact_executable[0]
     executable_matches = [
         row for row in windows
         if any(candidate in row.executable.casefold() for candidate in needles)

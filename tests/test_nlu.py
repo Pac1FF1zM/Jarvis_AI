@@ -160,6 +160,69 @@ def test_one_open_verb_expands_only_a_fully_resolved_application_list():
     ]
 
 
+def test_one_close_verb_expands_a_fully_resolved_application_list():
+    assert split_compound_command("закрой калькулятор и проводник") == [
+        "закрой калькулятор",
+        "закрой проводник",
+    ]
+    assert split_compound_command("закрой калькулятор, проводник и paint") == [
+        "закрой калькулятор",
+        "закрой проводник",
+        "закрой paint",
+    ]
+    assert split_compound_command("закрой калькулятор и неизвестное окно") == [
+        "закрой калькулятор и неизвестное окно"
+    ]
+
+
+def test_reported_parakeet_close_phrases_route_to_individual_windows():
+    parts = split_compound_command(
+        _normalise_transcription_for_nlu(
+            "Закрой калькулятор, проводник и вижу студио код."
+        )
+    )
+
+    assert parts == [
+        "закрой калькулятор",
+        "закрой проводник",
+        "закрой вижу студио код.",
+    ]
+    assert [route_explicit_command(part).slots for part in parts] == [
+        {"action": "close", "window": "calculator"},
+        {"action": "close", "window": "explorer"},
+        {"action": "close", "window": "visual_studio_code"},
+    ]
+
+
+def test_reported_parakeet_vscode_variants_route_to_canonical_window():
+    for phrase in ("Закрой Вэ скот.", "Закрой Вс, кот.", "Закрой вс код."):
+        action = route_explicit_command(_normalise_transcription_for_nlu(phrase))
+
+        assert action == RoutedAction(
+            "window_control",
+            {"action": "close", "window": "visual_studio_code"},
+        )
+
+
+def test_reported_mixed_open_and_close_phrase_is_an_ordered_action_plan():
+    parts = split_compound_command(
+        _normalise_transcription_for_nlu(
+            "Открой калькулятор, проводник, пейнт и закрой Вижул Студио код."
+        )
+    )
+
+    assert [route_explicit_command(part).intent for part in parts] == [
+        "open_application",
+        "open_application",
+        "open_application",
+        "window_control",
+    ]
+    assert route_explicit_command(parts[-1]).slots == {
+        "action": "close",
+        "window": "visual_studio_code",
+    }
+
+
 def test_window_command_canonicalises_owner_approved_application_alias():
     from modules.command_router import route_explicit_command
 

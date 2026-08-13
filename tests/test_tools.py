@@ -15,7 +15,7 @@ import tools._applications as applications_module
 import tools.browser_control as browser_control_module
 import tools._windows as windows_module
 from tools.browser_control import execute as execute_browser_control
-from tools._applications import resolve_application
+from tools._applications import ApplicationSpec, resolve_application
 from tools._windows import WindowInfo
 from tools.registry import ToolRegistry
 
@@ -205,6 +205,28 @@ def test_owner_approved_application_aliases_resolve(spoken, canonical):
     resolved = resolve_application(spoken)
     assert resolved is not None
     assert resolved.name == canonical
+
+
+def test_canonical_vscode_slot_finds_code_executable(monkeypatch):
+    code = ApplicationSpec(
+        name="visual_studio_code",
+        display_name="Code",
+        path=r"C:\Program Files\Microsoft VS Code\Code.exe",
+        aliases=("vs code", "вс код"),
+        discovered=True,
+    )
+    windows = [
+        WindowInfo(
+            handle=101,
+            title="project.py - Visual Studio Code",
+            process_id=202,
+            executable="Code.exe",
+        )
+    ]
+    monkeypatch.setattr(applications_module, "resolve_application", lambda _query: code)
+    monkeypatch.setattr(windows_module, "list_windows", lambda: windows)
+
+    assert windows_module.find_window("visual_studio_code") == windows[0]
 
 
 def test_running_discord_is_activated_without_secondary_instance(monkeypatch):

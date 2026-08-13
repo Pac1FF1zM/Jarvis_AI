@@ -69,15 +69,17 @@ def split_compound_command(text: str) -> list[str]:
 
 
 def _split_coordinated_applications(text: str) -> list[str]:
-    """Expand one explicit open verb over an allow-listed app enumeration.
+    """Expand one explicit app verb over an allow-listed enumeration.
 
     This runs only after the utterance has ended.  Every object must resolve
     independently; a partly unknown list is preserved as one ambiguous phrase
     instead of guessing or executing its known prefix.
     """
     match = re.fullmatch(
-        r"(?P<prefix>(?:(?:джарвис|пожалуйста)\s+)*(?:открой|запусти|включи)"
-        r"(?:\s+(?:приложение|программу))?)\s+(?P<objects>.+)",
+        r"(?P<prefix>(?:(?:джарвис|пожалуйста)\s+)*"
+        r"(?:открой|запусти|включи|закрой|сверни|разверни|восстанови|"
+        r"переключись\s+на|перейди\s+в)"
+        r"(?:\s+(?:приложение|программу|окно))?)\s+(?P<objects>.+)",
         text.strip(" ,"),
         flags=re.IGNORECASE,
     )
