@@ -19,6 +19,7 @@ class StructuredJSCConfig:
     num_reasons: int
     d_model: int = 192
     encoder_layers: int = 3
+    step_layers: int = 2
     attention_heads: int = 4
     feedforward_dim: int = 384
     dropout: float = 0.12
@@ -40,8 +41,8 @@ class StructuredJSCConfig:
             raise ValueError("structured label spaces must be non-empty")
         if self.d_model < 16 or self.d_model % self.attention_heads:
             raise ValueError("d_model must be >=16 and divisible by attention_heads")
-        if self.encoder_layers < 1 or self.max_steps < 1:
-            raise ValueError("encoder_layers and max_steps must be positive")
+        if self.encoder_layers < 1 or self.step_layers < 1 or self.max_steps < 1:
+            raise ValueError("encoder_layers, step_layers and max_steps must be positive")
         if not 0.0 <= self.dropout < 1.0:
             raise ValueError("dropout must be in [0, 1)")
 
@@ -87,21 +88,23 @@ class StructuredJSCModel(nn.Module):
             nn.LayerNorm(config.d_model),
         )
         self.step_embeddings = nn.Embedding(config.max_steps, config.d_model)
-        self.step_attention = nn.MultiheadAttention(
-            config.d_model,
-            config.attention_heads,
+        step_layer = nn.TransformerDecoderLayer(
+            d_model=config.d_model,
+            nhead=config.attention_heads,
+            dim_feedforward=config.feedforward_dim,
             dropout=config.dropout,
+            activation="gelu",
             batch_first=True,
+            norm_first=True,
         )
-        self.step_norm = nn.LayerNorm(config.d_model)
-        self.step_feedforward = nn.Sequential(
-            nn.Linear(config.d_model, config.feedforward_dim),
-            nn.GELU(),
-            nn.Dropout(config.dropout),
-            nn.Linear(config.feedforward_dim, config.d_model),
-            nn.Dropout(config.dropout),
+        # This is a fixed-width parallel program reasoner, not a token or JSON
+        # decoder.  Self-attention lets ordered step queries coordinate instead
+        # of collapsing onto the same command fragment.
+        self.step_reasoner = nn.TransformerDecoder(
+            step_layer,
+            num_layers=config.step_layers,
+            norm=nn.LayerNorm(config.d_model),
         )
-        self.step_output_norm = nn.LayerNorm(config.d_model)
         self.tool_embeddings = nn.Embedding(config.num_tools, config.d_model)
         self.condition_projection = nn.Sequential(
             nn.LayerNorm(config.d_model * 2),
@@ -193,15 +196,11 @@ class StructuredJSCModel(nn.Module):
         source_mask: torch.Tensor,
     ) -> torch.Tensor:
         queries = pooled[:, None, :] + self.step_embeddings.weight[None]
-        attended, _weights = self.step_attention(
+        return self.step_reasoner(
             queries,
             memory,
-            memory,
-            key_padding_mask=~source_mask.bool(),
-            need_weights=False,
+            memory_key_padding_mask=~source_mask.bool(),
         )
-        states = self.step_norm(queries + attended)
-        return self.step_output_norm(states + self.step_feedforward(states))
 
     def _span_scores(
         self,

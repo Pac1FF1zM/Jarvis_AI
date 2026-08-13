@@ -37,6 +37,11 @@ from training_workspace.jsc_migration_benchmark import (
 
 DEFAULT_SEEDS = (17, 29, 41)
 FORMAT_VERSION = 1
+PREVIOUS_DIRECT_STRUCTURED_REFERENCE = {
+    "commit": "9753746",
+    "selected_seed_migration_exact_jal": 0.12,
+    "multi_seed_mean_migration_exact_jal": 0.08916666666666667,
+}
 THRESHOLD_GRID = {
     "execution_threshold": (0.45, 0.50, 0.55, 0.60, 0.65),
     "verifier_threshold": (0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 0.95),
@@ -139,8 +144,15 @@ def tune_thresholds(
                 trial = {**selected, name: value}
                 predictions, decisions = decode_structured_cache(cache, base, trial)
                 metrics = _migration_metrics(examples, predictions, cache.registry)
-                rows.append(((_rank(metrics), value), metrics, decisions))
-            (_candidate_rank, value), metrics, decisions = min(rows, key=lambda row: row[0])
+                safety_tie = (
+                    -value
+                    if name in {"execution_threshold", "verifier_threshold"}
+                    else value
+                )
+                rows.append(((_rank(metrics), safety_tie), value, metrics, decisions))
+            _candidate_rank, value, metrics, decisions = min(
+                rows, key=lambda row: row[0]
+            )
             changed = changed or selected[name] != value
             selected[name] = value
             best_metrics = metrics
@@ -212,10 +224,15 @@ def _reference_metrics() -> dict[str, Any]:
         "jsc_v8_structured_exact_jal": systems.get("jsc_v8_structured_only", {})
         .get("metrics", {})
         .get("exact_jal_accuracy"),
+        "previous_direct_structured": PREVIOUS_DIRECT_STRUCTURED_REFERENCE,
     }
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    if not (args.data_dir / "dataset_manifest.json").is_file():
+        from training_workspace.build_jsc_structured_dataset import build
+
+        build(output=args.data_dir)
     seeds = tuple(dict.fromkeys(args.seeds))
     if args.smoke:
         seeds = seeds[:1]
@@ -315,6 +332,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "migration_suite_used_after_selection": True,
             "validation_examples": len(validation),
             "migration_examples": len(migration),
+            "train_examples": manifest["splits"]["train"]["examples"],
+            "structured_augmentation": manifest.get("structured_augmentation"),
             "validation_sha256": manifest["splits"]["validation"]["sha256"],
             "migration_sha256": hashlib.sha256(args.migration_suite.read_bytes()).hexdigest(),
             "locked_test_opened": False,
@@ -366,6 +385,8 @@ def _render_markdown(report: Mapping[str, Any]) -> str:
         f"- Seeds: `{report['protocol']['seeds']}`; validation: "
         f"{report['protocol']['validation_examples']}; migration development: "
         f"{report['protocol']['migration_examples']}.",
+        f"- Train: {report['protocol']['train_examples']} примеров; добавленные "
+        "structured families создавались без чтения migration/test/holdout.",
         f"- Topology: d_model={training['d_model']}, encoder_layers="
         f"{training['encoder_layers']}, FFN={training['feedforward_dim']}; batch="
         f"{training['batch_size']}; lr={training['learning_rate']}.",
@@ -416,6 +437,11 @@ def _render_markdown(report: Mapping[str, Any]) -> str:
         )
     reference = report["reference"]
     if reference.get("available"):
+        previous = reference["previous_direct_structured"]
+        improvement = (
+            selected["migration"]["exact_jal_accuracy"]
+            - previous["selected_seed_migration_exact_jal"]
+        )
         lines.extend(
             [
                 "",
@@ -427,6 +453,11 @@ def _render_markdown(report: Mapping[str, Any]) -> str:
                 f"{reference['jsc_v8_structured_exact_jal']:.2%}.",
                 "- Новый Structured JSC, выбранный seed: "
                 f"{selected['migration']['exact_jal_accuracy']:.2%}.",
+                "- Предыдущий direct Structured JSC "
+                f"(`{previous['commit']}`): "
+                f"{previous['selected_seed_migration_exact_jal']:.2%}; "
+                f"рост выбранного кандидата: "
+                f"{improvement:+.2%}.",
             ]
         )
     lines.extend(
@@ -444,14 +475,18 @@ def _render_markdown(report: Mapping[str, Any]) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data-dir", type=Path, default=Path("training_workspace/jsc_data"))
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=Path("training_workspace/jsc_structured_data"),
+    )
     parser.add_argument(
         "--migration-suite",
         type=Path,
         default=Path("training_workspace/jsc_migration_data/development.jsonl"),
     )
     parser.add_argument(
-        "--output-root", type=Path, default=Path("training_workspace/jsc_structured_runs_v3")
+        "--output-root", type=Path, default=Path("training_workspace/jsc_structured_runs_v5")
     )
     parser.add_argument("--seeds", nargs="+", type=int, default=DEFAULT_SEEDS)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")

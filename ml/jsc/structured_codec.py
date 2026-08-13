@@ -7,6 +7,9 @@ from typing import Mapping, Sequence
 
 import torch
 
+from core.russian_numbers import extract_russian_cardinals
+from tools._applications import resolve_application
+
 from .jal import DialogueAct, JALPlan, MissingSlot, ToolCall, ToolSchemaRegistry, dumps
 from .sequence_data import ACT_LABELS
 from .span_labels import SPAN_ARGUMENTS, decode_span_arguments
@@ -59,6 +62,7 @@ def decode_structured_jal(
     parameter_labels: Sequence[str],
     missing_labels: Sequence[str],
     reason_labels: Sequence[str],
+    states: Sequence[JALPlan | None] | None = None,
     execution_threshold: float = 0.65,
     verifier_threshold: float = 0.50,
     parameter_threshold: float = 0.50,
@@ -69,6 +73,8 @@ def decode_structured_jal(
     rows = len(utterances)
     if len(source_texts) != rows:
         raise ValueError("source_texts must align with utterances")
+    if states is not None and len(states) != rows:
+        raise ValueError("states must align with utterances")
     expected_shapes = {
         "act": act_logits.shape[0],
         "count": count_logits.shape[0],
@@ -102,6 +108,21 @@ def decode_structured_jal(
     decisions: Counter[str] = Counter()
     predictions: list[str] = []
     for index in range(rows):
+        if has_explicit_execution_blocker(utterances[index]):
+            predictions.append(dumps(JALPlan(DialogueAct.REJECT, reason="unsupported_tool")))
+            decisions["blocked"] += 1
+            continue
+        state = states[index] if states is not None else None
+        completed = _complete_pending_state(utterances[index], state, registry)
+        if completed is not None:
+            predictions.append(dumps(completed))
+            decisions["state_completed"] += 1
+            continue
+        explicit = assemble_verified_explicit_execution(utterances[index], registry)
+        if explicit is not None:
+            predictions.append(dumps(explicit))
+            decisions["explicit"] += 1
+            continue
         act_id = int(act_probabilities[index].argmax())
         act = DialogueAct(ACT_LABELS[act_id])
         act_confidence = float(act_probabilities[index, act_id])
@@ -121,19 +142,10 @@ def decode_structured_jal(
                 predictions.append(dumps(JALPlan(DialogueAct.REJECT, reason="unsupported_tool")))
                 decisions["low_confidence"] += 1
                 continue
-            if has_explicit_execution_blocker(utterances[index]):
-                predictions.append(dumps(JALPlan(DialogueAct.REJECT, reason="unsupported_tool")))
-                decisions["blocked"] += 1
-                continue
             verifier_row = verifier_probabilities[index]
             if int(verifier_row.argmax()) != 1 or float(verifier_row[1]) < verifier_threshold:
                 predictions.append(dumps(JALPlan(DialogueAct.REJECT, reason="unsupported_tool")))
                 decisions["verifier_rejected"] += 1
-                continue
-            explicit = assemble_verified_explicit_execution(utterances[index], registry)
-            if explicit is not None:
-                predictions.append(dumps(explicit))
-                decisions["explicit"] += 1
                 continue
         count = int(counts[index])
         if count < 1:
@@ -256,3 +268,42 @@ def _default_reason(act: DialogueAct) -> str | None:
     if act == DialogueAct.CONFIRM:
         return "user_confirmation"
     return None
+
+
+def _complete_pending_state(
+    utterance: str,
+    state: JALPlan | None,
+    registry: ToolSchemaRegistry,
+) -> JALPlan | None:
+    """Complete one unambiguous typed slot without reclassifying its tool."""
+    if (
+        state is None
+        or state.act != DialogueAct.ASK
+        or len(state.steps) != 1
+        or len(state.missing) != 1
+    ):
+        return None
+    missing = state.missing[0]
+    if missing.step != 0:
+        return None
+    value: str | int | None = None
+    if missing.name in {"application", "window"}:
+        application = resolve_application(utterance)
+        if application is not None:
+            value = application.name
+    elif missing.name in {"minutes", "reminder_id", "steps"}:
+        numbers = extract_russian_cardinals(utterance)
+        if len(numbers) == 1:
+            value = numbers[0]
+    if value is None:
+        return None
+    call = state.steps[0]
+    try:
+        plan = JALPlan(
+            DialogueAct.EXECUTE,
+            steps=(ToolCall(call.tool, {**call.arguments, missing.name: value}),),
+        )
+        registry.validate(plan)
+    except (TypeError, ValueError):
+        return None
+    return plan

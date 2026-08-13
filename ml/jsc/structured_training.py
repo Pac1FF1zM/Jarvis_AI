@@ -17,15 +17,16 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 
 from .data import JSCExample, load_jsc_jsonl
-from .jal import DialogueAct, ToolSchemaRegistry, dumps
+from .jal import DialogueAct, JALPlan, ToolSchemaRegistry, dumps
 from .project_registry import build_project_schema_registry
-from .sequence_data import ACT_LABELS, ACT_TO_ID, make_collate_fn, serialize_source
+from .sequence_data import ACT_LABELS, ACT_TO_ID, make_collate_fn
 from .span_labels import span_tool_arguments
 from .structured_codec import (
     STRUCTURED_SPAN_ARGUMENTS,
     build_missing_labels,
     decode_structured_jal,
 )
+from .structured_features import serialize_structured_source
 from .structured_labels import build_parameter_labels
 from .structured_model import StructuredJSCConfig, StructuredJSCModel
 from .tokenizer import JSCCharTokenizer
@@ -46,7 +47,7 @@ class StructuredTrainingConfig:
     attention_heads: int = 4
     feedforward_dim: int = 384
     dropout: float = 0.12
-    max_source_length: int = 384
+    max_source_length: int = 416
     patience: int = 8
     warmup_ratio: float = 0.08
     gradient_clip: float = 1.0
@@ -85,6 +86,7 @@ class StructuredLogitCache:
 
     utterances: tuple[str, ...]
     source_texts: tuple[str, ...]
+    states: tuple[JALPlan | None, ...]
     outputs: tuple[torch.Tensor, ...]
     registry: ToolSchemaRegistry
     tool_labels: tuple[str, ...]
@@ -109,7 +111,7 @@ class _StructuredDataset(Dataset):
 
     def __getitem__(self, index: int) -> dict[str, object]:
         example = self.examples[index]
-        source_text = serialize_source(example)
+        source_text = serialize_structured_source(example)
         source_ids = self.tokenizer.encode(
             source_text, max_length=self.max_source_length
         )
@@ -143,6 +145,7 @@ def train_structured(config: StructuredTrainingConfig) -> dict[str, Any]:
         num_reasons=len(context.reason_labels),
         d_model=32 if config.smoke else config.d_model,
         encoder_layers=1 if config.smoke else config.encoder_layers,
+        step_layers=1 if config.smoke else 2,
         attention_heads=config.attention_heads,
         feedforward_dim=64 if config.smoke else config.feedforward_dim,
         dropout=config.dropout,
@@ -230,8 +233,8 @@ def train_structured(config: StructuredTrainingConfig) -> dict[str, Any]:
         )
         rank = (
             float(program["opposite_action_rate"] > 0.0),
-            float(program["false_execution_rate"] > 0.002),
             -float(program["exact_jal_accuracy"]),
+            float(program["false_execution_rate"]),
             -float(program["tool_sequence_accuracy"]),
             float(validation_loss["loss"]),
         )
@@ -416,7 +419,10 @@ def cache_structured_checkpoint_logits(
         ]
     cache = StructuredLogitCache(
         utterances=tuple(example.text for example in ordered_examples),
-        source_texts=tuple(serialize_source(example) for example in ordered_examples),
+        source_texts=tuple(
+            serialize_structured_source(example) for example in ordered_examples
+        ),
+        states=tuple(example.state for example in ordered_examples),
         outputs=tuple(torch.cat(values) for values in chunks),
         registry=registry,
         tool_labels=context.tool_labels,
@@ -455,6 +461,7 @@ def decode_structured_cache(
         parameter_labels=cache.parameter_labels,
         missing_labels=cache.missing_labels,
         reason_labels=cache.reason_labels,
+        states=cache.states,
         execution_threshold=tuned.execution_threshold,
         verifier_threshold=tuned.verifier_threshold,
         parameter_threshold=tuned.parameter_threshold,
@@ -505,7 +512,7 @@ def _predict(
         ordered = [by_id[value] for value in batch["scenario_id"]]
         decoded = decode_structured_jal(
             utterances=[example.text for example in ordered],
-            source_texts=[serialize_source(example) for example in ordered],
+            source_texts=[serialize_structured_source(example) for example in ordered],
             act_logits=outputs[0].cpu(),
             count_logits=outputs[1].cpu(),
             tool_logits=outputs[2].cpu(),
@@ -520,6 +527,7 @@ def _predict(
             parameter_labels=context.parameter_labels,
             missing_labels=context.missing_labels,
             reason_labels=context.reason_labels,
+            states=[example.state for example in ordered],
             execution_threshold=config.execution_threshold,
             verifier_threshold=config.verifier_threshold,
             parameter_threshold=config.parameter_threshold,
@@ -691,7 +699,7 @@ def _load_context(config: StructuredTrainingConfig) -> _Context:
             raise ValueError(f"{split} hash mismatch")
         loaded[split] = tuple(load_jsc_jsonl(path, registry, expected_split=split))
     tokenizer = JSCCharTokenizer.fit(
-        serialize_source(example) for example in loaded["train"]
+        serialize_structured_source(example) for example in loaded["train"]
     )
     reasons = ("<none>",) + tuple(
         sorted({example.target.reason for example in loaded["train"] if example.target.reason})
@@ -702,7 +710,7 @@ def _load_context(config: StructuredTrainingConfig) -> _Context:
                 "train": manifest["splits"]["train"]["sha256"],
                 "validation": manifest["splits"]["validation"]["sha256"],
                 "schema": registry.schema_fingerprint,
-                "structured_format": 3,
+                "structured_format": 5,
             },
             sort_keys=True,
         ).encode()

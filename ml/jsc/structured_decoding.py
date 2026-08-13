@@ -1,6 +1,7 @@
 """Schema-conditioned assembly of executable JAL from structured predictions."""
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -78,7 +79,9 @@ def assemble_structured_execution(
     # A deterministic parser disagreement is stronger evidence than the neural
     # tool head. Never silently replace an explicit routed action.
     routed_tools = tuple(
-        action.intent for action in routed if action is not None and action.intent in registry.tool_names
+        action.intent
+        for action in routed
+        if action is not None and action.intent in registry.tool_names
     )
     if routed_tools and not _is_ordered_subsequence(routed_tools, tools):
         return None
@@ -103,7 +106,13 @@ def assemble_structured_execution(
             # A direct Structured JSC call may use schema-valid neural evidence
             # after its independent act/verifier gates.  Existing callers keep
             # the historical fail-closed requirement by default.
-            has_evidence = has_evidence or allow_neural_evidence
+            has_evidence = has_evidence or (
+                allow_neural_evidence
+                and (
+                    bool(arguments)
+                    or _has_zero_argument_lexical_evidence(tool, normalized)
+                )
+            )
         if index < len(raw_steps) and raw_steps[index].tool == tool:
             has_evidence = True
             allowed = set(registry.argument_names(tool))
@@ -124,7 +133,15 @@ def assemble_structured_execution(
 
 
 def _meaningful_parts(parts: Sequence[str]) -> list[str]:
-    ignored = {"затем", "потом", "после этого", "заодно", "и"}
+    ignored = {
+        "затем",
+        "потом",
+        "после этого",
+        "заодно",
+        "и",
+        "джарвис",
+        "пожалуйста",
+    }
     return [part.strip(" ,") for part in parts if part.strip(" ,").casefold() not in ignored]
 
 
@@ -174,3 +191,13 @@ def _coerce_arguments(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if application is not None:
             result["window"] = application.name
     return result
+
+
+def _has_zero_argument_lexical_evidence(tool: str, utterance: str) -> bool:
+    patterns = {
+        "get_current_time": r"\b(?:время|час|часы)\b",
+        "list_applications": r"\b(?:приложени\w*|программ\w*)\b",
+        "list_reminders": r"\bнапоминани\w*\b",
+    }
+    pattern = patterns.get(tool)
+    return pattern is not None and re.search(pattern, utterance) is not None

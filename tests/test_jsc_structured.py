@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import torch
 
+from ml.jsc.data import DialogueTurn, JSCExample
 from ml.jsc.jal import DialogueAct, JALPlan, MissingSlot, ToolCall, loads
 from ml.jsc.project_registry import build_project_schema_registry
 from ml.jsc.sequence_data import ACT_LABELS
@@ -14,6 +15,8 @@ from ml.jsc.structured_codec import (
 )
 from ml.jsc.structured_labels import build_parameter_labels
 from ml.jsc.structured_model import StructuredJSCConfig, StructuredJSCModel
+from ml.jsc.structured_features import serialize_structured_source
+from ml.jsc.structured_decoding import assemble_verified_explicit_execution
 
 
 def test_structured_model_has_only_direct_program_heads():
@@ -40,6 +43,7 @@ def test_structured_model_has_only_direct_program_heads():
 
     assert not hasattr(model, "decoder")
     assert not hasattr(model, "token_head")
+    assert hasattr(model, "step_reasoner")
     assert [tuple(value.shape) for value in outputs] == [
         (2, len(ACT_LABELS)),
         (2, 9),
@@ -61,6 +65,38 @@ def test_integer_argument_span_uses_normalized_source_annotation():
     assert span is not None
     start, end = span
     assert source[start - 1 : end] == "15"
+
+
+def test_structured_source_exposes_typed_state_without_target_leakage():
+    pending = JALPlan(
+        DialogueAct.ASK,
+        steps=(ToolCall("window_control", {"action": "close"}),),
+        missing=(MissingSlot(0, "window"),),
+        reason="missing_window",
+    )
+    example = JSCExample(
+        scenario_id="test.state",
+        split="validation",
+        family_id="test.state",
+        category="multi_turn",
+        history=(DialogueTurn("user", "закрой приложение"),),
+        text="калькулятор",
+        state=pending,
+        target=JALPlan(
+            DialogueAct.EXECUTE,
+            steps=(
+                ToolCall("window_control", {"action": "close", "window": "calculator"}),
+            ),
+        ),
+        metadata={},
+    )
+
+    source = serialize_structured_source(example)
+
+    assert "STATE_ACT:ask" in source
+    assert "STATE_TOOL_0:window_control" in source
+    assert "STATE_MISSING_0:window" in source
+    assert "calculator" not in source
 
 
 def test_structured_codec_builds_ask_plan_without_json_generation():
@@ -143,6 +179,134 @@ def test_structured_codec_blocks_negated_execution_even_with_confident_heads():
 
     assert loads(result.predictions[0]).act == DialogueAct.REJECT
     assert result.decisions == {"blocked": 1}
+
+
+def test_structured_codec_prefers_complete_explicit_route_over_uncertain_act():
+    registry = build_project_schema_registry()
+    tool_labels = ("<none>", *registry.tool_names)
+    parameter_labels = build_parameter_labels(registry)
+    missing_labels = build_missing_labels(registry)
+    reason_labels = ("<none>", "general_chat")
+    source = "USER:открой калькулятор"
+    shapes = _empty_logits(
+        len(tool_labels),
+        len(parameter_labels),
+        len(missing_labels),
+        len(reason_labels),
+        len(source) + 2,
+    )
+    shapes["act_logits"][0, ACT_LABELS.index("dialogue")] = 10.0
+
+    result = decode_structured_jal(
+        utterances=["открой калькулятор"],
+        source_texts=[source],
+        registry=registry,
+        tool_labels=tool_labels,
+        parameter_labels=parameter_labels,
+        missing_labels=missing_labels,
+        reason_labels=reason_labels,
+        **shapes,
+    )
+
+    assert loads(result.predictions[0]) == JALPlan(
+        DialogueAct.EXECUTE,
+        steps=(ToolCall("open_application", {"application": "calculator"}),),
+    )
+    assert result.decisions == {"explicit": 1}
+
+
+def test_structured_codec_completes_pending_window_without_reclassifying_tool():
+    registry = build_project_schema_registry()
+    tool_labels = ("<none>", *registry.tool_names)
+    parameter_labels = build_parameter_labels(registry)
+    missing_labels = build_missing_labels(registry)
+    reason_labels = ("<none>", "general_chat")
+    source = "USER:блокнот"
+    shapes = _empty_logits(
+        len(tool_labels),
+        len(parameter_labels),
+        len(missing_labels),
+        len(reason_labels),
+        len(source) + 2,
+    )
+    shapes["act_logits"][0, ACT_LABELS.index("dialogue")] = 10.0
+    state = JALPlan(
+        DialogueAct.ASK,
+        steps=(ToolCall("window_control", {"action": "close"}),),
+        missing=(MissingSlot(0, "window"),),
+        reason="missing_window",
+    )
+
+    result = decode_structured_jal(
+        utterances=["блокнот"],
+        source_texts=[source],
+        states=[state],
+        registry=registry,
+        tool_labels=tool_labels,
+        parameter_labels=parameter_labels,
+        missing_labels=missing_labels,
+        reason_labels=reason_labels,
+        **shapes,
+    )
+
+    assert loads(result.predictions[0]) == JALPlan(
+        DialogueAct.EXECUTE,
+        steps=(
+            ToolCall("window_control", {"action": "close", "window": "notepad"}),
+        ),
+    )
+    assert result.decisions == {"state_completed": 1}
+
+
+def test_structured_codec_rejects_ungrounded_zero_argument_hallucination():
+    registry = build_project_schema_registry()
+    tool_labels = ("<none>", *registry.tool_names)
+    parameter_labels = build_parameter_labels(registry)
+    missing_labels = build_missing_labels(registry)
+    reason_labels = ("<none>", "unsupported_tool")
+    source = "USER:получи пароль соседней сети"
+    shapes = _empty_logits(
+        len(tool_labels),
+        len(parameter_labels),
+        len(missing_labels),
+        len(reason_labels),
+        len(source) + 2,
+    )
+    shapes["act_logits"][0, ACT_LABELS.index("execute")] = 10.0
+    shapes["count_logits"][0, 1] = 10.0
+    shapes["tool_logits"][0, 0, tool_labels.index("get_current_time")] = 10.0
+    shapes["verifier_logits"][0, 1] = 10.0
+
+    result = decode_structured_jal(
+        utterances=["получи пароль соседней сети"],
+        source_texts=[source],
+        registry=registry,
+        tool_labels=tool_labels,
+        parameter_labels=parameter_labels,
+        missing_labels=missing_labels,
+        reason_labels=reason_labels,
+        **shapes,
+    )
+
+    assert loads(result.predictions[0]).act == DialogueAct.REJECT
+    assert result.decisions == {"schema_rejected": 1}
+
+
+def test_explicit_router_covers_courtesy_and_compound_connectors():
+    registry = build_project_schema_registry()
+
+    plan = assemble_verified_explicit_execution(
+        "джарвис, покажи приложения и потом проверь работает ли режим жестов",
+        registry,
+    )
+
+    assert plan == JALPlan(
+        DialogueAct.EXECUTE,
+        steps=(
+            ToolCall("list_applications"),
+            ToolCall("gesture_mode", {"action": "status"}),
+        ),
+    )
 
 
 def _empty_logits(
