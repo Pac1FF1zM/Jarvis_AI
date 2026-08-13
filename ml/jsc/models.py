@@ -536,6 +536,47 @@ class JSCBaselineModel(nn.Module):
         semantic_pooled = self._semantic_pooled(memory, pooled, source_mask)
         return (*outputs, self.execution_verifier_head(semantic_pooled))
 
+    @torch.inference_mode()
+    def predict_verified_semantic_heads(
+        self,
+        source_ids: torch.Tensor,
+        source_mask: torch.Tensor,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        """Predict the complete structured JSC surface without JSON decoding.
+
+        This is an inference-only diagnostic boundary for migration benchmarks
+        and the future structured runtime.  It deliberately performs one
+        encoder pass and never invokes the autoregressive decoder.
+        """
+        if self.execution_verifier_head is None:
+            raise RuntimeError("execution verifier head is disabled")
+        if self.parameter_head is None or self.span_slot_embeddings is None:
+            raise RuntimeError("full semantic heads are disabled")
+        self.eval()
+        memory, pooled = self.encode(source_ids, source_mask)
+        semantic_pooled = self._semantic_pooled(memory, pooled, source_mask)
+        count_logits, tool_logits, parameter_logits = self._schema_scores(
+            semantic_pooled, pooled
+        )
+        start_logits, end_logits = self._span_scores(memory, pooled, source_mask)
+        return (
+            self.act_head(semantic_pooled),
+            count_logits,
+            tool_logits,
+            parameter_logits,
+            start_logits,
+            end_logits,
+            self.execution_verifier_head(semantic_pooled),
+        )
+
     def _structured_scores(self, pooled: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         assert self.step_embeddings is not None
         assert self.step_count_head is not None and self.tool_sequence_head is not None
