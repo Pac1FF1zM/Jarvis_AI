@@ -1,4 +1,4 @@
-"""Isolated persistent client for the experimental Parakeet STT worker."""
+"""Isolated persistent client for the production Parakeet STT worker."""
 from __future__ import annotations
 
 import base64

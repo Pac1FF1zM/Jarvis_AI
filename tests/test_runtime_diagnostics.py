@@ -69,9 +69,13 @@ def _config(tmp_path: Path) -> Config:
     checkpoint = tmp_path / "models" / "nlu.pt"
     checkpoint.parent.mkdir()
     checkpoint.write_bytes(b"controlled test checkpoint")
-    whisper_root = tmp_path / "models" / "whisper"
-    whisper_root.mkdir()
-    (whisper_root / "small.pt").write_bytes(b"controlled whisper cache")
+    parakeet_root = tmp_path / "models" / "parakeet"
+    parakeet_root.mkdir()
+    for name in ("config.json", "processor_config.json", "model.safetensors"):
+        (parakeet_root / name).write_bytes(b"controlled parakeet snapshot")
+    interpreter = tmp_path / "venv" / "Scripts" / "python.exe"
+    interpreter.parent.mkdir(parents=True)
+    interpreter.write_bytes(b"controlled runtime")
     profile_root = tmp_path / "profiles"
     manager = ProfileManager(profile_root)
     device = {"name": "USB Microphone", "max_input_channels": 1}
@@ -86,8 +90,11 @@ def _config(tmp_path: Path) -> Config:
             "stt": ModuleConfig(
                 enabled=True,
                 device="auto",
-                model="small",
-                params={"download_root": str(whisper_root)},
+                params={
+                    "model_dir": str(parakeet_root),
+                    "python": str(interpreter),
+                    "timeout_seconds": 45,
+                },
             ),
             "nlu": ModuleConfig(
                 enabled=True, device="cpu", model=str(checkpoint)
@@ -120,7 +127,6 @@ def _healthy_runner(
         "pynput": SimpleNamespace(),
         "silero_vad": SimpleNamespace(),
         "onnxruntime": SimpleNamespace(),
-        "whisper": SimpleNamespace(),
         "silero": SimpleNamespace(),
         "ollama": SimpleNamespace(),
     }
@@ -223,6 +229,7 @@ def test_unapproved_gesture_candidate_allows_only_restricted_safe_test(tmp_path)
 def test_missing_core_and_voice_dependencies_are_actionable_failures(tmp_path):
     config = _config(tmp_path)
     Path(config.module("nlu").model).unlink()
+    Path(config.module("stt").params["python"]).unlink()
 
     def missing(name: str):
         raise ModuleNotFoundError(f"No module named {name}")
@@ -247,7 +254,7 @@ def test_missing_core_and_voice_dependencies_are_actionable_failures(tmp_path):
     assert report.exit_code == 2
     assert by_id["engine.torch"].status == DiagnosticStatus.FAIL
     assert by_id["engine.nlu"].status == DiagnosticStatus.FAIL
-    assert by_id["engine.whisper"].status == DiagnosticStatus.FAIL
+    assert by_id["engine.parakeet"].status == DiagnosticStatus.FAIL
     assert by_id["engine.hotkey"].status == DiagnosticStatus.FAIL
     assert by_id["service.ollama"].status == DiagnosticStatus.WARN
     assert all(
@@ -299,30 +306,14 @@ def test_invalid_runtime_config_is_reported_before_module_start(tmp_path):
     assert "wake_phrase_vad_threshold" in check.detail
 
 
-def test_doctor_validates_selected_parakeet_runtime_instead_of_whisper(tmp_path):
+def test_doctor_validates_production_parakeet_runtime(tmp_path):
     runner = _healthy_runner(tmp_path)
-    interpreter = tmp_path / "venv" / "Scripts" / "python.exe"
-    interpreter.parent.mkdir(parents=True)
-    interpreter.write_bytes(b"runtime")
-    model_dir = tmp_path / ".local" / "parakeet" / "model"
-    model_dir.mkdir(parents=True)
-    for name in ("config.json", "processor_config.json", "model.safetensors"):
-        (model_dir / name).write_bytes(b"present")
-    runner.config.modules["stt"].params.update(
-        {
-            "engine": "parakeet",
-            "experimental_production": True,
-            "parakeet_python": str(interpreter),
-            "parakeet_model_dir": str(model_dir),
-        }
-    )
 
     report = runner.run()
     by_id = {check.check_id: check for check in report.checks}
 
     assert by_id["engine.parakeet"].status == DiagnosticStatus.PASS
     assert by_id["model.parakeet"].status == DiagnosticStatus.PASS
-    assert "engine.whisper" not in by_id
 
 
 def test_wrong_yaml_value_types_do_not_crash_doctor(tmp_path):

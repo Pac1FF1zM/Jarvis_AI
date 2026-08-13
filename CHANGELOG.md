@@ -1,14 +1,16 @@
 # Changelog
 
-## [Unreleased] — 2026-08-13: experimental production Parakeet
+## [Unreleased] — 2026-08-13: production Parakeet
 
 ### STT и безопасная диагностика
 
-- Parakeet подключён к основному `STTModule` за двойным config-gate
-  (`engine: parakeet` + `experimental_production: true`). Persistent worker
-  получает production PCM, публикует стандартный `transcription_ready` и
-  корректно закрывается вместе с Jarvis. Откат на Whisper не требует изменения
-  кода.
+- После успешного личного production-теста владельцем Parakeet повышен до
+  единственного STT. Удалены runtime-ветка Whisper, её параметры, dependency,
+  installer preload и Doctor checks; сравнительный benchmark сохранён как
+  исторический инструмент.
+
+- Persistent Parakeet worker получает production PCM, публикует стандартный
+  `transcription_ready` и корректно закрывается вместе с Jarvis.
 - Старый 40-token decode bound, обрезавший длинные русские фразы, увеличен до
   96 при сохранении верхнего 12-секундного audio bound.
 - Добавлен парный no-action benchmark runner. На 20 публичных human-speech
@@ -26,8 +28,7 @@
 - Persistent worker прогревается один раз. Decode ограничен 96 новыми токенами;
   timeout завершает изолированный worker, отбрасывает текущий capture и
   позволяет следующей реплике запустить чистый процесс.
-- Whisper остаётся настроенным production baseline. Ошибка, отсутствующий пакет или
-  некорректное аудио теперь fail closed: публикуется пустой transcript с
+- Ошибка worker или некорректное аудио fail closed: публикуется пустой transcript с
   confidence `0.0`, а не синтетическая команда.
 
 ### NLU и semantic commit

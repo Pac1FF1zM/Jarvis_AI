@@ -1,7 +1,7 @@
 """Shared GPU lock — serializes GPU-bound inference across modules.
 
 HARD CONSTRAINT: the target box has an NVIDIA GTX 1060 with **3GB VRAM**.
-That is not enough to hold Whisper *and* a 7B LLM in VRAM at once, so
+That is not enough to hold STT *and* a 7B LLM in VRAM at once, so
 GPU-bound calls from STT and LLM must queue for GPU time instead of racing.
 
 Usage inside a module::

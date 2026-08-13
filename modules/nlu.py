@@ -73,7 +73,7 @@ _ABSOLUTE_REMINDERS = tuple(
 
 
 def _normalise_transcription_for_nlu(text: str) -> str:
-    """Repair a few observed Russian Whisper errors before neural routing."""
+    """Repair a few historically observed Russian STT errors before routing."""
     corrected = text.lower().replace("ё", "е")
     replacements = (
         (r"\bотпрой\b", "открой"),

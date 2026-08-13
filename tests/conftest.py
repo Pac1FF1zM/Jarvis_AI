@@ -25,7 +25,7 @@ def isolate_optional_runtime_engines(
     """Keep every pytest run offline and independent of installed engines.
 
     Optional packages are intentionally detected at module import/startup in
-    production.  Without this fixture, installing Whisper, Ollama, Silero or
+    production.  Without this fixture, installing Parakeet, Ollama, Silero or
     sounddevice changes integration-test behaviour and can trigger downloads,
     network calls, microphone access or real playback.  Tests for a real code
     path explicitly replaces these disabled values with its own fakes.
@@ -59,7 +59,6 @@ def isolate_optional_runtime_engines(
             return None
 
     monkeypatch.setattr(llm_module, "_OLLAMA", None)
-    monkeypatch.setattr(stt_module, "_WHISPER", None)
     monkeypatch.setattr(
         stt_module, "PersistentParakeetClient", _DisabledParakeetClient
     )

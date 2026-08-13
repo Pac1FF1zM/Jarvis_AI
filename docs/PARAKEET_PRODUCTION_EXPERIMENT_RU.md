@@ -1,23 +1,27 @@
-# Experimental production Parakeet — отчёт 2026-08-13
+# Production Parakeet — отчёт о выборе 2026-08-13
+
+После успешного личного production-теста владельцем Parakeet повышен до
+единственного STT. Whisper удалён из runtime-кода, основных зависимостей,
+конфигурации, Doctor и installer manifest. Сравнительный runner и результаты
+сохранены как историческое обоснование решения.
 
 ## Что включено
 
 `nvidia/parakeet-tdt-0.6b-v3` revision
 `541d1f99c6b0c3cd0b11a95167540bb8edefd82b` подключён к основному STT-контуру
 Jarvis. Модель остаётся в изолированном persistent worker и не импортируется в
-процесс EventBus. Production-включение требует двух явных параметров:
+процесс EventBus. Production-конфигурация задаёт только локальные ресурсы:
 
 ```yaml
 modules:
   stt:
     params:
-      engine: parakeet
-      experimental_production: true
+      model_dir: .local/parakeet/models/nvidia--parakeet-tdt-0.6b-v3
+      python: venv/Scripts/python.exe
+      timeout_seconds: 45
 ```
 
-Откат выполняется заменой `engine: parakeet` на `engine: whisper`. Скрытого
-fallback нет: это сохраняет чистоту A/B-наблюдений и не маскирует сбой одного
-движка результатом другого.
+Скрытого fallback нет: сбой worker всегда виден и даёт fail-closed результат.
 
 ## Результат парного smoke benchmark
 
@@ -40,9 +44,9 @@ NVIDIA GeForce RTX 3050 Laptop GPU 6 ГБ.
 
 На этой малой выборке Parakeet лучше по WER и примерно в 1,78 раза быстрее по
 средней decode latency. Whisper немного лучше по CER, а его модель загружается
-быстрее. Результат является основанием для experimental production A/B, но не
-для окончательного удаления Whisper: FLEURS содержит общий русский текст, а не
-короткие команды Jarvis, и 20 записей недостаточно для финального решения.
+быстрее. FLEURS содержит общий русский текст, а не короткие команды Jarvis,
+поэтому решающим promotion-сигналом стал последующий успешный личный тест на
+реальных задачах владельца.
 
 ## Обнаруженная и исправленная проблема
 

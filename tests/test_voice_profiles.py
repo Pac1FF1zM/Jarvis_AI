@@ -90,7 +90,7 @@ def test_corrupt_profile_personalization_falls_back_without_crashing(tmp_path, c
     assert "PROFILE_PERSONALIZATION_IGNORED" in caplog.text
 
 
-def test_profile_overlay_connects_reminders_calibration_and_whisper_aliases(tmp_path):
+def test_profile_overlay_connects_reminders_and_calibration(tmp_path):
     manager = ProfileManager(tmp_path)
     manager.ensure_profile("anna")
     manager.save_calibration("anna", _calibration())
@@ -99,7 +99,7 @@ def test_profile_overlay_connects_reminders_calibration_and_whisper_aliases(tmp_
     cfg = Config(
         modules={
             "wake_word": ModuleConfig(params={}),
-            "stt": ModuleConfig(params={"initial_prompt": "Команды Джарвиса."}),
+            "stt": ModuleConfig(params={}),
         }
     )
 
@@ -107,7 +107,7 @@ def test_profile_overlay_connects_reminders_calibration_and_whisper_aliases(tmp_
     assert cfg.reminders["profile_id"] == "anna"
     selected = cfg.module("wake_word").params["voice_calibrations"]
     assert selected[device_fingerprint(_device())]["pcm_gain_db"] == 3.0
-    assert "Discord: дисорд, дискод" in cfg.module("stt").params["initial_prompt"]
+    assert "initial_prompt" not in cfg.module("stt").params
 
 
 def test_signal_metrics_and_calibration_are_deterministic():

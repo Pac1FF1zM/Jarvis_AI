@@ -83,7 +83,7 @@ def accept_license(root: Path, accepted_spdx: str) -> dict[str, Any]:
         "license_spdx": LICENSE_SPDX,
         "license_url": LICENSE_URL,
         "license_sha256": provenance["license_sha256"],
-        "scope": "Local Parakeet diagnostic model installation; unrelated to fixture consent or retention.",
+        "scope": "Local Parakeet production model installation; unrelated to fixture consent or retention.",
     }
     approval.parent.mkdir(parents=True, exist_ok=True)
     approval.write_text(json.dumps(record, indent=2), encoding="utf-8")

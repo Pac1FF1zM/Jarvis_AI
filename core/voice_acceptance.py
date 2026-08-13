@@ -78,7 +78,7 @@ class CandidateResult:
 DEFAULT_CANDIDATES = (
     Candidate(
         "current",
-        "Текущий последовательный pipeline: полный ответ, статический VAD, Whisper small.",
+        "Текущий последовательный pipeline: полный ответ, статический VAD, Parakeet TDT.",
     ),
     Candidate(
         "balanced_vad",
@@ -222,7 +222,7 @@ def _simulate(turn: VoiceTurn, candidate: Candidate) -> tuple[float, float]:
         capture = min(capture, candidate.max_capture_ms)
     capture = max(0.0, capture - candidate.end_silence_saving_ms)
     capture += candidate.start_confirmation_cost_ms
-    # Whisper latency is approximately proportional to the bounded audio
+    # STT latency is approximately proportional to the bounded audio
     # window on this machine. Preserve a small fixed model/dispatch floor.
     capture_ratio = capture / turn.capture_ms if turn.capture_ms else 1.0
     stt = max(350.0, turn.stt_ms * min(1.0, capture_ratio)) * candidate.stt_factor

@@ -38,7 +38,7 @@ def test_dataset_splits_have_no_identical_texts():
     assert splits[1].isdisjoint(splits[2])
 
 
-def test_flat_whisper_transcript_is_split_into_ordered_actions_without_commas():
+def test_flat_stt_transcript_is_split_into_ordered_actions_without_commas():
     text = (
         "открой браузер запусти жестовый режим "
         "напомни через двадцать минут о встрече закрой дискорд"
@@ -114,7 +114,7 @@ def test_talking_about_application_does_not_trigger_launch_intent():
         assert predictor.predict(text).intent == "general_chat"
 
 
-def test_observed_whisper_errors_are_normalised_before_neural_routing():
+def test_observed_stt_errors_are_normalised_before_neural_routing():
     assert (
         _normalise_transcription_for_nlu("Отпрой к алкулятор.")
         == "открой калькулятор."

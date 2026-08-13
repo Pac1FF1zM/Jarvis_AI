@@ -54,7 +54,7 @@ def split_compound_command(text: str) -> list[str]:
             if item.strip(" ,")
         ]
         return [item for part in flattened for item in _split_coordinated_applications(part)]
-    # Whisper frequently returns a flat string without commas/conjunctions.
+    # Speech recognizers can return a flat string without punctuation.
     # Finite imperative verbs are reliable action boundaries; infinitives are
     # deliberately excluded so "напомни открыть дверь" remains one reminder.
     raw = [part.strip(" ,") for part in _RAW_COMMAND_BOUNDARY.split(text) if part.strip(" ,")]

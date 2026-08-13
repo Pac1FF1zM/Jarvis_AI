@@ -372,7 +372,7 @@ async def run_pipeline(
     shutdown_event: asyncio.Event | None = None,
 ) -> None:
     # Keep runtime engines lazy so ``main.py --doctor`` can still explain a
-    # missing/broken Torch, Whisper, Silero or audio installation.
+    # missing/broken Torch, Parakeet, Silero or audio installation.
     from memory.long_term import LongTermMemory
     from memory.conversations import ConversationStore
     from memory.workspaces import WorkspaceStore
@@ -485,7 +485,7 @@ async def run_pipeline(
         logger.info("text mode: wake_word, stt and tts are not initialized")
     else:
         # Voice engines are independent during initialization. Loading them in
-        # parallel hides Silero's CPU warm-up behind Whisper's CUDA load and
+        # parallel hides Silero's CPU warm-up behind Parakeet's CUDA load and
         # makes readiness depend on the slowest engine instead of their sum.
         voice_results = await asyncio.gather(
             start_if(

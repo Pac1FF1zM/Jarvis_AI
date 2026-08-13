@@ -19,6 +19,9 @@ def test_lite_and_full_dependencies_are_deliberately_separated():
     assert "ollama" not in lite.casefold()
     assert "ollama==" in full.casefold()
     assert "huggingface" not in (lite + full).casefold()
+    assert "openai-whisper" not in lite.casefold()
+    assert "transformers==5.15.0" in lite.casefold()
+    assert "librosa==0.11.0" in lite.casefold()
     assert "torch" not in {
         line.split("==", 1)[0].casefold()
         for line in lite.splitlines()
@@ -53,6 +56,8 @@ def test_setup_does_not_package_private_or_generated_workspace_data():
     assert "ml\\nlu\\train.py" not in script
     assert "holdout_v2" not in script
     assert "python-3.12.9-amd64.exe" in script
+    assert "setup parakeet.cmd" in script
+    assert "prepare_whisper.py" not in script
 
 
 def test_packaged_nlu_runtime_runs_inference_without_training_workspace(tmp_path):

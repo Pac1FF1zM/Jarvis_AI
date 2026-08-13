@@ -44,6 +44,12 @@ Source: "..\control_center\*.py"; DestDir: "{app}\control_center"; Flags: ignore
 Source: "..\core\*.py"; DestDir: "{app}\core"; Flags: ignoreversion
 Source: "..\memory\*.py"; DestDir: "{app}\memory"; Flags: ignoreversion
 Source: "..\modules\*.py"; DestDir: "{app}\modules"; Flags: ignoreversion
+Source: "..\experiments\__init__.py"; DestDir: "{app}\experiments"; Flags: ignoreversion
+Source: "..\experiments\parakeet\*.py"; DestDir: "{app}\experiments\parakeet"; Flags: ignoreversion
+Source: "..\experiments\parakeet\worker\*.py"; DestDir: "{app}\experiments\parakeet\worker"; Flags: ignoreversion
+Source: "..\experiments\parakeet\scripts\*.py"; DestDir: "{app}\experiments\parakeet\scripts"; Flags: ignoreversion
+Source: "..\experiments\parakeet\scripts\*.ps1"; DestDir: "{app}\experiments\parakeet\scripts"; Flags: ignoreversion
+Source: "..\experiments\parakeet\manifests\*"; DestDir: "{app}\experiments\parakeet\manifests"; Flags: ignoreversion
 Source: "..\tools\*.py"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\ml\__init__.py"; DestDir: "{app}\ml"; Flags: ignoreversion
 Source: "..\ml\nlu\__init__.py"; DestDir: "{app}\ml\nlu"; Flags: ignoreversion
@@ -64,17 +70,18 @@ Source: "..\checkpoints\tsn_resnet18_seed42\best.pt"; DestDir: "{app}\checkpoint
 Source: "..\reports\evaluation_test.json"; DestDir: "{app}\reports"; Flags: ignoreversion
 Source: "requirements-lite.txt"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "requirements-full.txt"; DestDir: "{app}\installer"; Flags: ignoreversion
-Source: "prepare_whisper.py"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "bootstrap_runtime.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "launchers\Jarvis.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "launchers\Jarvis Doctor.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "launchers\Enable Jarvis Full.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "launchers\Setup Parakeet.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "cache\python-3.12.9-amd64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{group}\Jarvis"; Filename: "{app}\Jarvis.cmd"; WorkingDir: "{app}"
 Name: "{group}\Jarvis Runtime Doctor"; Filename: "{app}\Jarvis Doctor.cmd"; WorkingDir: "{app}"
 Name: "{group}\Включить Jarvis Full (Ollama)"; Filename: "{app}\Enable Jarvis Full.cmd"; WorkingDir: "{app}"
+Name: "{group}\Настроить модель Parakeet"; Filename: "{app}\Setup Parakeet.cmd"; WorkingDir: "{app}"
 Name: "{autodesktop}\Jarvis"; Filename: "{app}\Jarvis.cmd"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
@@ -82,7 +89,6 @@ Filename: "{app}\Jarvis Doctor.cmd"; Description: "Показать итогов
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\runtime"
-Type: filesandordirs; Name: "{app}\models\openai-whisper"
 
 [Code]
 procedure RunRequired(const FileName, Parameters, WorkingDirectory, LabelText: String);

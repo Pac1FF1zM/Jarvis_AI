@@ -8,5 +8,5 @@
   "dtype": "float16",
   "sample_rate": 16000,
   "local_expected_path": ".local/parakeet/models/nvidia--parakeet-tdt-0.6b-v3",
-  "execution_policy": "shadow-only; actions are always blocked"
+  "execution_policy": "production STT; actions still require Jarvis semantic, NLU, and tool safety gates"
 }

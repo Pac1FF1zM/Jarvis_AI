@@ -213,19 +213,11 @@ def apply_profile_to_config(config: Config, manager: ProfileManager) -> str:
     config.reminders["profile_id"] = profile_id
     try:
         calibrations = manager.calibrations(profile_id)
-        aliases = manager.load_aliases(profile_id)
     except (ProfileError, OSError):
         logger.exception("PROFILE_PERSONALIZATION_IGNORED profile=%s", profile_id)
         calibrations = {}
-        aliases = {}
     if calibrations:
         config.module("wake_word").params["voice_calibrations"] = calibrations
-    if aliases:
-        fragments = [f"{canonical}: {', '.join(values)}" for canonical, values in aliases.items()]
-        stt_params = config.module("stt").params
-        base = str(stt_params.get("initial_prompt", "")).strip()
-        addition = "Словарь произношений пользователя: " + "; ".join(fragments)
-        stt_params["initial_prompt"] = f"{base} {addition}".strip()[:1500]
     return profile_id
 
 

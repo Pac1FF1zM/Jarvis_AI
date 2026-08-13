@@ -9,12 +9,15 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
-$python = Join-Path $root 'venv\Scripts\python.exe'
+$python = @(
+    (Join-Path $root 'venv\Scripts\python.exe'),
+    (Join-Path $root 'runtime\python\python.exe')
+) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 $script = Join-Path $root 'experiments\parakeet\scripts\model_acquisition.py'
 $requirements = Join-Path $root 'experiments\parakeet\manifests\requirements-parakeet.txt'
 
-if (-not (Test-Path -LiteralPath $python)) {
-    throw "Jarvis interpreter not found: $python"
+if (-not $python) {
+    throw "Jarvis interpreter not found under venv or runtime\python"
 }
 if ($InstallRuntime) {
     & $python -m pip install --disable-pip-version-check --requirement $requirements

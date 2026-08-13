@@ -9,7 +9,7 @@ import modules.wake_word as wake_word_module
 
 def test_optional_runtime_engines_are_disabled_unless_explicitly_faked():
     assert llm_module._OLLAMA is None
-    assert stt_module._WHISPER is None
+    assert stt_module.PersistentParakeetClient.__name__ == "_DisabledParakeetClient"
     assert tts_module._SILERO_TTS is None
     assert tts_module._SOUNDDEVICE is None
     assert wake_word_module._SOUNDDEVICE is None

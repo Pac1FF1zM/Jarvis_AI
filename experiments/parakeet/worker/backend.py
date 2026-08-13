@@ -1,4 +1,4 @@
-"""Local-only Parakeet TDT adapter for the no-action diagnostic."""
+"""Local-only Parakeet TDT adapter shared by production and diagnostics."""
 from __future__ import annotations
 
 import io

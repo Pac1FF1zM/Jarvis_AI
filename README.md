@@ -11,19 +11,19 @@ EventBus проверяет обязательные поля и диапазо�
 
 ## Статус проекта — 13 августа 2026
 
-Текущий checkpoint разделяет рабочий runtime и исследовательские кандидаты:
+Текущий runtime использует единый production STT:
 
 | Область | Текущее состояние |
 |---|---|
-| Основной STT | experimental production `nvidia/parakeet-tdt-0.6b-v3`; откат на Whisper — `engine: whisper` |
-| Baseline STT | `openai-whisper small`, сохранён в конфиге и парном benchmark runner |
+| Основной STT | `nvidia/parakeet-tdt-0.6b-v3`, pinned local production worker |
+| Предыдущий STT | Whisper удалён из runtime и зависимостей; сохранён только исторический benchmark |
 | NLU | собственная CharCNN + детерминированный router + semantic commit gate |
 | Gesture Core | локально выбран Jester Tiny3D; checkpoint и отчёт не хранятся в Git |
 | Выполнение команд | shadow-тест всегда `blocked`; production Parakeet проходит обычные safety-гейты Jarvis |
 | Голосовой benchmark | FLEURS `ru_ru`, 20 парных human-speech записей ≤12 с: Parakeet WER 4,40%, Whisper 5,35% |
 
 Полный handoff для продолжения в новом чате: [checkpoint 2026-08-13](docs/CHECKPOINT_2026-08-13_RU.md).
-Актуальный STT A/B-отчёт: [experimental production Parakeet](docs/PARAKEET_PRODUCTION_EXPERIMENT_RU.md).
+Отчёт о выборе STT: [production Parakeet](docs/PARAKEET_PRODUCTION_EXPERIMENT_RU.md).
 
 ## Что работает сейчас
 
@@ -54,11 +54,10 @@ wake_word_detected
 - Калибровка микрофона привязана к профилю пользователя и конкретному
   аудиоустройству. Она настраивает пороги начала/окончания речи и безопасное
   усиление PCM; после смены микрофона Jarvis использует стандартные значения.
-- Основным STT остаётся многоязычный `small` из официального
-  `openai-whisper`. При доступной NVIDIA CUDA он работает на GPU в FP16, иначе
-  переходит на CPU/FP32. Отсутствующий движок, ошибка декодирования или
-  некорректное аудио теперь дают пустой transcript с нулевой уверенностью:
-  production-путь не подставляет фиктивную команду.
+- Production STT — многоязычный `nvidia/parakeet-tdt-0.6b-v3` с закреплённой
+  revision. При доступной NVIDIA CUDA worker использует FP16, иначе доступен
+  явный CPU-режим. Ошибка worker, timeout или некорректное аудио дают пустой
+  transcript: production-путь не подставляет фиктивную команду.
 - NLU — собственная нейросеть проекта, обученная с нуля, вместе с узким
   детерминированным router. Перед ними работает semantic commit gate:
   незаконченные, отрицающие и процитированные команды блокируются,
@@ -204,14 +203,13 @@ Train, validation и test сохраняются раздельно в `data/cus
 shortcut/исполняемый файл напрямую и никогда не превращает распознанную речь в
 строку PowerShell, CMD или произвольную shell-команду.
 
-## Parakeet: production experiment и безопасный shadow-тест
+## Parakeet production и безопасный shadow-тест
 
-Parakeet TDT 0.6B v3 подключён как явно экспериментальный production STT. Его
+Parakeet TDT 0.6B v3 является единственным production STT. Его
 закреплённый checkpoint работает в отдельном постоянном процессе, принимает тот
-же PCM 16 кГц mono, что раньше получал Whisper, и публикует стандартный
+же PCM 16 кГц mono, что выдаёт microphone pipeline, и публикует стандартный
 `transcription_ready`. Ошибка или timeout дают пустой transcript; скрытого
-fallback и смешивания гипотез нет. Для мгновенного отката измените
-`modules.stt.params.engine` в `config.yaml` с `parakeet` на `whisper`.
+fallback и смешивания гипотез нет.
 
 Отдельный no-action shadow-контур сохранён для безопасной диагностики:
 
@@ -270,7 +268,7 @@ Claude и DeepSeek; найденные игры закрываются толь�
 
 Для обычного пользователя на Windows предусмотрен установщик
 `installer/output/Jarvis_Setup.exe`. По умолчанию он ставит Jarvis Lite со
-своим изолированным Python, Whisper, Silero и собственной NLU. Python и
+своим изолированным Python, Parakeet runtime, Silero и собственной NLU. Python и
 PowerShell-команды вручную не нужны. Ollama и языковая модель не ставятся без
 согласия пользователя: Jarvis Full можно выбрать отдельной галочкой или
 включить позднее через ярлык в меню «Пуск». Инструкция по сборке установщика:
@@ -311,8 +309,9 @@ python main.py --calibrate-voice --profile mikhail --profile-name "Михаил"
 `%APPDATA%\Jarvis\profiles`, а при заданном `JARVIS_DATA_DIR` — в
 `%JARVIS_DATA_DIR%\profiles`. Сырые аудиозаписи не сохраняются: только уровни,
 пороги VAD, усиление и отпечаток устройства. Файл `speech_aliases.json` внутри
-профиля может содержать личные варианты произношения иностранных названий;
-они добавляются в подсказку Whisper. Калибровка улучшает условия записи, но не
+профиля сохраняет личные варианты произношения иностранных названий для
+совместимости; текущий Parakeet runtime не использует prompt-подсказки.
+Калибровка улучшает условия записи, но не
 идентифицирует человека по голосу.
 
 Факты долговременной памяти сохраняются только после явной команды, например:
@@ -357,7 +356,7 @@ runtime-путей, собственный NLU checkpoint, PyTorch/CUDA/GPU, в�
 но намеренно не записывает и не воспроизводит звук; качество реального сигнала
 остаётся отдельной пользовательской проверкой.
 
-Чтобы Whisper использовал NVIDIA GPU, после основных зависимостей установите
+Чтобы Parakeet использовал NVIDIA GPU, после основных зависимостей установите
 CUDA-вариант PyTorch (эта команда проверена с CUDA 12.8):
 
 ```powershell
@@ -372,8 +371,9 @@ python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_
 ```
 
 Без CUDA-варианта PyTorch настройка `device: auto` безопасно выберет CPU.
-Checkpoint Whisper `small` (около 461 МБ) скачивается только при первом запуске
-в `models/openai-whisper/` и не добавляется в Git.
+Pinned checkpoint Parakeet скачивается только после просмотра и явного принятия
+CC-BY-4.0 через `SETUP_PARAKEET.cmd`; веса в `.local/parakeet/models/` не
+добавляются в Git.
 Модели openWakeWord для фразы активации также загружаются только один раз; если
 это не удалось, запуск не ломается и продолжает работать через `Ctrl+Alt+Space`.
 В сонном режиме Jarvis реагирует на фразу `Hey Jarvis` или горячую клавишу.
@@ -532,17 +532,15 @@ memory/     краткосрочная память и SQLite-хранилище
 tests/      unit, regression и end-to-end тесты
 ```
 
-Конфигурация модулей находится в `config.yaml`. Сейчас `stt.params.engine`
-выбирает экспериментальный Parakeet; обязательный флаг
-`experimental_production: true` не даёт включить его случайно. Whisper `small`
-остаётся полностью настроенным baseline. Собственная NLU работает на CPU, а
-GPU-доступ моделей сериализуется через `GPULock`.
+Конфигурация модулей находится в `config.yaml`. STT использует только pinned
+Parakeet worker; `model_dir`, отдельный Python и timeout задаются в
+`modules.stt.params`. Собственная NLU работает на CPU, а GPU-доступ моделей
+сериализуется через `GPULock`.
 
 ## Пока не реализовано
 
 - парный benchmark на приватном корпусе именно боевых команд владельца (публичный
   FLEURS smoke уже выполнен, но не заменяет этот acceptance gate);
-- окончательное promotion/rollback-решение после production A/B сессий;
 - дообучение NLU на подтверждённом корпусе реальных STT-искажений;
 - произвольная автоматизация интерфейса внутри любого приложения (клики по
   неизвестным кнопкам, заполнение форм и чтение содержимого экрана);

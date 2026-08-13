@@ -12,10 +12,10 @@ numpy>=1.24            # local RGB clip buffers for the optional Gesture Core
 # the current runtime deps.
 # pydantic>=2.5   # planned/optional
 
-# Audio/LLM/TTS engines. OpenAI Whisper and Ollama are imported by
-# modules/stt.py and modules/llm.py respectively (behind guarded imports, so
-# the project still runs without them installed).
-openai-whisper>=20250625
+# Audio/LLM/TTS engines. Parakeet runs through the pinned Transformers adapter
+# in an isolated local worker; model acquisition remains an explicit step.
+transformers==5.15.0
+librosa==0.11.0
 ollama>=0.2
 silero>=0.4
 sounddevice>=0.4     # interruptible local audio playback for Silero TTS

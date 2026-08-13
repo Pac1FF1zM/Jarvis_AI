@@ -1,4 +1,4 @@
-"""Persistent local Parakeet decoder for the no-action microphone test."""
+"""Persistent local Parakeet decoder used by production and shadow clients."""
 from __future__ import annotations
 
 import argparse
@@ -25,13 +25,12 @@ def _serve(model_dir: Path, provider: str) -> None:
             "model_load_ms": backend.load_ms,
             "warm_up_ms": backend.warm_up_ms,
             "health": backend.health(),
-            "execution": "blocked",
         })
         for line in sys.stdin:
             try:
                 request = json.loads(line)
                 if request.get("op") == "close":
-                    _emit({"event": "closed", "execution": "blocked"})
+                    _emit({"event": "closed"})
                     return
                 if request.get("op") != "decode":
                     raise ValueError("unsupported worker operation")
@@ -43,13 +42,11 @@ def _serve(model_dir: Path, provider: str) -> None:
                     "text": text,
                     "confidence": None,
                     "decode_ms": (time.perf_counter() - started) * 1000.0,
-                    "execution": "blocked",
                 })
             except Exception as exc:
                 _emit({
                     "event": "error",
                     "error": f"{type(exc).__name__}: {exc}",
-                    "execution": "blocked",
                 })
     finally:
         backend.close()

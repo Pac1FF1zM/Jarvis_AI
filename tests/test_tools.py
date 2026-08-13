@@ -310,7 +310,7 @@ def test_browser_uses_windows_default_https_handler(monkeypatch):
         ("дискорти", "discord"),
     ],
 )
-def test_allowlist_resolves_common_russian_whisper_variants(heard, expected):
+def test_allowlist_resolves_common_russian_stt_variants(heard, expected):
     resolved = resolve_application(heard)
     assert resolved is not None
     assert resolved.name == expected

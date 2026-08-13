@@ -1,10 +1,9 @@
-# Parakeet TDT: experimental production STT and shadow diagnostic
+# Parakeet TDT: production STT and shadow diagnostic
 
-The production STT module can now send each 16 kHz mono microphone capture to
-the same isolated persistent worker. This path is enabled only when both
-`engine: parakeet` and `experimental_production: true` are present in
-`config.yaml`. It publishes the ordinary Jarvis `transcription_ready` event;
-therefore `main.py` is a real action-capable runtime.
+The production STT module sends each 16 kHz mono microphone capture to an
+isolated persistent Parakeet worker. Parakeet is the only runtime STT and
+publishes the ordinary Jarvis `transcription_ready` event; therefore `main.py`
+is a real action-capable runtime.
 
 The separate shadow diagnostic records one capture in memory, sends it
 to a persistent local Parakeet worker, and shows the production Jarvis NLU
@@ -19,8 +18,8 @@ Pinned model:
 - preferred provider `cuda`, FP16
 
 The model card lists Linux as the preferred/supported OS. This Windows path
-therefore uses the official Transformers implementation as an experimental
-compatibility test and fails closed if CUDA or model loading is unavailable.
+therefore uses the official Transformers implementation and fails closed if
+CUDA or model loading is unavailable.
 
 ## Setup
 
@@ -66,9 +65,8 @@ TEST_PARAKEET_NLU.cmd --text "открой калькулятор"
 ```
 
 Use `TEST_PARAKEET_NLU.cmd` when actions must remain impossible. Use `main.py`
-only for an intentional production A/B session, because commands that pass the
-normal semantic/NLU/tool safety gates may execute. Roll back by setting
-`modules.stt.params.engine: whisper`.
+only for an intentional production session, because commands that pass the
+normal semantic/NLU/tool safety gates may execute.
 
 ## Paired benchmark
 

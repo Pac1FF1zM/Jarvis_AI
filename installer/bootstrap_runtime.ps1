@@ -117,24 +117,25 @@ try {
             "-m", "pip", "install", "--disable-pip-version-check",
             "-r", (Join-Path $InstallerDir "requirements-lite.txt")
         )
-        Invoke-Native $PythonExe @(
-            (Join-Path $InstallerDir "prepare_whisper.py"),
-            "--model", "small",
-            "--download-root", (Join-Path $AppDir "models\openai-whisper")
-        )
     }
 
     if ($InstallOllama -or $OllamaOnly) { Enable-Ollama }
 
-    $doctorJson = Join-Path $DataDir "doctor-report.json"
-    & $PythonExe (Join-Path $AppDir "main.py") --doctor --json 1> $doctorJson
-    if ($LASTEXITCODE -eq 2) {
-        throw "Runtime Doctor found critical errors. See $doctorJson"
+    $parakeetModel = Join-Path $AppDir ".local\parakeet\models\nvidia--parakeet-tdt-0.6b-v3\model.safetensors"
+    if (Test-Path -LiteralPath $parakeetModel) {
+        $doctorJson = Join-Path $DataDir "doctor-report.json"
+        & $PythonExe (Join-Path $AppDir "main.py") --doctor --json 1> $doctorJson
+        if ($LASTEXITCODE -eq 2) {
+            throw "Runtime Doctor found critical errors. See $doctorJson"
+        }
+        if ($LASTEXITCODE -ne 0) {
+            throw "Runtime Doctor failed with exit code $LASTEXITCODE"
+        }
+        Write-Host "JARVIS_INSTALL_READY doctor=$doctorJson"
+    } else {
+        Write-Warning "Parakeet model setup is required before first Jarvis start. Use the Start-menu shortcut."
+        Write-Host "JARVIS_INSTALL_READY model_setup=required"
     }
-    if ($LASTEXITCODE -ne 0) {
-        throw "Runtime Doctor failed with exit code $LASTEXITCODE"
-    }
-    Write-Host "JARVIS_INSTALL_READY doctor=$doctorJson"
 } finally {
     Stop-Transcript | Out-Null
 }

@@ -492,7 +492,7 @@ class ControlCenterWindow(QMainWindow):
             ("Активная сессия", "modules.wake_word.params.active_session_enabled", self._check()),
             ("Таймаут продолжения", "modules.wake_word.params.active_session_timeout_seconds", self._spin(2, 60)),
             ("Устройство STT", "modules.stt.device", self._combo(("auto", "cpu", "cuda"))),
-            ("Модель Whisper", "modules.stt.model", QLineEdit()),
+            ("Модель Parakeet", "modules.stt.params.model_dir", QLineEdit()),
             ("Устройство LLM", "modules.llm.device", self._combo(("cpu", "cuda"))),
             ("Модель Ollama", "modules.llm.model", QLineEdit()),
             ("Уровень логов", "logging.level", self._combo(("DEBUG", "INFO", "WARNING", "ERROR"))),

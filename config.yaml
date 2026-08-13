@@ -78,43 +78,22 @@ modules:
       active_session_timeout_seconds: 7
       # Balanced latency profile selected from real-session simulations:
       # reject one-frame noise spikes, close on 650 ms silence, and prevent a
-      # noisy room from feeding a 15-second clip into Whisper.
+      # noisy room from feeding an oversized clip into Parakeet.
       speech_start_frames: 2
       end_silence_ms: 650
       max_duration_ms: 12000
       hotkey: "<ctrl>+<alt>+<space>"
 
-  # Experimental production A/B candidate. Set engine back to "whisper" for
-  # an immediate rollback; the existing Whisper model/options stay intact.
+  # Production NVIDIA Parakeet TDT. The pinned local snapshot runs in an
+  # isolated persistent worker and never performs network access at runtime.
   stt:
     enabled: true
-    # Parakeet uses a pinned, license-approved local snapshot in an isolated
-    # persistent worker. "auto" selects CUDA on this machine.
+    # "auto" selects CUDA when PyTorch sees the NVIDIA GPU.
     device: "auto"
-    model: "small"
     params:
-      engine: parakeet
-      experimental_production: true
-      parakeet_model_dir: .local/parakeet/models/nvidia--parakeet-tdt-0.6b-v3
-      parakeet_python: venv/Scripts/python.exe
-      parakeet_timeout_seconds: 45
-      language: ru
-      download_root: models/openai-whisper
-      # Balanced accuracy profile for short, independent voice commands.
-      # A small beam improves recognition without the latency/VRAM cost of
-      # moving from Whisper small to a larger model.
-      temperature: 0.0
-      beam_size: 3
-      patience: 1.0
-      condition_on_previous_text: false
-      # Bias mixed Russian/English application names without changing the
-      # Russian recognition language. This is a prompt, not another model.
-      initial_prompt: >-
-        Голосовые команды ассистенту Джарвис: открой, запусти, закрой, найди,
-        напомни, включи, выключи, запусти жестовый режим. Приложения и сайты:
-        браузер, ютуб, ютьюб, Telegram, Телеграм, Discord, Дискорд, Steam,
-        Visual Studio Code, VS Code, ChatGPT, Claude, DeepSeek, калькулятор,
-        блокнот, проводник, Paint, Пейнт, диспетчер задач.
+      model_dir: .local/parakeet/models/nvidia--parakeet-tdt-0.6b-v3
+      python: venv/Scripts/python.exe
+      timeout_seconds: 45
 
   # Own character-level NLU manager. It routes tool/control/dialogue/reject,
   # then predicts intent and slots. All weights and its tokenizer are trained
@@ -152,7 +131,7 @@ modules:
       speaker: xenia
       sample_rate: 48000
       # Silero lazily initializes expensive CPU kernels on its first calls.
-      # Warm them while Whisper loads in parallel, then cache short repeated
+      # Warm them while Parakeet loads in parallel, then cache short repeated
       # confirmations so the first spoken response is not the slowest one.
       prewarm_enabled: true
       prewarm_texts:
