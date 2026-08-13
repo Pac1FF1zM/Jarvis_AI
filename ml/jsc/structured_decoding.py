@@ -53,6 +53,7 @@ def assemble_structured_execution(
     *,
     raw_plan: JALPlan | None = None,
     structured_arguments: Sequence[Mapping[str, Any]] | None = None,
+    allow_neural_evidence: bool = False,
 ) -> JALPlan | None:
     """Build an executable plan without trusting generated tool names.
 
@@ -99,6 +100,10 @@ def assemble_structured_execution(
             for name, value in structured_arguments[index].items():
                 if name in allowed:
                     arguments.setdefault(name, value)
+            # A direct Structured JSC call may use schema-valid neural evidence
+            # after its independent act/verifier gates.  Existing callers keep
+            # the historical fail-closed requirement by default.
+            has_evidence = has_evidence or allow_neural_evidence
         if index < len(raw_steps) and raw_steps[index].tool == tool:
             has_evidence = True
             allowed = set(registry.argument_names(tool))

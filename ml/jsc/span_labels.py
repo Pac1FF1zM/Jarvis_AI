@@ -24,9 +24,12 @@ SPAN_ARGUMENTS = (
 )
 
 
-def span_tool_arguments(registry: ToolSchemaRegistry) -> dict[str, tuple[str, ...]]:
+def span_tool_arguments(
+    registry: ToolSchemaRegistry,
+    span_slots: Sequence[str] = SPAN_ARGUMENTS,
+) -> dict[str, tuple[str, ...]]:
     return {
-        tool: tuple(name for name in SPAN_ARGUMENTS if name in registry.argument_names(tool))
+        tool: tuple(name for name in span_slots if name in registry.argument_names(tool))
         for tool in registry.tool_names
     }
 
@@ -38,12 +41,15 @@ def find_argument_span(
 ) -> tuple[int, int] | None:
     """Return inclusive tokenizer positions (BOS is zero) for one target value."""
     value = call.arguments.get(argument)
-    if not isinstance(value, str) or not value.strip():
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        return None
+    value_text = str(value)
+    if not value_text.strip():
         return None
     source = source_text.casefold().replace("ё", "е")
-    candidates = [_normalize(value)]
+    candidates = [_normalize(value_text)]
     if argument in {"application", "window"}:
-        resolved = resolve_application(value)
+        resolved = resolve_application(value_text)
         if resolved is not None:
             for spec in APPLICATIONS:
                 if spec.name == resolved.name:
@@ -82,6 +88,7 @@ def decode_span_arguments(
     *,
     confidence_threshold: float = 0.45,
     maximum_length: int = 256,
+    span_slots: Sequence[str] = SPAN_ARGUMENTS,
 ) -> tuple[dict[str, str], ...]:
     """Decode safe, schema-applicable character spans for predicted tools."""
     if not 0.0 <= confidence_threshold <= 1.0:
@@ -93,7 +100,7 @@ def decode_span_arguments(
             continue
         allowed = set(registry.argument_names(tool))
         arguments: dict[str, str] = {}
-        for slot_index, name in enumerate(SPAN_ARGUMENTS):
+        for slot_index, name in enumerate(span_slots):
             if name not in allowed:
                 continue
             starts = start_probabilities[step_index][slot_index]
