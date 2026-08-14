@@ -67,14 +67,25 @@
 - [x] выбрать seed29: 87,75% migration development Exact JAL, 100% schema,
   0% false execution и 0% opposite action;
 - [x] подключить seed29 и validation-selected thresholds в stateful shadow;
+- [x] включить agreement canary с единым semantic owner и сравнением
+  канонических NLU/JSC JAL без side effects;
+- [x] реализовать fail-closed admission из versioned evidence, rolling error
+  budget и автоматический rollback в agreement canary;
+- [x] реализовать restricted reversible JAL executor: completeness/risk gates,
+  compensation-before-replacement и rollback compound-транзакций;
+- [x] подготовить JSC-primary и условно отключаемый legacy NLU runtime;
 - [ ] получить живую shadow telemetry seed29 после обновления конфигурации;
 - [ ] собрать новый frozen voice holdout, не использованный в decoder/data;
-- [ ] поднять correction выше текущих 46,67% и реализовать compensation policy;
-- [ ] поднять OOD/selective-risk качество выше текущих 33,33% exact без
-  ухудшения нулевого false execution;
+- [x] получить на свежем 400-sample offline runtime gate correction/OOD 100%,
+  Exact JAL 96,75%, false execution/opposite action 0%; human voice gate открыт;
+- [x] реализовать typed correction transaction и compensation policy;
+- [ ] подтвердить correction ≥95% и OOD recall ≥98% на новом размеченном
+  human-command voice holdout без ухудшения нулевого false execution;
 - [ ] измерить CPU p50/p95, cold start и устойчивость длинной сессии;
-- [ ] провести отдельный no-side-effect execution-canary review;
-- [ ] не удалять production NLU до формального promotion решения;
+- [x] реализовать no-side-effect agreement canary и локальный audit log;
+- [ ] набрать ≥1 000 reviewed voice turns минимум от трёх пользователей;
+- [ ] провести один стабильный restricted/JSC-primary release-цикл;
+- [ ] удалить NLU только после второго стабильного JSC-primary release-цикла;
 - [ ] добавлять естественные формулировки новых tool schemas вместе с
   regression и независимым holdout;
 - [ ] не запускать обучение автоматически и не использовать пользовательские
@@ -124,5 +135,5 @@ Ollama.
   optional runtime-зависимостями на поддерживаемых версиях Python;
 - тестовый запуск не скачивает модели и не воспроизводит звук.
 
-Актуальный общий прогон 14 августа 2026 после Structured JSC v8 и исправления
-ленивого импорта микрофона: `545 passed, 3 skipped` в `.venv-training`.
+Актуальный общий прогон 14 августа 2026 после включения agreement canary и JAL
+transaction executor: `570 passed, 3 skipped` в `.venv-training`.

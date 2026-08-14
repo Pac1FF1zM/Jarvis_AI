@@ -1,4 +1,4 @@
-# Jarvis — полный статус проекта на 14 августа 2026
+# Jarvis — полный статус проекта, актуализирован 15 августа 2026
 
 Этот документ — актуальная точка входа для продолжения разработки. Старые
 checkpoint-документы сохраняются как история и не являются источником текущей
@@ -6,19 +6,28 @@ production-конфигурации.
 
 ## Краткий итог
 
-Jarvis работает как локальный Windows-ассистент с production Parakeet STT,
-собственной production NLU, безопасными инструментами, Silero TTS, памятью,
-напоминаниями, Control Center и ограниченным Gesture Core. Structured JSC v8
-прошёл migration development gates с Exact JAL 87,75% и подключён параллельным
-stateful shadow-наблюдателем. Он пока не исполняет команды и не заменяет NLU.
+Jarvis 0.9.0 работает как локальный Windows-ассистент с production Parakeet
+STT, безопасными инструментами, Silero TTS, памятью, напоминаниями, Control
+Center и ограниченным Gesture Core. Миграция на Structured JSC/JAL переведена
+в активный `agreement_canary`: JSC и legacy NLU анализируют один transcript
+независимо, но только единый coordinator выбирает semantic owner. В canary им
+остаётся NLU; JSC не имеет side effects.
+
+Restricted reversible, JSC-primary и NLU-removed runtime-пути реализованы и
+покрыты тестами. Они fail-closed заблокированы versioned evidence до реальных
+human voice gates и одного/двух стабильных release-циклов. Это означает, что
+архитектура готова к контролируемой миграции, но production promotion ещё не
+получил достаточных полевых доказательств.
 
 Текущие уровни зрелости:
 
 | Контур | Статус | Разрешённые side effects |
 |---|---|---|
-| Основной голосовой runtime | Production/local | Да, после safety gates |
+| Основной голосовой runtime | Production/local, agreement canary | Да, только выбранный NLU control |
 | Parakeet diagnostic | No-action diagnostic | Нет |
-| Structured JSC v8 | Experimental production shadow | Нет |
+| Structured JSC v8 | Active agreement canary | Нет |
+| Restricted JAL executor | Code-ready, evidence-blocked | Нет до promotion |
+| JSC-primary / NLU removed | Code-ready, release-cycle-blocked | Нет до promotion |
 | Gesture Core | Restricted real-camera test | Только G01–G06 |
 | Свободный диалог Ollama | Optional/degraded в последней сессии | Инструменты не маршрутизирует |
 
@@ -29,14 +38,13 @@ openWakeWord / Ctrl+Alt+Space
   -> Silero VAD + PCM16 16 kHz capture
   -> Parakeet TDT 0.6B v3
   -> semantic commit gate
-  -> production NLU + deterministic router
-  -> orchestrator + schema-checked tools
+  -> production NLU + Structured JSC v8 (independent)
+  -> migration coordinator
+     -> semantic_result from NLU (active agreement canary)
+     -> JAL transaction request (only after admitted promotion)
+  -> orchestrator + schema-checked tools / JAL executor
   -> response
   -> Silero TTS
-
-                         +-> Structured JSC v8 shadow
-                             history + pending JAL + comparison log
-                             no executable events
 ```
 
 Основной запуск — `START_JARVIS_UI.cmd` / Jarvis Control Center. Прямой
@@ -50,8 +58,10 @@ gesture runtime.
 |---|---|---|
 | Wake word | openWakeWord `hey_jarvis`, threshold 0,35; PTT `Ctrl+Alt+Space` | Включён; active session 7 с |
 | STT | `nvidia/parakeet-tdt-0.6b-v3`, локальный persistent worker, CUDA auto | Единственный production STT |
-| Production NLU | `models/nlu_manager_finetuned.pt`, CPU, threshold 0,55 | Основной execution routing |
-| JSC shadow | Structured v8 seed29, CPU, state/history | Включён, execution отсутствует |
+| Legacy NLU control | `models/nlu_manager_finetuned.pt`, CPU, threshold 0,55 | Активный owner/fallback в agreement canary |
+| Structured JSC | Structured v8 seed29, CPU, state/history | Agreement candidate, execution отсутствует |
+| Migration coordinator | Evidence admission + rolling error budget | Единственный semantic owner |
+| JAL executor | Schema, reversibility, compensation, rollback | Готов; не активирован evidence-gate |
 | LLM | Ollama `qwen2.5:7b-instruct`, CPU Q4_K_M | Опционален; в последних сессиях недоступен, используется stub |
 | TTS | Silero `v4_ru`, `xenia`, 48 kHz | Включён, prewarm + bounded cache |
 | Gesture | Jester Tiny3D, CUDA auto | Restricted test; allowlist G01–G06 |
@@ -79,8 +89,9 @@ gesture runtime.
 - CharCNN + augmented, 169 199 параметров.
 - Frozen holdout intent macro-F1 0,959; constrained slot decoders и semantic
   gate остаются частью production-системы.
-- NLU нельзя удалять, пока JSC не пройдёт независимый voice holdout и execution
-  canary gates.
+- NLU загружается условно и технически больше не является обязательным импортом.
+  В 0.9.0 он намеренно остаётся control/fallback; удаление из пакета разрешено
+  только после двух стабильных JSC-primary release-циклов.
 
 ### Structured JSC v8
 
@@ -112,14 +123,19 @@ Migration development:
 | False execution | 0,00% |
 | Opposite action | 0,00% |
 
+Свежий versioned offline runtime gate на 400 примерах: Exact JAL 96,75%,
+correction 100%, OOD recall 100%, false execution 0%, opposite action 0%.
+Отдельный seed29 probe: 24/24. Эти результаты подтверждают код и frozen
+артефакт, но не засчитываются как новые voice turns.
+
 CPU-smoke после прогрева: примерно 6–129 мс; первый cold request около
 0,5–0,8 с. JSC задаёт typed clarification для неизвестного приложения/окна и
 неполного reminder, затем заполняет pending slot следующим ходом.
 
-Ограничение результата: migration development использовался при анализе
-архитектуры и не является новым frozen voice holdout. Последний живой
-`logs/jsc_shadow.jsonl` создан до подключения seed29; новая полевая телеметрия
-ещё не накоплена.
+Ограничение результата: migration development и offline runtime gate не
+являются новым frozen voice holdout. `models/JSC_MIGRATION_STATE.json` честно
+фиксирует `reviewed_voice_turns: 0` и `stable_release_cycles: 0`; свежая полевая
+seed29 telemetry ещё не накоплена.
 
 ### Gesture Core
 
@@ -187,10 +203,14 @@ ASR-алиасов, reminder slot merge и отсутствие уточнени
 
 ## Проверки
 
-- JSC/router/application targeted suite: 105 passed.
-- Runtime/JSC/event regression: 82 passed.
-- Structured dataset/schema/migration suite: 17 passed.
-- Полный suite в `.venv-training`: **545 passed, 3 skipped** за 1:47;
+- Новый migration runtime suite проверяет stage admission, обязательные два
+  release-цикла, unsafe error budget, canonical legacy adapter, agreement
+  forwarding, restricted selection, compensation и compound rollback.
+- Runtime readiness CLI подтверждает: agreement canary admitted; restricted,
+  JSC-primary и NLU-removed корректно blocked текущим human evidence.
+- Versioned snapshot результата сохранён в
+  `docs/evidence/JSC_MIGRATION_READINESS_20260814.json`.
+- Полный suite в `.venv-training`: **570 passed, 3 skipped** за 1:44;
   ошибок нет. Восемь предупреждений относятся к известному PyTorch
   `TransformerEncoder nested_tensor/norm_first` и не меняют результат.
 - `git diff --check`: ошибок whitespace нет; предупреждения LF/CRLF ожидаемы на
@@ -204,8 +224,9 @@ Runtime `venv` намеренно не содержит `tensorboard`, поэт�
 
 ## Git и воспроизводимость
 
-- Production-код, Structured JSC v8 release export, Jester Tiny3D release
-  export и их audit reports входят в `main` и в Windows Setup.
+- Production-код, migration coordinator/JAL executor, versioned evidence,
+  Structured JSC v8 release export, Jester Tiny3D release export и их audit
+  reports входят в `main` и Windows Setup.
 - `config.yaml` использует только стабильные release-пути внутри `models/`;
   clone больше не зависит от локальных training run directories.
 - Тяжёлые training snapshots, private logs, WAV, databases и generated reports
@@ -213,15 +234,14 @@ Runtime `venv` намеренно не содержит `tensorboard`, поэт�
 
 ## Незакрытые риски
 
-1. JSC correction exact 46,67%: нужна typed correction transaction и явная
-   compensation policy для уже выполненного предыдущего действия.
-2. JSC OOD exact 33,33%: нужен независимый OOD/selective-risk gate без роста
-   false execution.
-3. Нет нового frozen voice holdout после fine-tuning; 87,75% нельзя обобщать на
-   любую пользовательскую фразу.
-4. Нет живой shadow telemetry seed29 после обновления `config.yaml`.
-5. Production NLU и JSC ещё не сравнивались на одном новом закрытом голосовом
+1. Нет нового frozen voice holdout после fine-tuning; offline 96,75% нельзя
+   обобщать на любую пользовательскую фразу.
+2. Нет живой agreement telemetry seed29 после обновления `config.yaml`.
+3. NLU и JSC ещё не сравнивались на одном новом закрытом голосовом
    наборе после исправлений.
+4. Human-gates correction ≥95% и OOD recall ≥98% ещё не подтверждены, несмотря
+   на 100% в offline runtime gate.
+5. Stable JSC-primary release cycles: 0 из 2; NLU удалять нельзя.
 6. Ollama в последних сессиях выключен; свободный диалог работает через stub.
 7. Discord cold launch иногда не подтверждает появление основного окна.
 8. Gesture Core требует персональной camera calibration и более сильного
@@ -230,16 +250,20 @@ Runtime `venv` намеренно не содержит `tensorboard`, поэт�
 
 ## Следующие действия по приоритету
 
-### P0 — перед любым JSC execution canary
+### P0 — пройти agreement canary evidence
 
-1. Запустить Jarvis с новым seed29 и накопить чистый `jsc_shadow` лог на новом
-   наборе одиночных, compound, clarification, correction, reject и OOD фраз.
-2. Собрать отдельный frozen voice holdout, который не использовался в данных,
-   decoder rules или threshold selection.
-3. Довести correction и OOD, сохранив false execution 0% и opposite action 0%.
-4. Измерить CPU p50/p95 и cold start на длинной реальной сессии.
-5. Только после этого проектировать no-side-effect canary/replay; production NLU
-   не удалять до формального решения promotion.
+1. Накопить не менее 1 000 свежих размеченных `jsc_agreement` voice turns
+   минимум от трёх пользователей: single, compound, clarification, correction,
+   reject, OOD, шум и дальний микрофон.
+2. Заморозить private human-command holdout до любых следующих изменений
+   decoder/data/thresholds и прогнать audio → Parakeet → semantic plan E2E.
+3. Подтвердить false execution/opposite action 0%, semantic exact ≥90%,
+   correction ≥95% и OOD recall ≥98%; измерить CPU p50/p95/cold start.
+4. Записать проверенные метрики в `models/JSC_MIGRATION_STATE.json` и только
+   после review переключить stage на `restricted_reversible`.
+5. Провести один стабильный restricted/JSC-primary цикл с error budget, затем
+   второй стабильный JSC-primary цикл. Только после них выставлять
+   `nlu_removed` и исключать NLU из installer/manifest.
 
 ### P1 — runtime polish
 
@@ -256,7 +280,10 @@ Runtime `venv` намеренно не содержит `tensorboard`, поэт�
 
 ## Решение на текущую дату
 
-Parakeet остаётся единственным production STT. Production NLU остаётся
-исполняющим semantic routing. Structured JSC v8 признан готовым для stateful
-shadow и дальнейшего закрытого benchmark, но не для удаления NLU и не для
-самостоятельного execution. Gesture Core остаётся restricted test.
+Parakeet остаётся единственным production STT. Release 0.9.0 находится на
+Stage 1 `agreement_canary`: NLU — активный semantic control, JSC — независимый
+неисполняемый кандидат. Вся цепочка restricted JAL → JSC-primary → условное
+удаление NLU реализована, протестирована и fail-closed управляется evidence.
+Её фактическое включение отложено до настоящей seed29 voice telemetry и двух
+стабильных циклов; синтетические результаты за них не выдаются. Gesture Core
+остаётся restricted test.

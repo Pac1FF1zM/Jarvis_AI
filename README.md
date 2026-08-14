@@ -9,7 +9,7 @@ EventBus проверяет обязательные поля и диапазо�
 Неизвестные события расширений остаются допустимыми, но их payload также
 отделяется от словаря производителя перед публикацией.
 
-## Статус проекта — 14 августа 2026
+## Статус проекта — 15 августа 2026
 
 Текущий runtime использует единый production STT:
 
@@ -17,14 +17,16 @@ EventBus проверяет обязательные поля и диапазо�
 |---|---|
 | Основной STT | `nvidia/parakeet-tdt-0.6b-v3`, pinned local production worker |
 | Предыдущий STT | Whisper удалён из runtime и зависимостей; сохранён только исторический benchmark |
-| Production NLU | собственная CharCNN + детерминированный router + semantic commit gate; исполняющий routing |
-| Structured JSC | v8 seed29, 87,75% Exact JAL migration development; stateful shadow без исполнения |
+| Semantic routing | `agreement_canary`: NLU — активный control/fallback, единый coordinator исключает двойное выполнение |
+| Structured JSC | v8 seed29; независимый JAL candidate и agreement telemetry без side effects |
 | Gesture Core | Jester Tiny3D release export включён в `models/`; restricted G01–G06 |
-| Выполнение команд | production NLU проходит safety-гейты; Parakeet diagnostic и JSC shadow не имеют side effects |
+| JSC/JAL promotion | restricted/JSC-primary/NLU-removed пути реализованы, но fail-closed до human voice gates и 1/2 стабильных циклов |
 | Голосовой benchmark | FLEURS `ru_ru`, 20 парных human-speech записей ≤12 с: Parakeet WER 4,40%, Whisper 5,35% |
-| Полный pytest | 545 passed, 3 skipped в `.venv-training` |
+| Полный pytest | 570 passed, 3 skipped в `.venv-training` |
 
-Полный актуальный handoff: [статус проекта 2026-08-14](docs/PROJECT_STATUS_2026-08-14_RU.md).
+Полный актуальный handoff: [статус проекта 2026-08-15](docs/PROJECT_STATUS_2026-08-14_RU.md).
+Текущая матрица admission:
+[JSC migration readiness](docs/evidence/JSC_MIGRATION_READINESS_20260814.json).
 Предыдущий [checkpoint 2026-08-13](docs/CHECKPOINT_2026-08-13_RU.md) сохранён
 как исторический снимок.
 Отчёт о выборе STT: [production Parakeet](docs/PARAKEET_PRODUCTION_EXPERIMENT_RU.md).
@@ -41,7 +43,8 @@ Silero VAD записывает команду до окончания речи 
 wake_word_detected
   → audio_captured
   → transcription_ready
-  → nlu_result
+  → nlu_result + jsc_candidate_ready
+  → semantic_result (agreement canary coordinator)
   → tool_call_requested / general chat
   → response_ready
   → speech_started
@@ -68,12 +71,20 @@ wake_word_detected
   самокоррекция оставляет только последнюю мысль, а составной план принимается
   атомарно — одна неизвестная часть запрещает все действия.
 - Structured JSC v8 получает тот же transcript параллельно с NLU, строит
-  типизированный JAL, хранит history/pending state и пишет сравнение в
-  `logs/jsc_shadow.jsonl`. Он не публикует executable events и пока не заменяет
-  production NLU. Migration development Exact JAL — 87,75%; false execution и
-  opposite action — 0%.
+  типизированный JAL, хранит history/pending state и публикует только
+  неисполняемый candidate. Единый migration coordinator в активном
+  `agreement_canary` передаёт дальше NLU и пишет каноническое сравнение в
+  `logs/jsc_agreement.jsonl`; поэтому два semantic-пути не могут одновременно
+  выполнить команду. Migration development Exact JAL — 87,75%, а свежий
+  офлайн runtime gate — 96,75%; оба результата не заменяют human voice gate.
+- Restricted reversible и JSC-primary execution уже реализованы отдельным JAL
+  executor: schema validation, completeness/calibrated abstention, correction
+  compensation, stop-on-failure и compound rollback. Runtime не допускает эти
+  стадии по одному config-флагу: нужны versioned human metrics; NLU удаляется
+  только после двух стабильных JSC-primary release-циклов.
 - Ollama используется только для свободного диалога. Решения о запуске
-  инструментов принимает NLU, а готовый результат возвращается напрямую;
+  инструментов принимает выбранный semantic owner; в активном canary это NLU,
+  а JSC не имеет side effects. Готовый результат возвращается напрямую;
   при недоступности Ollama работает текстовая заглушка. Доступность локальной
   модели проверяется во время запуска, поэтому первый вопрос не ждёт сетевого
   тайм-аута уже выключенного сервера.
@@ -532,8 +543,9 @@ TTS. Отдельные adversarial-тесты проверяют двойную
 
 ```text
 core/       EventBus, Orchestrator, GPULock, конфигурация
-modules/    wake word, STT, собственный NLU, LLM, TTS, планировщик
-ml/nlu/     датасет, токенизатор, модели, обучение, inference
+modules/    wake word, STT, NLU/JSC coordinator, JAL executor, LLM, TTS
+ml/nlu/     legacy control/fallback, датасет, обучение, inference
+ml/jsc/     JAL schema, Structured JSC, migration gates и transactions
 experiments/ изолированные no-action STT/semantic-кандидаты
 models/     checkpoints и метрики экспериментов
 tools/      автоматически обнаруживаемые инструменты
@@ -543,16 +555,17 @@ tests/      unit, regression и end-to-end тесты
 
 Конфигурация модулей находится в `config.yaml`. STT использует только pinned
 Parakeet worker; `model_dir`, отдельный Python и timeout задаются в
-`modules.stt.params`. Собственная NLU работает на CPU, а GPU-доступ моделей
-сериализуется через `GPULock`.
+`modules.stt.params`. Legacy NLU-control и Structured JSC работают на CPU, а
+GPU-доступ моделей сериализуется через `GPULock`.
 
 ## Пока не реализовано
 
 - парный benchmark на приватном корпусе именно боевых команд владельца (публичный
   FLEURS smoke уже выполнен, но не заменяет этот acceptance gate);
-- promotion Structured JSC из shadow: сначала нужны новый frozen voice holdout,
-  correction/OOD gates и отдельный execution-canary review;
-- typed correction compensation после уже выполненного предыдущего действия;
+- фактический promotion выше agreement canary: runtime готов, но ещё нужны
+  1 000 reviewed human voice turns, frozen holdout и correction/OOD gates;
+- накопление свежей live seed29 telemetry; офлайн evidence уже зафиксирован,
+  но намеренно не выдаётся за production-наблюдение;
 - произвольная автоматизация интерфейса внутри любого приложения (клики по
   неизвестным кнопкам, заполнение форм и чтение содержимого экрана);
 - полностью neural exact slot extraction без constrained decoder;

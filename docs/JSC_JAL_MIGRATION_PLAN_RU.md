@@ -1,40 +1,66 @@
 # План миграции NLU → JSC/JAL
 
-## Текущее состояние — Stage 0: independent shadow
+## Текущее состояние — Stage 1: agreement canary
 
-Structured JSC получает `transcription_ready` напрямую, до результата старой
-NLU. Он публикует только `jsc_candidate_ready` с неизменяемым
-`execution_allowed: false`, пишет risk/completeness/transaction telemetry и не
-имеет пути к инструментам. NLU остаётся production router и контрольной
-группой.
+Release 0.9.0 включает всю управляемую цепочку миграции. Structured JSC и
+legacy NLU получают один transcript независимо, а `JSCMigrationModule` является
+единственным владельцем semantic routing. В активной стадии результат NLU
+уходит дальше как `semantic_result`, JSC не исполняет команды, а канонические
+NLU/JSC JAL-планы сравниваются в `logs/jsc_agreement.jsonl`.
 
-## Stage 1: agreement canary
+Стадия задаётся в `config.yaml`, но одного изменения конфигурации недостаточно:
+runtime читает versioned evidence `models/JSC_MIGRATION_STATE.json` и при
+несоблюдении ворот автоматически возвращается в `agreement_canary`. Текущие
+значения — 0 reviewed voice turns и 0 stable release cycles; офлайн-прогон на
+400 примерах зафиксирован отдельно и не считается human voice evidence.
 
-Собрать не менее 1 000 свежих голосовых turns минимум от трёх пользователей.
-Разметить disagreement, correction, OOD, incomplete/compound и ASR-noise.
-Обязательные ворота: false execution = 0, opposite action = 0, schema validity
-= 100%, correction ≥ 95%, OOD recall ≥ 98%, full voice semantic exact ≥ 90%.
-Canary остаётся без исполнения.
+## Stage 2: restricted reversible
 
-## Stage 2: restricted JSC primary
+Код готов, promotion пока заблокирован. После прохода human voice gates JSC
+получит primary routing только для schema-valid, complete и calibrated accepted
+планов из обратимого allowlist. Все остальные запросы останутся на NLU.
 
-Разрешить JSC только обратимые allow-listed действия при успешных calibrated
-risk и completeness gates. Correction выполняется одной транзакцией:
-compensation → проверка результата → replacement; при ошибке компенсации
-replacement не запускается. NLU работает в shadow и автоматически откатывает
-stage при превышении error budget.
+`JALExecutorModule` уже реализует:
+
+- последовательную JAL-транзакцию под одним trace;
+- обязательную compensation evidence для изменяющих состояние canary-действий;
+- rollback уже выполненных шагов при ошибке следующего шага;
+- correction transaction `compensation → verify → replacement`;
+- запрет replacement при ошибке compensation;
+- восстановление исходного действия при ошибке replacement;
+- committed-action receipt для следующего correction turn.
+
+Promotion требует не менее 1 000 размеченных голосовых turns минимум от трёх
+пользователей: false execution = 0, opposite action = 0, semantic exact ≥ 90%,
+correction ≥ 95%, OOD recall ≥ 98%. Rolling error budget немедленно отключает
+promoted routing при unsafe disagreement и возвращает agreement canary.
 
 ## Stage 3: JSC/JAL primary
 
-После двух стабильных release-циклов перевести все поддержанные инструменты на
-JAL executor, удалить NLU из runtime и installer, но сохранить отдельный
-rollback artifact на один релиз. Неизвестные и высокорисковые запросы всегда
-abstain/reject; расширение grammar требует новой frozen benchmark версии.
+Код готов, promotion заблокирован минимум до одного стабильного release-цикла
+после прохода voice gates. JSC становится semantic owner для поддержанных JAL
+планов; incomplete, OOD и high-risk запросы fail closed через calibrated
+abstention/reject. NLU остаётся включённым shadow-контролем и rollback-путём.
+
+## Stage 4: NLU removed
+
+Условный импорт NLU уже позволяет собрать runtime без legacy-модуля и
+checkpoint. Фактическое удаление из runtime, installer и release manifest
+разрешено только после двух последовательных стабильных JSC-primary
+release-циклов. На один следующий релиз NLU checkpoint сохраняется как
+отдельный rollback artifact.
 
 ## Незакрытый внешний gate
 
-В репозитории есть независимый paired FLEURS STT benchmark (Parakeet WER 4,40%
-против Whisper-small 5,35%), но это общая русская речь, не набор команд Jarvis.
-Для production-перехода всё ещё нужен приватный human-command manifest: не
-менее 30 записей, трёх спикеров и матрица чистая речь/шум/дальний микрофон.
-Runner и формат описаны в `benchmarks/voice_e2e/README_RU.md`.
+В репозитории есть независимый paired FLEURS STT benchmark: Parakeet WER 4,40%
+против Whisper-small 5,35%. Это общая русская речь, а не команды Jarvis.
+Production promotion требует свежий приватный human-command manifest и
+размеченную seed29 telemetry. Runner и consent-aware формат описаны в
+`benchmarks/voice_e2e/README_RU.md`; readiness проверяется командой:
+
+```powershell
+.venv-training\Scripts\python.exe training_workspace\check_jsc_migration_readiness.py
+```
+
+Текущий ожидаемый результат: agreement canary admitted, все исполняющие стадии
+blocked. Это защитный статус, а не незавершённая реализация runtime-путей.

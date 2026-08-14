@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.9.0] — 2026-08-15: controlled JSC/JAL migration canary
+
+- Added a single semantic migration coordinator. NLU and Structured JSC now
+  publish independent results, while only the coordinator may choose the
+  semantic owner for a trace; this prevents NLU/JSC double execution.
+- Activated the no-side-effect `agreement_canary` stage and local JSONL
+  agreement telemetry. Promotion is fail-closed against versioned human-voice
+  evidence in `models/JSC_MIGRATION_STATE.json`.
+- Implemented the dormant `restricted_reversible`, `jsc_primary` and
+  `nlu_removed` runtime stages. They cannot activate until their audited gates
+  pass; an unsafe requested stage degrades to agreement canary.
+- Added a schema-validating JAL transaction executor with reversible allowlist,
+  correction compensation, stop-on-compensation-failure, replacement recovery,
+  compound rollback and committed-action receipts.
+- Made legacy NLU a conditional runtime dependency so it can be removed from a
+  future package after two stable JSC-primary release cycles. Release 0.9.0
+  still ships NLU as the canary control and production fallback.
+- Added migration readiness diagnostics and regression coverage for admission,
+  abstention, rollback, adapters and the two-cycle removal gate.
+- Full suite: 570 passed, 3 skipped. Human command voice telemetry remains an
+  external acceptance gate and is not substituted with offline replay.
+
 ## [0.8.0] — 2026-08-14: JSC safety and independent voice gates
 
 - JSC shadow now consumes `transcription_ready` directly and publishes only a

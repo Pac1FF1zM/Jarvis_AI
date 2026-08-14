@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "evidence": "models/JSC_MIGRATION_STATE.json",
+  "active_status": "agreement_canary",
+  "release": "0.9.0",
+  "evidence_release_matches": true,
+  "stages": {
+    "independent_shadow": {
+      "admitted": true,
+      "active_stage": "independent_shadow",
+      "reasons": []
+    },
+    "agreement_canary": {
+      "admitted": true,
+      "active_stage": "agreement_canary",
+      "reasons": []
+    },
+    "restricted_reversible": {
+      "admitted": false,
+      "active_stage": "agreement_canary",
+      "reasons": [
+        "reviewed_voice_turns_below_1000",
+        "false_execution_not_zero",
+        "opposite_action_not_zero",
+        "semantic_exact_below_0_90",
+        "correction_below_0_95",
+        "ood_recall_below_0_98"
+      ]
+    },
+    "jsc_primary": {
+      "admitted": false,
+      "active_stage": "agreement_canary",
+      "reasons": [
+        "reviewed_voice_turns_below_1000",
+        "false_execution_not_zero",
+        "opposite_action_not_zero",
+        "semantic_exact_below_0_90",
+        "correction_below_0_95",
+        "ood_recall_below_0_98",
+        "jsc_primary_requires_one_stable_release_cycle"
+      ]
+    },
+    "nlu_removed": {
+      "admitted": false,
+      "active_stage": "agreement_canary",
+      "reasons": [
+        "reviewed_voice_turns_below_1000",
+        "false_execution_not_zero",
+        "opposite_action_not_zero",
+        "semantic_exact_below_0_90",
+        "correction_below_0_95",
+        "ood_recall_below_0_98",
+        "jsc_primary_requires_one_stable_release_cycle",
+        "nlu_removal_requires_two_stable_release_cycles"
+      ]
+    }
+  }
+}
