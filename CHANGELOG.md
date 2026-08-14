@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0] — 2026-08-14: JSC safety and independent voice gates
+
+- JSC shadow now consumes `transcription_ready` directly and publishes only a
+  typed, non-executable candidate; legacy NLU remains a comparison baseline.
+- Added calibrated abstention telemetry, compound-plan completeness checks and
+  an auditable correction/compensation transaction policy.
+- Added a frozen independent-human audio→Parakeet→JSC benchmark contract and a
+  fresh labelled seed29 no-action probe. Synthetic replay is never reported as
+  live voice evidence.
+- Unified source, model manifest and Windows installer at release `0.8.0`.
+
 ## [Unreleased] — 2026-08-14: Structured JSC v8 shadow
 
 ### Reproducible production release

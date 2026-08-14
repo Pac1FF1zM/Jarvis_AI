@@ -1,5 +1,7 @@
 #define AppName "Jarvis AI"
-#define AppVersion "0.7.0"
+#define VersionFile FileOpen("..\\VERSION")
+#define AppVersion Trim(FileRead(VersionFile))
+#expr FileClose(VersionFile)
 #define AppPublisher "Pac1FF1zM"
 
 [Setup]
@@ -39,6 +41,7 @@ Name: "{userappdata}\Jarvis\logs"; Flags: uninsneveruninstall
 Source: "..\main.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\jarvis_control.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\config.yaml"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\VERSION"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\control_center\*.py"; DestDir: "{app}\control_center"; Flags: ignoreversion
 Source: "..\core\*.py"; DestDir: "{app}\core"; Flags: ignoreversion

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "release": "0.7.0",
+  "release": "0.8.0",
   "models": [
     {
       "name": "production_nlu",
@@ -12,7 +12,7 @@
       "name": "structured_jsc_v8_seed29",
       "path": "models/jsc/structured_v8_seed29.pt",
       "sha256": "968ff79119fb7fc46b0023c813025fc28a9f755451807b8cb49726441cadb5ec",
-      "runtime_policy": "stateful_shadow_only"
+      "runtime_policy": "independent_stateful_shadow_only"
     },
     {
       "name": "jester_tiny3d_20260812",

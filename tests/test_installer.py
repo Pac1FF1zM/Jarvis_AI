@@ -164,7 +164,7 @@ def test_release_model_manifest_matches_packaged_artifacts():
     manifest = json.loads(
         (ROOT / "models" / "RELEASE_MODELS.json").read_text(encoding="utf-8")
     )
-    assert manifest["release"] == "0.7.0"
+    assert manifest["release"] == (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
     for model in manifest["models"]:
         path = ROOT / Path(model["path"])

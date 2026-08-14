@@ -35,6 +35,7 @@ from core.gpu_lock import GPULock
 from core.orchestrator import Orchestrator, State
 from core.runtime_diagnostics import run_doctor
 from core.profile_manager import ProfileManager, apply_profile_to_config
+from core.version import __version__
 
 CONFIG_PATH = os.environ.get("JARVIS_CONFIG", "config.yaml")
 
@@ -683,8 +684,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
             "  • открывать приложения, файлы, сайты и настройки Windows;\n"
             "  • управлять окнами, вкладками и рабочими пространствами Windows;\n"
             "  • искать в интернете, сообщать время и ставить напоминания;\n"
-            "  • запоминать явно указанные факты отдельно для каждого профиля;\n"
-            "  • включать отдельный тестовый режим распознавания жестов;\n"
+            "  • хранить факты по профилям и включать тестовый режим жестов;\n"
             "  • выполнять составные команды и понимать исправления.\n\n"
             "Примеры:\n"
             "  python main.py\n"
@@ -753,6 +753,9 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     help_group = parser.add_argument_group("Справка")
     help_group.add_argument(
         "-h", "--help", action="help", help="показать эту подсказку"
+    )
+    help_group.add_argument(
+        "--version", action="version", version=f"Jarvis {__version__}"
     )
     return parser
 
