@@ -14,6 +14,8 @@ from core.config_loader import ModuleConfig
 from core.event_bus import Event, EventBus
 from core.gpu_lock import GPULock
 import modules.stt as stt_mod
+import modules.parakeet_client as parakeet_client_mod
+from modules.parakeet_client import PersistentParakeetClient
 from modules.stt import STTModule
 
 
@@ -72,6 +74,36 @@ class _FakeClient:
     def close(self):
         self.thread_ids.append(threading.get_ident())
         self.closed = True
+
+
+def test_parakeet_worker_uses_no_window_creation_flag(monkeypatch, tmp_path):
+    captured = {}
+
+    class FakeProcess:
+        stdin = io.StringIO()
+        stdout = io.StringIO()
+        stderr = ()
+
+    def fake_popen(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return FakeProcess()
+
+    monkeypatch.setattr(parakeet_client_mod.subprocess, "Popen", fake_popen)
+    client = PersistentParakeetClient(
+        repository_root=tmp_path,
+        model_dir=tmp_path,
+        python_executable=Path(__file__),
+        provider="cpu",
+    )
+    monkeypatch.setattr(client, "_receive", lambda: {"event": "ready"})
+
+    client.start()
+
+    assert captured["kwargs"]["creationflags"] == getattr(
+        parakeet_client_mod.subprocess, "CREATE_NO_WINDOW", 0
+    )
+    client.process = None
 
 
 @pytest.fixture

@@ -94,6 +94,10 @@ class PersistentParakeetClient:
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            # Control Center is a windowed application.  Without this flag
+            # Windows creates a separate console for the long-lived Parakeet
+            # interpreter; closing that console kills STT during startup.
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             text=True,
             encoding="utf-8",
             bufsize=1,
