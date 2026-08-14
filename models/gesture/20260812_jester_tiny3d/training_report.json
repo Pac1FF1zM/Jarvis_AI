@@ -1,0 +1,192 @@
+{
+  "model": "tiny_3d_cnn",
+  "pretrained": false,
+  "parameters": 493315,
+  "batch_size": 32,
+  "gradient_accumulation_steps": 1,
+  "num_workers": 16,
+  "vram_preflight": {
+    "batch_size": 32,
+    "peak_reserved_bytes": 1145044992,
+    "total_bytes": 25756696576,
+    "free_before_bytes": 24422383616,
+    "ratio": 0.04445620534532945
+  },
+  "epochs_completed": 30,
+  "resumed_from_epoch": 0,
+  "best_val_macro_f1": 0.7923881775495965,
+  "validation": {
+    "accuracy": 0.7990802732129574,
+    "macro_f1": 0.7923881775495965,
+    "negative_recall": 0.9075462268865567,
+    "per_class": {
+      "Swiping Left": {
+        "precision": 0.6764705882352942,
+        "recall": 0.791497975708502,
+        "f1": 0.7294776119402985,
+        "support": 494
+      },
+      "Swiping Right": {
+        "precision": 0.6833910034602076,
+        "recall": 0.8127572016460906,
+        "f1": 0.7424812030075187,
+        "support": 486
+      },
+      "Swiping Down": {
+        "precision": 0.7148080438756855,
+        "recall": 0.7519230769230769,
+        "f1": 0.7328959700093721,
+        "support": 520
+      },
+      "Swiping Up": {
+        "precision": 0.7813163481953291,
+        "recall": 0.7244094488188977,
+        "f1": 0.7517875383043923,
+        "support": 508
+      },
+      "Pushing Hand Away": {
+        "precision": 0.8006872852233677,
+        "recall": 0.8661710037174721,
+        "f1": 0.8321428571428572,
+        "support": 538
+      },
+      "Pulling Hand In": {
+        "precision": 0.6993243243243243,
+        "recall": 0.7870722433460076,
+        "f1": 0.740608228980322,
+        "support": 526
+      },
+      "Sliding Two Fingers Left": {
+        "precision": 0.8189300411522634,
+        "recall": 0.766859344894027,
+        "f1": 0.7920398009950249,
+        "support": 519
+      },
+      "Sliding Two Fingers Right": {
+        "precision": 0.8062360801781737,
+        "recall": 0.7015503875968992,
+        "f1": 0.7502590673575129,
+        "support": 516
+      },
+      "Sliding Two Fingers Down": {
+        "precision": 0.7581573896353166,
+        "recall": 0.743879472693032,
+        "f1": 0.7509505703422054,
+        "support": 531
+      },
+      "Sliding Two Fingers Up": {
+        "precision": 0.8373626373626374,
+        "recall": 0.7298850574712644,
+        "f1": 0.7799385875127943,
+        "support": 522
+      },
+      "Pushing Two Fingers Away": {
+        "precision": 0.7878787878787878,
+        "recall": 0.7344632768361582,
+        "f1": 0.7602339181286549,
+        "support": 531
+      },
+      "Pulling Two Fingers In": {
+        "precision": 0.746588693957115,
+        "recall": 0.7379576107899807,
+        "f1": 0.7422480620155039,
+        "support": 519
+      },
+      "Rolling Hand Forward": {
+        "precision": 0.8095238095238095,
+        "recall": 0.7504798464491362,
+        "f1": 0.7788844621513944,
+        "support": 521
+      },
+      "Rolling Hand Backward": {
+        "precision": 0.7663551401869159,
+        "recall": 0.8316430020283976,
+        "f1": 0.7976653696498055,
+        "support": 493
+      },
+      "Turning Hand Clockwise": {
+        "precision": 0.7065868263473054,
+        "recall": 0.612987012987013,
+        "f1": 0.6564673157162726,
+        "support": 385
+      },
+      "Turning Hand Counterclockwise": {
+        "precision": 0.7025641025641025,
+        "recall": 0.6867167919799498,
+        "f1": 0.6945500633713562,
+        "support": 399
+      },
+      "Zooming In With Full Hand": {
+        "precision": 0.841541755888651,
+        "recall": 0.747148288973384,
+        "f1": 0.7915407854984894,
+        "support": 526
+      },
+      "Zooming Out With Full Hand": {
+        "precision": 0.8283433133732535,
+        "recall": 0.7889733840304183,
+        "f1": 0.8081791626095424,
+        "support": 526
+      },
+      "Zooming In With Two Fingers": {
+        "precision": 0.851931330472103,
+        "recall": 0.7605363984674329,
+        "f1": 0.8036437246963563,
+        "support": 522
+      },
+      "Zooming Out With Two Fingers": {
+        "precision": 0.8770491803278688,
+        "recall": 0.8075471698113208,
+        "f1": 0.8408644400785854,
+        "support": 530
+      },
+      "Thumb Up": {
+        "precision": 0.8954635108481263,
+        "recall": 0.8423005565862709,
+        "f1": 0.8680688336520076,
+        "support": 539
+      },
+      "Thumb Down": {
+        "precision": 0.90234375,
+        "recall": 0.8619402985074627,
+        "f1": 0.8816793893129771,
+        "support": 536
+      },
+      "Shaking Hand": {
+        "precision": 0.8426573426573427,
+        "recall": 0.9128787878787878,
+        "f1": 0.8763636363636363,
+        "support": 528
+      },
+      "Stop Sign": {
+        "precision": 0.8611111111111112,
+        "recall": 0.8097014925373134,
+        "f1": 0.8346153846153846,
+        "support": 536
+      },
+      "Drumming Fingers": {
+        "precision": 0.9074074074074074,
+        "recall": 0.9158878504672897,
+        "f1": 0.9116279069767442,
+        "support": 535
+      },
+      "No gesture": {
+        "precision": 0.8403908794788274,
+        "recall": 0.9681050656660413,
+        "f1": 0.8997384481255449,
+        "support": 533
+      },
+      "Doing other things": {
+        "precision": 0.8089607965152458,
+        "recall": 0.885558583106267,
+        "f1": 0.8455284552845529,
+        "support": 1468
+      }
+    },
+    "loss": 0.6920412434697707,
+    "samples": 14787
+  },
+  "seconds": 36536.866371400014,
+  "checkpoint": "models/gesture/20260812_jester_tiny3d/best.pt",
+  "test_split_opened": false
+}

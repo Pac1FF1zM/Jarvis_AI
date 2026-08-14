@@ -165,6 +165,34 @@ def test_healthy_runtime_report_is_ready_without_real_engines(tmp_path):
     assert by_id["model.ollama"].status == DiagnosticStatus.PASS
 
 
+def test_structured_jsc_release_checkpoint_gets_shadow_smoke_check(tmp_path):
+    config = _config(tmp_path)
+    checkpoint = tmp_path / "models" / "jsc.pt"
+    checkpoint.write_bytes(b"controlled jsc checkpoint")
+    config.modules["jsc_shadow"] = ModuleConfig(
+        enabled=True,
+        device="cpu",
+        model=str(checkpoint),
+        params={"thresholds": {"execution_threshold": 0.65}},
+    )
+    runner = _healthy_runner(tmp_path, config=config)
+    calls: list[tuple[Path, dict[str, float]]] = []
+
+    def validate(path: Path, thresholds: dict[str, float]) -> str:
+        calls.append((path, thresholds))
+        return "validated shadow checkpoint"
+
+    runner._jsc_checkpoint_validator = validate
+    report = runner.run()
+    check = next(
+        item for item in report.checks if item.check_id == "engine.jsc_shadow"
+    )
+
+    assert check.status == DiagnosticStatus.PASS
+    assert "shadow" in check.summary.casefold()
+    assert calls == [(checkpoint, {"execution_threshold": 0.65})]
+
+
 def test_unapproved_gesture_candidate_is_reported_as_observer_warning(tmp_path):
     config = _config(tmp_path)
     checkpoint = tmp_path / "models" / "gesture.pt"

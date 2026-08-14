@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "release": "0.7.0",
+  "models": [
+    {
+      "name": "production_nlu",
+      "path": "models/nlu_manager_finetuned.pt",
+      "sha256": "d30d2ba11398124b3b721fe2aae56dd715b36ce15c9aaa08296408e3beacec7b",
+      "runtime_policy": "execution_after_semantic_safety_gates"
+    },
+    {
+      "name": "structured_jsc_v8_seed29",
+      "path": "models/jsc/structured_v8_seed29.pt",
+      "sha256": "968ff79119fb7fc46b0023c813025fc28a9f755451807b8cb49726441cadb5ec",
+      "runtime_policy": "stateful_shadow_only"
+    },
+    {
+      "name": "jester_tiny3d_20260812",
+      "path": "models/gesture/20260812_jester_tiny3d/best.pt",
+      "sha256": "0c14820042c652c8b51d19c82af57fd0f0706edcf317f1859cf2e461b80f7e07",
+      "runtime_policy": "restricted_reversible_actions_g01_g06"
+    }
+  ],
+  "external_models": [
+    {
+      "name": "nvidia_parakeet_tdt_0_6b_v3",
+      "runtime_path": ".local/parakeet/models/nvidia--parakeet-tdt-0.6b-v3",
+      "revision": "541d1f99c6b0c3cd0b11a95167540bb8edefd82b",
+      "distribution": "explicit_post_install_acquisition",
+      "license": "CC-BY-4.0"
+    }
+  ]
+}

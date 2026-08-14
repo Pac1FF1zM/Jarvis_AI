@@ -8,9 +8,10 @@
 
 - изолированный Python 3.12.9 внутри папки Jarvis;
 - собственная NLU и безопасные инструменты;
+- Structured JSC v8 в stateful shadow-режиме без права выполнять команды;
 - Parakeet Transformers runtime, Silero TTS, VAD и push-to-talk;
 - основной Control Center, память, рабочие пространства и вкладка жестов;
-- ограниченная тестовая gesture-модель G01-G06;
+- включённая в Setup ограниченная gesture-модель G01-G06;
 - приложения, время и постоянные напоминания;
 - пользовательские данные в `%APPDATA%\Jarvis`;
 - автоматический Runtime Doctor после установки.

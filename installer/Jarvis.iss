@@ -1,5 +1,5 @@
 #define AppName "Jarvis AI"
-#define AppVersion "0.6.0"
+#define AppVersion "0.7.0"
 #define AppPublisher "Pac1FF1zM"
 
 [Setup]
@@ -57,6 +57,7 @@ Source: "..\ml\nlu\inference.py"; DestDir: "{app}\ml\nlu"; Flags: ignoreversion
 Source: "..\ml\nlu\models.py"; DestDir: "{app}\ml\nlu"; Flags: ignoreversion
 Source: "..\ml\nlu\schema.py"; DestDir: "{app}\ml\nlu"; Flags: ignoreversion
 Source: "..\ml\nlu\tokenizer.py"; DestDir: "{app}\ml\nlu"; Flags: ignoreversion
+Source: "..\ml\jsc\*.py"; DestDir: "{app}\ml\jsc"; Flags: ignoreversion
 Source: "..\ml\gesture\__init__.py"; DestDir: "{app}\ml\gesture"; Flags: ignoreversion
 Source: "..\ml\gesture\labels.py"; DestDir: "{app}\ml\gesture"; Flags: ignoreversion
 Source: "..\ml\gesture\models.py"; DestDir: "{app}\ml\gesture"; Flags: ignoreversion
@@ -66,8 +67,9 @@ Source: "..\src\data\transforms.py"; DestDir: "{app}\src\data"; Flags: ignorever
 Source: "..\src\models\*.py"; DestDir: "{app}\src\models"; Flags: ignoreversion
 Source: "..\models\nlu_manager_finetuned.pt"; DestDir: "{app}\models"; Flags: ignoreversion
 Source: "..\models\nlu_manager_finetuned.metrics.json"; DestDir: "{app}\models"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "..\checkpoints\tsn_resnet18_seed42\best.pt"; DestDir: "{app}\checkpoints\tsn_resnet18_seed42"; Flags: ignoreversion
-Source: "..\reports\evaluation_test.json"; DestDir: "{app}\reports"; Flags: ignoreversion
+Source: "..\models\RELEASE_MODELS.json"; DestDir: "{app}\models"; Flags: ignoreversion
+Source: "..\models\jsc\*"; DestDir: "{app}\models\jsc"; Flags: ignoreversion
+Source: "..\models\gesture\20260812_jester_tiny3d\*"; DestDir: "{app}\models\gesture\20260812_jester_tiny3d"; Flags: ignoreversion
 Source: "requirements-lite.txt"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "requirements-full.txt"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "bootstrap_runtime.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion

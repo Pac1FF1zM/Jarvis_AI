@@ -1,5 +1,63 @@
 # Changelog
 
+## [Unreleased] — 2026-08-14: Structured JSC v8 shadow
+
+### Reproducible production release
+
+- Promoted the selected Structured JSC v8 and Jester Tiny3D artifacts from
+  ignored training-run paths into versioned `models/` release paths.
+- Updated `config.yaml`, Runtime Doctor and the Windows installer to ship and
+  validate the same Parakeet/NLU/JSC/Gesture architecture used by the source
+  runtime.
+- Removed the obsolete 134 MB TSN checkpoint from the installer payload and
+  added clean-package regression coverage for the JSC runtime subset.
+
+### JSC architecture and dialogue
+
+- Structured JSC now predicts typed acts, ordered tools, arguments, missing
+  slots, reasons and execution verification directly; it does not generate
+  JSON autoregressively.
+- Added stateful shadow dialogue with history, pending JAL, `dialogue_id`,
+  clarification prompts and slot carry-over across turns.
+- Added fail-closed semantic grounding for execution and non-execute drafts;
+  targetless close, unrelated destructive steps, negated commands and
+  unsupported process-level requests are blocked.
+- Added generic application/window clarification and incomplete reminder flow.
+  A follow-up such as `калькулятор` or `через пятнадцать минут` fills only the
+  pending slot.
+
+### Data and fine-tuning
+
+- Structured train data expanded to 4 355 examples covering ASR noise,
+  natural commands, 2–5 actions, corrections, hard negatives, OOD and
+  multi-turn state.
+- Added reproducible category-balanced sampling and backward-compatible reuse
+  of reports created before that training option existed.
+- Fixed AMP masking overflow for float16 training.
+- Selected Structured JSC v8 seed29: 534 942 parameters, best epoch 5,
+  checkpoint SHA-256
+  `968ff79119fb7fc46b0023c813025fc28a9f755451807b8cb49726441cadb5ec`.
+- Migration development: 87,75% Exact JAL, 95,75% tool sequence, 93,75%
+  arguments, 100% multi-turn/ASR/4–5 actions, 0% false execution and 0%
+  opposite action. Correction and OOD remain below promotion requirements.
+
+### Runtime wiring and ASR fixes
+
+- `config.yaml` now loads seed29 and its validation-selected thresholds in
+  `jsc_shadow`. Production NLU remains the only semantic execution routing.
+- Added application aliases and ASR cleanup for `вэ скот`, `вс кот`, `вскод`,
+  `дискод`, `паинт`, `телегу`, `отпрой` and trailing `джарвис`.
+- Fixed the no-action Parakeet microphone CLI so closed stdin exits without
+  importing/initialising `sounddevice`.
+- Full environment-isolated suite: `545 passed, 3 skipped`.
+
+### Documentation
+
+- Added a single full project handoff:
+  `docs/PROJECT_STATUS_2026-08-14_RU.md`.
+- Marked the 13 August checkpoint as historical and synchronized README,
+  backlog and JSC roadmap with production Parakeet plus JSC shadow reality.
+
 ## [Unreleased] — 2026-08-13: production Parakeet
 
 ### STT и безопасная диагностика

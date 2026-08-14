@@ -61,6 +61,7 @@ training_workspace/jsc_scaling_data/
 training_workspace/jsc_scaling_runs/
 training_workspace/jsc_structured_runs*/
 training_workspace/jsc_structured_data/
+training_workspace/jsc_structured_data_v*/
 training_workspace/.structured_smoke/
 training_workspace/data/private_holdout.jsonl
 training_workspace/data/feedback_train.jsonl
@@ -79,7 +80,9 @@ installer/.tools/
 # Local previews and editable office documents may contain screen/profile metadata
 artifacts/
 docs/*.docx
-tmp/pdfs/
+tmp/
+/Jarvis_Showcase_RU.pptx
+/Jarvis_Showcase_Script_RU.txt
 
 # Local experimental runtimes, downloaded models, approvals, and private audio.
 .local/

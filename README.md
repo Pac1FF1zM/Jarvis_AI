@@ -9,7 +9,7 @@ EventBus проверяет обязательные поля и диапазо�
 Неизвестные события расширений остаются допустимыми, но их payload также
 отделяется от словаря производителя перед публикацией.
 
-## Статус проекта — 13 августа 2026
+## Статус проекта — 14 августа 2026
 
 Текущий runtime использует единый production STT:
 
@@ -17,12 +17,16 @@ EventBus проверяет обязательные поля и диапазо�
 |---|---|
 | Основной STT | `nvidia/parakeet-tdt-0.6b-v3`, pinned local production worker |
 | Предыдущий STT | Whisper удалён из runtime и зависимостей; сохранён только исторический benchmark |
-| NLU | собственная CharCNN + детерминированный router + semantic commit gate |
-| Gesture Core | локально выбран Jester Tiny3D; checkpoint и отчёт не хранятся в Git |
-| Выполнение команд | shadow-тест всегда `blocked`; production Parakeet проходит обычные safety-гейты Jarvis |
+| Production NLU | собственная CharCNN + детерминированный router + semantic commit gate; исполняющий routing |
+| Structured JSC | v8 seed29, 87,75% Exact JAL migration development; stateful shadow без исполнения |
+| Gesture Core | Jester Tiny3D release export включён в `models/`; restricted G01–G06 |
+| Выполнение команд | production NLU проходит safety-гейты; Parakeet diagnostic и JSC shadow не имеют side effects |
 | Голосовой benchmark | FLEURS `ru_ru`, 20 парных human-speech записей ≤12 с: Parakeet WER 4,40%, Whisper 5,35% |
+| Полный pytest | 545 passed, 3 skipped в `.venv-training` |
 
-Полный handoff для продолжения в новом чате: [checkpoint 2026-08-13](docs/CHECKPOINT_2026-08-13_RU.md).
+Полный актуальный handoff: [статус проекта 2026-08-14](docs/PROJECT_STATUS_2026-08-14_RU.md).
+Предыдущий [checkpoint 2026-08-13](docs/CHECKPOINT_2026-08-13_RU.md) сохранён
+как исторический снимок.
 Отчёт о выборе STT: [production Parakeet](docs/PARAKEET_PRODUCTION_EXPERIMENT_RU.md).
 
 ## Что работает сейчас
@@ -63,6 +67,11 @@ wake_word_detected
   незаконченные, отрицающие и процитированные команды блокируются,
   самокоррекция оставляет только последнюю мысль, а составной план принимается
   атомарно — одна неизвестная часть запрещает все действия.
+- Structured JSC v8 получает тот же transcript параллельно с NLU, строит
+  типизированный JAL, хранит history/pending state и пишет сравнение в
+  `logs/jsc_shadow.jsonl`. Он не публикует executable events и пока не заменяет
+  production NLU. Migration development Exact JAL — 87,75%; false execution и
+  opposite action — 0%.
 - Ollama используется только для свободного диалога. Решения о запуске
   инструментов принимает NLU, а готовый результат возвращается напрямую;
   при недоступности Ollama работает текстовая заглушка. Доступность локальной
@@ -109,7 +118,7 @@ wake_word_detected
   результат уже не может открыть приложение, заговорить или изменить state.
 - Доступны время, запуск приложений, окна, пользовательские файлы, настройки
   Windows, браузерный поиск/сайты/вкладки, громкость и управление музыкой.
-  Составная команда, включая строку Whisper без запятых, превращается в
+  Составная команда, включая строку STT без запятых, превращается в
   последовательный план под одним trace; числа «четырнадцать», «двадцать» и
   составные числительные нормализуются в параметры времени. Поддерживаются
   местоимения «закрой его», отрицания, исправления и безопасная команда
@@ -134,11 +143,12 @@ wake_word_detected
 
 В собственной NLU/JSC-части Hugging Face, готовые веса, готовые embeddings,
 внешние токенизаторы и скачанные датасеты не используются. PyTorch служит
-только вычислительным фреймворком. Whisper, Silero и openWakeWord являются
-отдельными локальными аудиодвижками, а не «мозгом» Jarvis.
+только вычислительным фреймворком. Parakeet, Silero и openWakeWord являются
+отдельными локальными аудиодвижками, а не «мозгом» Jarvis. Whisper в
+production runtime больше не используется.
 
 Выбранный runtime checkpoint — `models/nlu_manager_finetuned.pt`. Это
-`CharCNN + augmented` с 53 919 параметрами:
+`CharCNN + augmented` со 169 199 параметрами:
 
 | Проверка | Intent macro-F1 | Худший recall intent |
 |---|---:|---:|
@@ -171,12 +181,11 @@ multipart-TGZ, равнобюджетный benchmark и закрытый до �
 `training_workspace/requirements-jester.txt`, окружение создаёт
 `SETUP_JESTER_TRAINING.cmd`.
 
-В текущем локальном runtime выбран `tiny_3d_cnn`; загрузчик проверяет тип
-checkpoint, полный порядок 27 меток, preprocessing-параметры и SHA-256.
-Тяжёлые датасеты, runs, checkpoint и generated-отчёт остаются локальными и
-намеренно исключены из Git. После клонирования репозитория Gesture Core не
-сможет использовать эту модель, пока соответствующие локальные артефакты не
-будут восстановлены отдельно.
+В текущем runtime выбран `tiny_3d_cnn`; загрузчик проверяет тип checkpoint,
+полный порядок 27 меток, preprocessing-параметры и SHA-256. Выбранный компактный
+release-checkpoint и финальный quality report находятся в
+`models/gesture/20260812_jester_tiny3d/` и входят в Git/Setup. Тяжёлые датасеты,
+полные training runs и промежуточные checkpoints остаются локальными.
 
 Проверка отдельного видео с выбранным TSN checkpoint:
 
@@ -541,7 +550,9 @@ Parakeet worker; `model_dir`, отдельный Python и timeout задают�
 
 - парный benchmark на приватном корпусе именно боевых команд владельца (публичный
   FLEURS smoke уже выполнен, но не заменяет этот acceptance gate);
-- дообучение NLU на подтверждённом корпусе реальных STT-искажений;
+- promotion Structured JSC из shadow: сначала нужны новый frozen voice holdout,
+  correction/OOD gates и отдельный execution-canary review;
+- typed correction compensation после уже выполненного предыдущего действия;
 - произвольная автоматизация интерфейса внутри любого приложения (клики по
   неизвестным кнопкам, заполнение форм и чтение содержимого экрана);
 - полностью neural exact slot extraction без constrained decoder;

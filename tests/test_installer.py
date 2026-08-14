@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
+import json
 import re
 import shutil
 import subprocess
@@ -51,8 +53,11 @@ def test_setup_does_not_package_private_or_generated_workspace_data():
     assert "jarvis_control.py" in script
     assert "control_center\\*.py" in script
     assert "ml\\gesture\\models.py" in script
-    assert "checkpoints\\tsn_resnet18_seed42\\best.pt" in script
-    assert "reports\\evaluation_test.json" in script
+    assert "ml\\jsc\\*.py" in script
+    assert "models\\jsc\\*" in script
+    assert "models\\gesture\\20260812_jester_tiny3d\\*" in script
+    assert "checkpoints\\tsn_resnet18_seed42\\best.pt" not in script
+    assert "reports\\evaluation_test.json" not in script
     assert "ml\\nlu\\train.py" not in script
     assert "holdout_v2" not in script
     assert "python-3.12.9-amd64.exe" in script
@@ -98,6 +103,73 @@ def test_packaged_nlu_runtime_runs_inference_without_training_workspace(tmp_path
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_setup_declares_every_structured_jsc_runtime_module():
+    """The installed shadow must not depend on the source checkout."""
+    setup = (INSTALLER / "Jarvis.iss").read_text(encoding="utf-8").casefold()
+
+    assert 'source: "..\\ml\\jsc\\*.py"' in setup
+    assert 'source: "..\\models\\jsc\\*"' in setup
+    assert (ROOT / "models" / "jsc" / "structured_v8_seed29.pt").is_file()
+    assert (
+        ROOT
+        / "models"
+        / "gesture"
+        / "20260812_jester_tiny3d"
+        / "best.pt"
+    ).is_file()
+
+
+def test_packaged_jsc_runtime_runs_without_training_workspace(tmp_path):
+    """Smoke the release checkpoint from an installer-shaped source tree."""
+    for package in ("core", "memory", "modules", "tools"):
+        shutil.copytree(ROOT / package, tmp_path / package)
+    (tmp_path / "ml").mkdir()
+    shutil.copy2(ROOT / "ml" / "__init__.py", tmp_path / "ml" / "__init__.py")
+    shutil.copytree(ROOT / "ml" / "jsc", tmp_path / "ml" / "jsc")
+    checkpoint = tmp_path / "models" / "jsc" / "structured_v8_seed29.pt"
+    checkpoint.parent.mkdir(parents=True)
+    shutil.copy2(ROOT / "models" / "jsc" / checkpoint.name, checkpoint)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            (
+                "import sys; sys.path.insert(0, sys.argv[1]); "
+                "from ml.jsc.inference import StructuredJSCPredictor; "
+                "from ml.jsc.jal import loads; "
+                "from ml.jsc.project_registry import build_project_schema_registry; "
+                "predictor = StructuredJSCPredictor(sys.argv[2], "
+                "build_project_schema_registry(), device='cpu'); "
+                "plan = loads(predictor.predict('открой калькулятор').jal); "
+                "assert plan.act.value == 'execute' and len(plan.steps) == 1, plan"
+            ),
+            str(tmp_path),
+            str(checkpoint),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_release_model_manifest_matches_packaged_artifacts():
+    manifest = json.loads(
+        (ROOT / "models" / "RELEASE_MODELS.json").read_text(encoding="utf-8")
+    )
+    assert manifest["release"] == "0.7.0"
+
+    for model in manifest["models"]:
+        path = ROOT / Path(model["path"])
+        assert path.is_file(), path
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == model["sha256"]
 
 
 def test_installed_launchers_isolate_user_state_and_use_private_python():

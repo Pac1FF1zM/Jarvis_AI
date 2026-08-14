@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from importlib import metadata
 from pathlib import Path
-from typing import Any, Callable, IO
+from typing import Any, Callable, IO, Mapping
 
 from core.config_loader import Config, load_config
 from core.profile_manager import (
@@ -97,6 +97,7 @@ DistributionVersion = Callable[[str], str]
 DiskUsage = Callable[[str | os.PathLike[str]], Any]
 UrlOpen = Callable[..., Any]
 CheckpointValidator = Callable[[Path], str]
+JSCCheckpointValidator = Callable[[Path, Mapping[str, float]], str]
 GestureCheckpointValidator = Callable[[Path, Path, str], tuple[bool, float, str]]
 MemoryProbe = Callable[[], int | None]
 
@@ -114,6 +115,7 @@ class RuntimeDiagnosticRunner:
         disk_usage: DiskUsage = shutil.disk_usage,
         urlopen: UrlOpen = urllib.request.urlopen,
         checkpoint_validator: CheckpointValidator | None = None,
+        jsc_checkpoint_validator: JSCCheckpointValidator | None = None,
         gesture_checkpoint_validator: GestureCheckpointValidator | None = None,
         memory_probe: MemoryProbe | None = None,
         python_version: tuple[int, int, int] | None = None,
@@ -127,6 +129,9 @@ class RuntimeDiagnosticRunner:
         self._urlopen = urlopen
         self._checkpoint_validator = (
             checkpoint_validator or _validate_nlu_checkpoint
+        )
+        self._jsc_checkpoint_validator = (
+            jsc_checkpoint_validator or _validate_jsc_checkpoint
         )
         self._gesture_checkpoint_validator = (
             gesture_checkpoint_validator or _validate_gesture_checkpoint
@@ -156,6 +161,7 @@ class RuntimeDiagnosticRunner:
         self._check_workspaces()
         torch_module = self._check_torch_and_cuda()
         self._check_nlu(torch_module)
+        self._check_jsc(torch_module)
         self._check_gesture(torch_module)
         sounddevice = self._check_voice_input()
         self._check_voice_profile(sounddevice)
@@ -646,6 +652,58 @@ class RuntimeDiagnosticRunner:
             "nlu",
             DiagnosticStatus.PASS,
             "Собственная NLU загружается и выполняет smoke inference",
+            detail=detail,
+        )
+
+    def _check_jsc(self, torch_module: Any | None) -> None:
+        """Load the configured side-effect-free Structured JSC checkpoint."""
+        if "jsc_shadow" not in self.config.modules:
+            return
+        module = self.config.module("jsc_shadow")
+        if not module.enabled:
+            self._skip(
+                "engine.jsc_shadow", "jsc", "Structured JSC shadow отключён"
+            )
+            return
+        checkpoint = self._resolve(module.model)
+        if not checkpoint.is_file():
+            self._add(
+                "engine.jsc_shadow",
+                "jsc",
+                DiagnosticStatus.FAIL,
+                "Checkpoint Structured JSC не найден",
+                detail=str(checkpoint),
+                action="Верните release checkpoint в models/jsc/ или обновите config.yaml.",
+            )
+            return
+        if torch_module is None:
+            self._skip(
+                "engine.jsc_shadow",
+                "jsc",
+                "Checkpoint Structured JSC найден, но не проверен без PyTorch",
+            )
+            return
+        thresholds = {
+            str(key): float(value)
+            for key, value in _mapping(module.params.get("thresholds")).items()
+        }
+        try:
+            detail = self._jsc_checkpoint_validator(checkpoint, thresholds)
+        except Exception as exc:  # noqa: BLE001
+            self._add(
+                "engine.jsc_shadow",
+                "jsc",
+                DiagnosticStatus.FAIL,
+                "Checkpoint Structured JSC повреждён или несовместим",
+                detail=_error_detail(exc),
+                action="Восстановите audited release export из models/jsc/.",
+            )
+            return
+        self._add(
+            "engine.jsc_shadow",
+            "jsc",
+            DiagnosticStatus.PASS,
+            "Structured JSC загружается и выполняет shadow smoke inference",
             detail=detail,
         )
 
@@ -1186,6 +1244,27 @@ def _validate_nlu_checkpoint(path: Path) -> str:
     predictor = NLUPredictor(path, "cpu")
     result = predictor.predict("который час")
     return f"{path}; smoke intent={result.intent}, confidence={result.confidence:.3f}"
+
+
+def _validate_jsc_checkpoint(
+    path: Path, thresholds: Mapping[str, float]
+) -> str:
+    from ml.jsc.inference import StructuredJSCPredictor
+    from ml.jsc.jal import loads
+    from ml.jsc.project_registry import build_project_schema_registry
+
+    predictor = StructuredJSCPredictor(
+        path,
+        build_project_schema_registry(),
+        device="cpu",
+        thresholds=thresholds,
+    )
+    prediction = predictor.predict("открой калькулятор")
+    plan = loads(prediction.jal)
+    return (
+        f"{path}; shadow act={plan.act.value}, steps={len(plan.steps)}, "
+        f"latency={prediction.latency_ms:.1f} ms; execution disabled"
+    )
 
 
 def _validate_gesture_checkpoint(

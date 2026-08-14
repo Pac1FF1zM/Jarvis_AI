@@ -14,9 +14,9 @@ modules:
     enabled: true
     # CUDA is selected when available; installer CPU fallback remains usable.
     device: "auto"
-    model: training_workspace/jester/runs/full/tiny_3d_cnn/best.pt
+    model: models/gesture/20260812_jester_tiny3d/best.pt
     params:
-      quality_report: reports/jester/final_test.json
+      quality_report: models/gesture/20260812_jester_tiny3d/final_test.json
       checkpoint_sha256: 0c14820042c652c8b51d19c82af57fd0f0706edcf317f1859cf2e461b80f7e07
       allow_unapproved_observer: true
       camera_index: 0
@@ -105,19 +105,21 @@ modules:
     params:
       confidence_threshold: 0.55
 
-  # Experimental observer. It receives the same finalized transcription as
-  # production NLU, writes a comparable JAL prediction and never executes it.
+  # Experimental production observer. It receives the same finalized
+  # transcription as production NLU, writes a comparable stateful JAL
+  # prediction and never executes it. Checkpoint selected on validation and
+  # admitted only after passing migration safety gates.
   jsc_shadow:
     enabled: true
     device: cpu
-    model: training_workspace/jsc_structured_runs_v5/runs/seed17/best.pt
+    model: models/jsc/structured_v8_seed29.pt
     params:
       log_path: logs/jsc_shadow.jsonl
       thresholds:
         execution_threshold: 0.65
-        verifier_threshold: 0.70
+        verifier_threshold: 0.90
         parameter_threshold: 0.35
-        span_threshold: 0.20
+        span_threshold: 0.25
         missing_threshold: 0.35
 
   # Ollama qwen2.5:7b-instruct. Full 7B GPU offload will NOT fit in 3GB;
