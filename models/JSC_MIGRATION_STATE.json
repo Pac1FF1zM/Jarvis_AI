@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "active_release": "0.9.0",
+  "reviewed_voice_turns": 0,
+  "stable_release_cycles": 0,
+  "false_execution_rate": 1.0,
+  "opposite_action_rate": 1.0,
+  "semantic_exact_rate": 0.0,
+  "correction_accuracy": 0.0,
+  "ood_recall": 0.0,
+  "offline_runtime_gate": {
+    "samples": 400,
+    "exact_jal_accuracy": 0.9675,
+    "false_execution_rate": 0.0,
+    "opposite_action_rate": 0.0,
+    "correction_accuracy": 1.0,
+    "ood_recall": 1.0
+  },
+  "status": "agreement_canary",
+  "note": "Offline evidence cannot promote production stages; reviewed human voice telemetry is required."
+}

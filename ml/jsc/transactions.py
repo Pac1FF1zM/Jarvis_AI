@@ -34,6 +34,7 @@ class CorrectionTransaction:
     status: str
     reason: str
     original_trace_id: str | None
+    original: ToolCall | None
     replacement: ToolCall | None
     compensation: CompensationCall | None
     policy: str = "compensate_then_replace_stop_on_failure"
@@ -140,20 +141,40 @@ def plan_correction_transaction(
         return None
     replacement = plan.steps[-1] if plan.act == DialogueAct.EXECUTE and plan.steps else None
     if replacement is None:
-        return CorrectionTransaction("blocked", "replacement_not_executable", None, None, None)
+        return CorrectionTransaction(
+            "blocked", "replacement_not_executable", None, None, None, None
+        )
     if previous_receipt is None:
-        return CorrectionTransaction("blocked", "original_action_not_observed", None, replacement, None)
+        return CorrectionTransaction(
+            "blocked", "original_action_not_observed", None, None, replacement, None
+        )
+    original = ToolCall(previous_receipt.tool, dict(previous_receipt.params))
     expected = explicit_original or str(previous_receipt.params.get("application", ""))
     observed = str(previous_receipt.params.get("application", ""))
     if previous_receipt.tool != "open_application" or observed != expected:
         return CorrectionTransaction(
-            "blocked", "original_action_mismatch", previous_receipt.trace_id, replacement, None
+            "blocked",
+            "original_action_mismatch",
+            previous_receipt.trace_id,
+            original,
+            replacement,
+            None,
         )
     compensation = compensation_for(previous_receipt)
     if compensation is None:
         return CorrectionTransaction(
-            "blocked", "compensation_unavailable", previous_receipt.trace_id, replacement, None
+            "blocked",
+            "compensation_unavailable",
+            previous_receipt.trace_id,
+            original,
+            replacement,
+            None,
         )
     return CorrectionTransaction(
-        "ready", "verified_reversible_correction", previous_receipt.trace_id, replacement, compensation
+        "ready",
+        "verified_reversible_correction",
+        previous_receipt.trace_id,
+        original,
+        replacement,
+        compensation,
     )

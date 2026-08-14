@@ -214,6 +214,9 @@ class JSCCandidateReadyPayload(EventPayload):
     jal: str
     accepted: bool
     risk: Mapping[str, Any] = field(default_factory=dict)
+    completeness_issues: tuple[str, ...] = ()
+    correction_transaction: Mapping[str, Any] | None = None
+    input_source: str = "unknown"
     execution_allowed: bool = False
 
     def __post_init__(self) -> None:
@@ -225,6 +228,62 @@ class JSCCandidateReadyPayload(EventPayload):
             raise ValueError("shadow JSC candidates cannot authorize execution")
         if not isinstance(self.risk, Mapping):
             raise TypeError("risk must be a mapping")
+        if not isinstance(self.completeness_issues, tuple) or not all(
+            isinstance(item, str) for item in self.completeness_issues
+        ):
+            raise TypeError("completeness_issues must be a tuple of strings")
+        if self.correction_transaction is not None and not isinstance(
+            self.correction_transaction, Mapping
+        ):
+            raise TypeError("correction_transaction must be a mapping")
+        _require_text("input_source", self.input_source)
+
+
+@dataclass(frozen=True)
+class SemanticResultPayload(NLUResultPayload):
+    """Semantic result selected by the NLU/JSC migration coordinator."""
+
+    event_type: ClassVar[str] = "semantic_result"
+    source: str = "nlu"
+    jal: str | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.source not in {"nlu", "jsc"}:
+            raise ValueError("semantic source must be nlu or jsc")
+        if self.jal is not None:
+            _require_text("jal", self.jal)
+
+
+@dataclass(frozen=True)
+class JALExecutionRequestedPayload(EventPayload):
+    event_type: ClassVar[str] = "jal_execution_requested"
+    text: str
+    jal: str
+    migration_stage: str
+    correction_transaction: Mapping[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        _require_text("text", self.text)
+        _require_text("jal", self.jal)
+        _require_text("migration_stage", self.migration_stage)
+        if self.correction_transaction is not None and not isinstance(
+            self.correction_transaction, Mapping
+        ):
+            raise TypeError("correction_transaction must be a mapping")
+
+
+@dataclass(frozen=True)
+class JALActionCommittedPayload(EventPayload):
+    event_type: ClassVar[str] = "jal_action_committed"
+    tool: str
+    params: Mapping[str, Any]
+    result: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        _require_text("tool", self.tool)
+        if not isinstance(self.params, Mapping) or not isinstance(self.result, Mapping):
+            raise TypeError("committed action params/result must be mappings")
 
 
 @dataclass(frozen=True)
@@ -447,6 +506,9 @@ PAYLOAD_CONTRACTS: Mapping[str, type[EventPayload]] = MappingProxyType(
             InteractionCompletedPayload,
             NLUResultPayload,
             JSCCandidateReadyPayload,
+            SemanticResultPayload,
+            JALExecutionRequestedPayload,
+            JALActionCommittedPayload,
             ToolCallRequestedPayload,
             ToolResultPayload,
             ResponseReadyPayload,

@@ -49,6 +49,7 @@ def test_setup_does_not_package_private_or_generated_workspace_data():
     ):
         assert forbidden not in script
     assert "models\\nlu_manager_finetuned.pt" in script
+    assert "models\\jsc_migration_state.json" in script
     assert "ml\\nlu\\inference.py" in script
     assert "jarvis_control.py" in script
     assert "control_center\\*.py" in script

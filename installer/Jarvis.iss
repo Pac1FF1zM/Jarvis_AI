@@ -71,6 +71,7 @@ Source: "..\src\models\*.py"; DestDir: "{app}\src\models"; Flags: ignoreversion
 Source: "..\models\nlu_manager_finetuned.pt"; DestDir: "{app}\models"; Flags: ignoreversion
 Source: "..\models\nlu_manager_finetuned.metrics.json"; DestDir: "{app}\models"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\models\RELEASE_MODELS.json"; DestDir: "{app}\models"; Flags: ignoreversion
+Source: "..\models\JSC_MIGRATION_STATE.json"; DestDir: "{app}\models"; Flags: ignoreversion
 Source: "..\models\jsc\*"; DestDir: "{app}\models\jsc"; Flags: ignoreversion
 Source: "..\models\gesture\20260812_jester_tiny3d\*"; DestDir: "{app}\models\gesture\20260812_jester_tiny3d"; Flags: ignoreversion
 Source: "requirements-lite.txt"; DestDir: "{app}\installer"; Flags: ignoreversion

@@ -105,16 +105,15 @@ modules:
     params:
       confidence_threshold: 0.55
 
-  # Experimental production observer. It receives the same finalized
-  # transcription as production NLU, writes a comparable stateful JAL
-  # prediction and never executes it. Checkpoint selected on validation and
-  # admitted only after passing migration safety gates.
+  # Independent Structured JSC candidate producer. It cannot authorize
+  # execution itself; only the evidence-gated migration coordinator below can
+  # select its typed JAL plan.
   jsc_shadow:
     enabled: true
     device: cpu
     model: models/jsc/structured_v8_seed29.pt
     params:
-      migration_stage: independent_shadow
+      migration_stage: agreement_canary
       log_path: logs/jsc_shadow.jsonl
       thresholds:
         execution_threshold: 0.65
@@ -129,6 +128,26 @@ modules:
         maximum_normalized_entropy: 0.65
         minimum_verifier_confidence: 0.90
 
+  # Owns semantic selection so NLU and JSC can never execute the same trace.
+  # Promotion beyond canary is rejected unless reviewed human-voice evidence
+  # and stable release-cycle counters satisfy ml/jsc/migration.py.
+  jsc_migration:
+    enabled: true
+    device: cpu
+    params:
+      stage: agreement_canary
+      evidence_path: models/JSC_MIGRATION_STATE.json
+      log_path: logs/jsc_agreement.jsonl
+      fallback_seconds: 0.75
+      error_budget_window: 200
+      minimum_agreement: 0.95
+
+  jal_executor:
+    enabled: true
+    device: cpu
+    params:
+      policy: restricted_reversible
+
   # Ollama qwen2.5:7b-instruct. Full 7B GPU offload will NOT fit in 3GB;
   # run on CPU, or use Q4_K_M / smaller. See README §3.
   llm:
@@ -137,9 +156,9 @@ modules:
     compute_type: q4_k_m
     model: "qwen2.5:7b-instruct"
     params:
-      # The NLU model owns tool routing. Ollama handles only general dialogue;
-      # deterministic tool results are returned directly.
-      input_event: nlu_result
+      # The migration coordinator owns routing. Ollama handles only general
+      # dialogue; deterministic tool results are returned directly.
+      input_event: semantic_result
       # Probe while the heavier voice models load in parallel. If Ollama is
       # offline, the first chat turn falls back immediately instead of waiting
       # for a connection timeout.

@@ -162,6 +162,7 @@ class RuntimeDiagnosticRunner:
         torch_module = self._check_torch_and_cuda()
         self._check_nlu(torch_module)
         self._check_jsc(torch_module)
+        self._check_jsc_migration()
         self._check_gesture(torch_module)
         sounddevice = self._check_voice_input()
         self._check_voice_profile(sounddevice)
@@ -705,6 +706,66 @@ class RuntimeDiagnosticRunner:
             DiagnosticStatus.PASS,
             "Structured JSC загружается и выполняет shadow smoke inference",
             detail=detail,
+        )
+
+    def _check_jsc_migration(self) -> None:
+        if "jsc_migration" not in self.config.modules:
+            return
+        module = self.config.module("jsc_migration")
+        if not module.enabled:
+            self._skip("engine.jsc_migration", "jsc", "JSC migration coordinator отключён")
+            return
+        from ml.jsc.migration import MigrationStage, admit_stage
+
+        try:
+            requested = MigrationStage.parse(
+                str(module.params.get("stage", "agreement_canary"))
+            )
+            evidence_path = self._resolve(
+                str(module.params.get("evidence_path", "models/JSC_MIGRATION_STATE.json"))
+            )
+            evidence = json.loads(evidence_path.read_text("utf-8"))
+            if not isinstance(evidence, Mapping):
+                raise ValueError("migration evidence must be an object")
+            admission = admit_stage(requested, evidence)
+        except (OSError, TypeError, ValueError) as exc:
+            self._add(
+                "engine.jsc_migration",
+                "jsc",
+                DiagnosticStatus.FAIL,
+                "JSC migration evidence недоступен или повреждён",
+                detail=_error_detail(exc),
+                action="Восстановите models/JSC_MIGRATION_STATE.json.",
+            )
+            return
+        nlu_enabled = self.config.module("nlu").enabled
+        if not admission.admitted and not nlu_enabled:
+            self._add(
+                "engine.jsc_migration",
+                "jsc",
+                DiagnosticStatus.FAIL,
+                "Запрошенная JSC-stage не допущена и NLU fallback отключён",
+                detail="; ".join(admission.reasons),
+                action="Верните NLU или предоставьте прошедшую аудит human-voice telemetry.",
+            )
+            return
+        status = DiagnosticStatus.PASS if admission.admitted else DiagnosticStatus.WARN
+        self._add(
+            "engine.jsc_migration",
+            "jsc",
+            status,
+            f"JSC migration active stage: {admission.active.config_name}",
+            detail=(
+                f"requested={admission.requested.config_name}; "
+                f"reviewed_voice_turns={int(evidence.get('reviewed_voice_turns', 0))}; "
+                f"stable_release_cycles={int(evidence.get('stable_release_cycles', 0))}; "
+                f"reasons={','.join(admission.reasons) or 'none'}"
+            ),
+            action=(
+                "Не повышайте stage до выполнения human-voice и release-cycle gates."
+                if not admission.admitted
+                else ""
+            ),
         )
 
     def _check_gesture(self, torch_module: Any | None) -> None:

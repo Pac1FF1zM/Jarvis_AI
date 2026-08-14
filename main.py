@@ -383,8 +383,9 @@ async def run_pipeline(
     from modules.gesture_bridge import GestureActionBridge
     from modules.llm import LLMModule
     from modules.gesture_control import GestureControlModule
-    from modules.nlu import NLUModule
     from modules.jsc_shadow import JSCShadowModule
+    from modules.jsc_migration import JSCMigrationModule
+    from modules.jal_executor import JALExecutorModule
     from modules.reminders import ReminderScheduler
     from modules.stt import STTModule
     from modules.text_output import TextOutputModule
@@ -393,6 +394,13 @@ async def run_pipeline(
     from tools.registry import ToolRegistry
 
     cfg = load_config(config_path)
+    nlu_module_class: Any | None = None
+    if cfg.module("nlu").enabled:
+        # Keep the import conditional so the final NLU-removed package no
+        # longer needs either legacy runtime code or its checkpoint.
+        from modules.nlu import NLUModule
+
+        nlu_module_class = NLUModule
     profile_root = str(cfg.profiles.get("root", "")).strip() or None
     profile_manager = ProfileManager(profile_root)
     active_profile = apply_profile_to_config(cfg, profile_manager)
@@ -468,9 +476,21 @@ async def run_pipeline(
         )
         return module
 
+    def create_nlu(module_config: ModuleConfig) -> Any:
+        if nlu_module_class is None:
+            raise RuntimeError("legacy NLU factory requested while module is disabled")
+        return nlu_module_class(module_config, gpu_lock)
+
     if text_input is not None:
-        await start_if("nlu", lambda mc: NLUModule(mc, gpu_lock))
+        await start_if("nlu", create_nlu)
         await start_if("jsc_shadow", lambda mc: JSCShadowModule(mc))
+        await start_if(
+            "jsc_migration",
+            lambda mc: JSCMigrationModule(
+                mc, legacy_nlu_enabled=cfg.module("nlu").enabled
+            ),
+        )
+        await start_if("jal_executor", lambda mc: JALExecutorModule(mc, tools))
         await start_if(
             "llm", lambda mc: LLMModule(
                 mc,
@@ -495,8 +515,15 @@ async def run_pipeline(
                 "wake_word", lambda mc: WakeWordModule(mc, force_simulated=demo)
             ),
             start_if("stt", lambda mc: STTModule(mc, gpu_lock)),
-            start_if("nlu", lambda mc: NLUModule(mc, gpu_lock)),
+            start_if("nlu", create_nlu),
             start_if("jsc_shadow", lambda mc: JSCShadowModule(mc)),
+            start_if(
+                "jsc_migration",
+                lambda mc: JSCMigrationModule(
+                    mc, legacy_nlu_enabled=cfg.module("nlu").enabled
+                ),
+            ),
+            start_if("jal_executor", lambda mc: JALExecutorModule(mc, tools)),
             start_if(
                 "llm", lambda mc: LLMModule(
                     mc,
@@ -532,7 +559,7 @@ async def run_pipeline(
             raise startup_errors[0]
         voice_modules = voice_results
         wake_word = voice_modules[0]
-        if cfg.module("gesture").enabled and voice_modules[6] is not None:
+        if cfg.module("gesture").enabled and voice_modules[8] is not None:
             gesture_bridge = GestureActionBridge(tools)
             await gesture_bridge.start(bus)
             modules_started.append(gesture_bridge)

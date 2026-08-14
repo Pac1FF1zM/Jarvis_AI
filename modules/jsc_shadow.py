@@ -48,8 +48,14 @@ class JSCShadowModule(BaseModule):
         self._migration_stage = str(
             config.params.get("migration_stage", "independent_shadow")
         )
-        if self._migration_stage != "independent_shadow":
-            raise ValueError("only the non-executing independent_shadow stage is enabled")
+        if self._migration_stage not in {
+            "independent_shadow",
+            "agreement_canary",
+            "restricted_reversible",
+            "jsc_primary",
+            "nlu_removed",
+        }:
+            raise ValueError("unsupported JSC migration stage")
         self._log_path = Path(
             config.params.get("log_path", "logs/jsc_shadow.jsonl")
         )
@@ -79,6 +85,7 @@ class JSCShadowModule(BaseModule):
         bus.subscribe("nlu_result", self._on_nlu_result)
         bus.subscribe("tool_call_requested", self._on_tool_call_requested)
         bus.subscribe("tool_result", self._on_tool_result)
+        bus.subscribe("jal_action_committed", self._on_jal_action_committed)
         bus.subscribe("cancel_requested", self._on_dialogue_reset)
         bus.subscribe("session_sleep_requested", self._on_dialogue_reset)
         bus.subscribe("interaction_failed", self._on_dialogue_reset)
@@ -115,6 +122,13 @@ class JSCShadowModule(BaseModule):
                     jal=candidate["prediction"].jal,
                     accepted=bool(risk.get("accepted", False)),
                     risk=risk,
+                    completeness_issues=tuple(candidate["completeness"]),
+                    correction_transaction=(
+                        candidate["transaction"].to_dict()
+                        if candidate["transaction"] is not None
+                        else None
+                    ),
+                    input_source=str(event.payload.get("source") or "unknown"),
                 ),
             )
         )
@@ -133,8 +147,8 @@ class JSCShadowModule(BaseModule):
         history_before = candidate["history_before"]
         state_before = candidate["state_before"]
         dialogue_id = candidate["dialogue_id"]
-        transaction = plan_correction_transaction(text, plan, self._last_receipt)
-        completeness = plan_completeness_issues(text, plan)
+        transaction = candidate["transaction"]
+        completeness = candidate["completeness"]
         record = {
             "schema_version": 3,
             "recorded_at": datetime.now(timezone.utc).isoformat(),
@@ -207,6 +221,8 @@ class JSCShadowModule(BaseModule):
             logger.error("JSC_SHADOW_INVALID_JAL trace=%s", event.trace_id)
             return None
         self._update_dialogue(event.trace_id, text, plan)
+        transaction = plan_correction_transaction(text, plan, self._last_receipt)
+        completeness = plan_completeness_issues(text, plan)
         return {
             "text": text,
             "prediction": prediction,
@@ -214,6 +230,8 @@ class JSCShadowModule(BaseModule):
             "history_before": history_before,
             "state_before": state_before,
             "dialogue_id": dialogue_id,
+            "transaction": transaction,
+            "completeness": completeness,
         }
 
     async def _on_tool_call_requested(self, event: Event) -> None:
@@ -229,6 +247,20 @@ class JSCShadowModule(BaseModule):
             return
         tool, params = requested
         receipt = ActionReceipt(event.trace_id, tool, dict(params), dict(result))
+        if receipt.succeeded:
+            self._last_receipt = receipt
+
+    async def _on_jal_action_committed(self, event: Event) -> None:
+        params = event.payload.get("params")
+        result = event.payload.get("result")
+        if not isinstance(params, Mapping) or not isinstance(result, Mapping):
+            return
+        receipt = ActionReceipt(
+            event.trace_id,
+            str(event.payload.get("tool", "")),
+            dict(params),
+            dict(result),
+        )
         if receipt.succeeded:
             self._last_receipt = receipt
 
