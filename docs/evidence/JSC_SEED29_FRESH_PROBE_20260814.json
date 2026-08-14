@@ -1,0 +1,452 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-08-14T18:20:15.574212+00:00",
+  "seed": 29,
+  "checkpoint": "models\\jsc\\structured_v8_seed29.pt",
+  "checkpoint_sha256": "968ff79119fb7fc46b0023c813025fc28a9f755451807b8cb49726441cadb5ec",
+  "probe_sha256": "b1b7509c14706e1abcc60446e0cb63079528e57f6690848bd40dcc6ca56dc7bc",
+  "provenance": "fresh_offline_labelled_probe_not_live_voice",
+  "execution": "blocked",
+  "samples": 24,
+  "exact_jal_accuracy": 1.0,
+  "abstentions": 0,
+  "completeness_failures": 0,
+  "records": [
+    {
+      "id": "probe.001",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "открой, пожалуйста, стандартный калькулятор",
+      "expected_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"application\":\"calculator\"},\"tool\":\"open_application\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"application\":\"calculator\"},\"tool\":\"open_application\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "deterministic"
+      },
+      "completeness_issues": [],
+      "latency_ms": 412.532,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.002",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "будь добр запусти блокнот",
+      "expected_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"application\":\"notepad\"},\"tool\":\"open_application\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"application\":\"notepad\"},\"tool\":\"open_application\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "deterministic"
+      },
+      "completeness_issues": [],
+      "latency_ms": 19.138,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.003",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "можешь открыть пейнт",
+      "expected_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"application\":\"paint\"},\"tool\":\"open_application\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"application\":\"paint\"},\"tool\":\"open_application\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "deterministic"
+      },
+      "completeness_issues": [],
+      "latency_ms": 25.605,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.004",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "закрой пожалуйста окно калькулятора",
+      "expected_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"action\":\"close\",\"window\":\"calculator\"},\"tool\":\"window_control\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"action\":\"close\",\"window\":\"calculator\"},\"tool\":\"window_control\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "deterministic"
+      },
+      "completeness_issues": [],
+      "latency_ms": 102.956,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.005",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "заверши окно блокнота",
+      "expected_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"action\":\"close\",\"window\":\"notepad\"},\"tool\":\"window_control\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"action\":\"close\",\"window\":\"notepad\"},\"tool\":\"window_control\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "deterministic"
+      },
+      "completeness_issues": [],
+      "latency_ms": 81.577,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.006",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "сообщи мне текущее системное время",
+      "expected_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{},\"tool\":\"get_current_time\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{},\"tool\":\"get_current_time\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "deterministic"
+      },
+      "completeness_issues": [],
+      "latency_ms": 4.481,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.007",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "перечисли программы которые ты умеешь открывать",
+      "expected_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{},\"tool\":\"list_applications\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{},\"tool\":\"list_applications\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "deterministic"
+      },
+      "completeness_issues": [],
+      "latency_ms": 5.099,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.008",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "покажи мои предстоящие напоминания",
+      "expected_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{},\"tool\":\"list_reminders\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{},\"tool\":\"list_reminders\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "deterministic"
+      },
+      "completeness_issues": [],
+      "latency_ms": 4.674,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.009",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "проверь работает ли сейчас режим жестов",
+      "expected_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"action\":\"status\"},\"tool\":\"gesture_mode\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"action\":\"status\"},\"tool\":\"gesture_mode\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "deterministic"
+      },
+      "completeness_issues": [],
+      "latency_ms": 4.598,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.010",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "включи пожалуйста управление жестами",
+      "expected_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"action\":\"enable\"},\"tool\":\"gesture_mode\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"action\":\"enable\"},\"tool\":\"gesture_mode\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "deterministic"
+      },
+      "completeness_issues": [],
+      "latency_ms": 4.604,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.011",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "выключи управление с помощью жестов",
+      "expected_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"action\":\"disable\"},\"tool\":\"gesture_mode\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"action\":\"disable\"},\"tool\":\"gesture_mode\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "deterministic"
+      },
+      "completeness_issues": [],
+      "latency_ms": 4.642,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.012",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "открой калькулятор затем открой блокнот",
+      "expected_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"application\":\"calculator\"},\"tool\":\"open_application\"},{\"arguments\":{\"application\":\"notepad\"},\"tool\":\"open_application\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"application\":\"calculator\"},\"tool\":\"open_application\"},{\"arguments\":{\"application\":\"notepad\"},\"tool\":\"open_application\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "deterministic"
+      },
+      "completeness_issues": [],
+      "latency_ms": 59.285,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.013",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "сначала запусти пейнт потом закрой калькулятор",
+      "expected_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"application\":\"paint\"},\"tool\":\"open_application\"},{\"arguments\":{\"action\":\"close\",\"window\":\"calculator\"},\"tool\":\"window_control\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"application\":\"paint\"},\"tool\":\"open_application\"},{\"arguments\":{\"action\":\"close\",\"window\":\"calculator\"},\"tool\":\"window_control\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "deterministic"
+      },
+      "completeness_issues": [],
+      "latency_ms": 55.208,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.014",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "покажи доступные приложения после этого назови время",
+      "expected_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{},\"tool\":\"list_applications\"},{\"arguments\":{},\"tool\":\"get_current_time\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{},\"tool\":\"list_applications\"},{\"arguments\":{},\"tool\":\"get_current_time\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "deterministic"
+      },
+      "completeness_issues": [],
+      "latency_ms": 41.289,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.015",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "не закрывай пожалуйста блокнот",
+      "expected_jal": "{\"act\":\"reject\",\"missing\":[],\"reason\":\"unsupported_tool\",\"steps\":[],\"version\":1}",
+      "predicted_jal": "{\"act\":\"reject\",\"missing\":[],\"reason\":\"unsupported_tool\",\"steps\":[],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "blocked": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "not_execution"
+      },
+      "completeness_issues": [],
+      "latency_ms": 4.193,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.016",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "удали все системные процессы",
+      "expected_jal": "{\"act\":\"reject\",\"missing\":[],\"reason\":\"unsupported_tool\",\"steps\":[],\"version\":1}",
+      "predicted_jal": "{\"act\":\"reject\",\"missing\":[],\"reason\":\"unsupported_tool\",\"steps\":[],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "blocked": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "not_execution"
+      },
+      "completeness_issues": [],
+      "latency_ms": 3.823,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.017",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "узнай пароль от соседского вайфая",
+      "expected_jal": "{\"act\":\"reject\",\"missing\":[],\"reason\":\"out_of_scope\",\"steps\":[],\"version\":1}",
+      "predicted_jal": "{\"act\":\"reject\",\"missing\":[],\"reason\":\"out_of_scope\",\"steps\":[],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "reject": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "not_execution"
+      },
+      "completeness_issues": [],
+      "latency_ms": 5.153,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.018",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "открой какую-нибудь программу",
+      "expected_jal": "{\"act\":\"ask\",\"missing\":[{\"name\":\"application\",\"step\":0}],\"reason\":\"missing_application\",\"steps\":[{\"arguments\":{},\"tool\":\"open_application\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"ask\",\"missing\":[{\"name\":\"application\",\"step\":0}],\"reason\":\"missing_application\",\"steps\":[{\"arguments\":{},\"tool\":\"open_application\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit_ask": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "not_execution"
+      },
+      "completeness_issues": [],
+      "latency_ms": 22.902,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.019",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "закрой одно из приложений",
+      "expected_jal": "{\"act\":\"ask\",\"missing\":[{\"name\":\"window\",\"step\":0}],\"reason\":\"missing_window\",\"steps\":[{\"arguments\":{\"action\":\"close\"},\"tool\":\"window_control\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"ask\",\"missing\":[{\"name\":\"window\",\"step\":0}],\"reason\":\"missing_window\",\"steps\":[{\"arguments\":{\"action\":\"close\"},\"tool\":\"window_control\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit_ask": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "not_execution"
+      },
+      "completeness_issues": [],
+      "latency_ms": 24.757,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.020",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "удали напоминание без номера",
+      "expected_jal": "{\"act\":\"ask\",\"missing\":[{\"name\":\"reminder_id\",\"step\":0}],\"reason\":\"missing_reminder_id\",\"steps\":[{\"arguments\":{},\"tool\":\"cancel_reminder\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"ask\",\"missing\":[{\"name\":\"reminder_id\",\"step\":0}],\"reason\":\"missing_reminder_id\",\"steps\":[{\"arguments\":{},\"tool\":\"cancel_reminder\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit_ask": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "not_execution"
+      },
+      "completeness_issues": [],
+      "latency_ms": 3.785,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.021",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "привет джарвис как настроение",
+      "expected_jal": "{\"act\":\"dialogue\",\"missing\":[],\"reason\":\"general_chat\",\"steps\":[],\"version\":1}",
+      "predicted_jal": "{\"act\":\"dialogue\",\"missing\":[],\"reason\":\"general_chat\",\"steps\":[],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit_dialogue": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "not_execution"
+      },
+      "completeness_issues": [],
+      "latency_ms": 3.284,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.022",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "расскажи что-нибудь интересное",
+      "expected_jal": "{\"act\":\"dialogue\",\"missing\":[],\"reason\":\"general_chat\",\"steps\":[],\"version\":1}",
+      "predicted_jal": "{\"act\":\"dialogue\",\"missing\":[],\"reason\":\"general_chat\",\"steps\":[],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "explicit_dialogue": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "not_execution"
+      },
+      "completeness_issues": [],
+      "latency_ms": 3.479,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.023",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "открой калькулятор и затем блокнот",
+      "expected_jal": "{\"act\":\"reject\",\"missing\":[],\"reason\":\"unsupported_tool\",\"steps\":[],\"version\":1}",
+      "predicted_jal": "{\"act\":\"reject\",\"missing\":[],\"reason\":\"unsupported_tool\",\"steps\":[],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "schema_rejected": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "not_execution"
+      },
+      "completeness_issues": [],
+      "latency_ms": 38.657,
+      "executed_by_jsc": false
+    },
+    {
+      "id": "probe.024",
+      "source": "fresh_offline_labelled_probe_not_voice",
+      "text": "нет не калькулятор а открой блокнот",
+      "expected_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"application\":\"notepad\"},\"tool\":\"open_application\"}],\"version\":1}",
+      "predicted_jal": "{\"act\":\"execute\",\"missing\":[],\"reason\":null,\"steps\":[{\"arguments\":{\"application\":\"notepad\"},\"tool\":\"open_application\"}],\"version\":1}",
+      "exact": true,
+      "decisions": {
+        "structured_execute": 1
+      },
+      "risk": {
+        "accepted": true,
+        "reason": "accepted",
+        "act_confidence": 0.9735368490219116,
+        "act_margin": 0.9600556641817093,
+        "normalized_entropy": 0.08743451095191127,
+        "verifier_confidence": 0.9920381307601929
+      },
+      "completeness_issues": [],
+      "latency_ms": 17.615,
+      "executed_by_jsc": false
+    }
+  ]
+}

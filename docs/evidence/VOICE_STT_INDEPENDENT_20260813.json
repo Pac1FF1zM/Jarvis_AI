@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "mode": "paired_no_action_independent_human_speech",
+  "dataset": "google/fleurs ru_ru/dev",
+  "samples": 20,
+  "manifest_sha256": "379f18c09a3201b43d881b103df80185ec0fe9fc221bae3bffee605c22992a89",
+  "source_report_sha256": "5bb5379876963324c878d18d5a16c015cb9f581e78f3cf2bd70f6ff19510747a",
+  "parakeet": {
+    "model": "nvidia/parakeet-tdt-0.6b-v3",
+    "revision": "541d1f99c6b0c3cd0b11a95167540bb8edefd82b",
+    "wer": 0.0440251572327044,
+    "cer": 0.021586616297895305,
+    "exact_match_rate": 0.7,
+    "mean_latency_ms": 1210.4010100018058,
+    "p95_latency_ms": 1802.4925000063377
+  },
+  "whisper_small": {
+    "wer": 0.05345911949685535,
+    "cer": 0.01834862385321101,
+    "exact_match_rate": 0.5,
+    "mean_latency_ms": 2148.9588800031925,
+    "p95_latency_ms": 2970.367799993255
+  },
+  "winner_by_wer_and_latency": "parakeet",
+  "execution": "blocked",
+  "production_voice_command_gate": "not_satisfied",
+  "limitation": "Independent general Russian speech validates STT, but not Jarvis command semantics; >=30 command recordings from >=3 speakers are still required."
+}

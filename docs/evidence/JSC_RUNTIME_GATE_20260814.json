@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-08-14T18:21:30.707299+00:00",
+  "mode": "packaged_structured_jsc_no_action",
+  "execution": "blocked",
+  "checkpoint": "models\\jsc\\structured_v8_seed29.pt",
+  "checkpoint_sha256": "968ff79119fb7fc46b0023c813025fc28a9f755451807b8cb49726441cadb5ec",
+  "samples": 400,
+  "metrics": {
+    "examples": 400,
+    "exact_jal_accuracy": 0.9675,
+    "codec_valid_rate": 1.0,
+    "schema_valid_rate": 1.0,
+    "act_accuracy": 0.9875,
+    "tool_sequence_accuracy": 0.9975,
+    "argument_sequence_accuracy": 0.9775,
+    "ood_recall": 1.0,
+    "false_execution_rate": 0.0,
+    "execution_precision": 0.9764705882352941,
+    "written_number_examples": 0,
+    "written_number_exact_jal_accuracy": 0.0,
+    "written_number_value_accuracy": 0.0,
+    "digit_number_exact_jal_accuracy": 0.0,
+    "category_exact_jal": {
+      "asr_noise": 1.0,
+      "compound": 1.0,
+      "correction": 1.0,
+      "hard_negative": 0.8333333333333334,
+      "multi_turn": 1.0,
+      "ood": 1.0,
+      "single": 0.9
+    },
+    "target_tool_exact_jal": {
+      "browser_control": 1.0,
+      "gesture_mode": 1.0,
+      "get_current_time": 1.0,
+      "list_applications": 1.0,
+      "open_application": 1.0,
+      "set_reminder": 1.0,
+      "system_control": 1.0,
+      "window_control": 0.9607843137254902
+    },
+    "target_tool_presence_recall": {
+      "browser_control": 1.0,
+      "gesture_mode": 1.0,
+      "get_current_time": 1.0,
+      "list_applications": 1.0,
+      "open_application": 1.0,
+      "set_reminder": 1.0,
+      "system_control": 1.0,
+      "window_control": 1.0
+    },
+    "invalid_reasons": {},
+    "exact_jal_by_step_group": {
+      "steps_1": 0.9540229885057471,
+      "steps_2_3": 1.0,
+      "steps_4_5": 1.0
+    },
+    "opposite_action_count": 0,
+    "opposite_action_rate": 0.0,
+    "negated_examples": 6,
+    "negated_execution_rate": 0.0
+  },
+  "selective_risk_reasons": {
+    "deterministic": 310,
+    "accepted": 12,
+    "not_execution": 78
+  },
+  "latency_ms": {
+    "mean": 32.7631562499937,
+    "median": 20.120849999784696,
+    "max": 432.49439999999595
+  },
+  "gates": {
+    "passed": true,
+    "checks": {
+      "overall_exact_jal_accuracy": {
+        "actual": 0.9675,
+        "target": 0.84,
+        "passed": true
+      },
+      "single_exact_jal_accuracy": {
+        "actual": 0.9,
+        "target": 0.87,
+        "passed": true
+      },
+      "steps_2_3_exact_jal_accuracy": {
+        "actual": 1.0,
+        "target": 0.85,
+        "passed": true
+      },
+      "steps_4_5_exact_jal_accuracy": {
+        "actual": 1.0,
+        "target": 0.82,
+        "passed": true
+      },
+      "multi_turn_exact_jal_accuracy": {
+        "actual": 1.0,
+        "target": 0.87,
+        "passed": true
+      },
+      "schema_valid_rate": {
+        "actual": 1.0,
+        "target": 1.0,
+        "passed": true
+      },
+      "maximum_false_execution_rate": {
+        "actual": 0.0,
+        "target": 0.002,
+        "passed": true
+      },
+      "maximum_opposite_action_rate": {
+        "actual": 0.0,
+        "target": 0.0,
+        "passed": true
+      }
+    }
+  }
+}

@@ -86,6 +86,7 @@ tmp/
 
 # Local experimental runtimes, downloaded models, approvals, and private audio.
 .local/
+benchmarks/voice_e2e/private/
 
 # Local archives, IDE and OS metadata
 *.zip
