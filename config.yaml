@@ -114,6 +114,7 @@ modules:
     device: cpu
     model: models/jsc/structured_v8_seed29.pt
     params:
+      migration_stage: independent_shadow
       log_path: logs/jsc_shadow.jsonl
       thresholds:
         execution_threshold: 0.65
@@ -121,6 +122,12 @@ modules:
         parameter_threshold: 0.35
         span_threshold: 0.25
         missing_threshold: 0.35
+        # Selective execution stays observable-only until calibrated on the
+        # frozen independent human-voice benchmark.
+        minimum_act_confidence: 0.65
+        minimum_act_margin: 0.15
+        maximum_normalized_entropy: 0.65
+        minimum_verifier_confidence: 0.90
 
   # Ollama qwen2.5:7b-instruct. Full 7B GPU offload will NOT fit in 3GB;
   # run on CPU, or use Q4_K_M / smaller. See README §3.

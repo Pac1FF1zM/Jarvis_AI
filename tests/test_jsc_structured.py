@@ -379,7 +379,7 @@ def test_structured_codec_rejects_ungrounded_zero_argument_hallucination():
     )
 
     assert loads(result.predictions[0]).act == DialogueAct.REJECT
-    assert result.decisions == {"schema_rejected": 1}
+    assert result.decisions == {"blocked": 1}
 
 
 def test_explicit_router_covers_courtesy_and_compound_connectors():

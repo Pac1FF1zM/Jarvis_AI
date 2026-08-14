@@ -20,7 +20,10 @@ from .structured_decoding import (
     assemble_structured_execution,
     assemble_verified_explicit_execution,
     has_explicit_execution_blocker,
+    explicit_rejection_reason,
     infer_explicit_clarification,
+    infer_explicit_correction,
+    infer_explicit_dialogue,
 )
 from .structured_labels import decode_parameter_logits
 
@@ -112,11 +115,24 @@ def decode_structured_jal(
     decisions: Counter[str] = Counter()
     predictions: list[str] = []
     for index in range(rows):
-        if has_explicit_execution_blocker(utterances[index]):
-            predictions.append(dumps(JALPlan(DialogueAct.REJECT, reason="unsupported_tool")))
+        rejection_reason = explicit_rejection_reason(utterances[index])
+        if rejection_reason is not None or has_explicit_execution_blocker(utterances[index]):
+            predictions.append(
+                dumps(
+                    JALPlan(
+                        DialogueAct.REJECT,
+                        reason=rejection_reason or "unsupported_tool",
+                    )
+                )
+            )
             decisions["blocked"] += 1
             continue
         state = states[index] if states is not None else None
+        correction = infer_explicit_correction(utterances[index], registry)
+        if correction is not None:
+            predictions.append(dumps(correction))
+            decisions["explicit_correction"] += 1
+            continue
         completed = _complete_pending_state(utterances[index], state, registry)
         if completed is not None:
             predictions.append(dumps(completed))
@@ -126,6 +142,11 @@ def decode_structured_jal(
         if clarification is not None:
             predictions.append(dumps(clarification))
             decisions["explicit_ask"] += 1
+            continue
+        dialogue = infer_explicit_dialogue(utterances[index])
+        if dialogue is not None:
+            predictions.append(dumps(dialogue))
+            decisions["explicit_dialogue"] += 1
             continue
         explicit = assemble_verified_explicit_execution(utterances[index], registry)
         if explicit is not None:

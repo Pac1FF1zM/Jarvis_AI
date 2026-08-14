@@ -206,6 +206,28 @@ class NLUResultPayload(EventPayload):
 
 
 @dataclass(frozen=True)
+class JSCCandidateReadyPayload(EventPayload):
+    """A semantic candidate that is structurally unable to authorize execution."""
+
+    event_type: ClassVar[str] = "jsc_candidate_ready"
+    text: str
+    jal: str
+    accepted: bool
+    risk: Mapping[str, Any] = field(default_factory=dict)
+    execution_allowed: bool = False
+
+    def __post_init__(self) -> None:
+        _require_text("text", self.text)
+        _require_text("jal", self.jal)
+        if not isinstance(self.accepted, bool):
+            raise TypeError("accepted must be bool")
+        if self.execution_allowed is not False:
+            raise ValueError("shadow JSC candidates cannot authorize execution")
+        if not isinstance(self.risk, Mapping):
+            raise TypeError("risk must be a mapping")
+
+
+@dataclass(frozen=True)
 class ToolCallRequestedPayload(EventPayload):
     event_type: ClassVar[str] = "tool_call_requested"
     tool: str
@@ -424,6 +446,7 @@ PAYLOAD_CONTRACTS: Mapping[str, type[EventPayload]] = MappingProxyType(
             InteractionFailedPayload,
             InteractionCompletedPayload,
             NLUResultPayload,
+            JSCCandidateReadyPayload,
             ToolCallRequestedPayload,
             ToolResultPayload,
             ResponseReadyPayload,

@@ -34,11 +34,13 @@ def infer_explicit_clarification(
     normalized = normalized.strip(" ,.!?:;-")
     open_patterns = (
         rf"^(?:открой|открывай|запусти|запускай|включи)\s+(?:нужн\w*\s+)?{_GENERIC_APPLICATION}$",
+        rf"^(?:открой|запусти)\s+(?:какую-нибудь|какую нибудь|любую)\s+{_GENERIC_APPLICATION}$",
         rf"^(?:мне\s+)?(?:нужно|надо)\s+(?:открыть|запустить)\s+(?:одно\s+|нужн\w*\s+)?{_GENERIC_APPLICATION}$",
     )
     close_patterns = (
         rf"^(?:закрой|закрывай|заверши|убери)\s+(?:одно\s+|нужн\w*\s+)?{_GENERIC_WINDOW}$",
         rf"^(?:мне\s+)?(?:нужно|надо)\s+(?:закрыть|завершить)\s+(?:одно\s+|нужн\w*\s+)?{_GENERIC_WINDOW}$",
+        rf"^(?:закрой|заверши)\s+одно\s+из\s+(?:приложений|окон)$",
     )
     if any(re.fullmatch(pattern, normalized) for pattern in open_patterns):
         return _validated_ask(
@@ -54,7 +56,7 @@ def infer_explicit_clarification(
             "window",
             "missing_window",
         )
-    if re.fullmatch(r"(?:отмени|удали)\s+напоминани\w*", normalized):
+    if re.fullmatch(r"(?:отмени|удали)\s+напоминани\w*(?:\s+без\s+номера)?", normalized):
         return _validated_ask(
             registry,
             ToolCall("cancel_reminder"),
@@ -95,6 +97,20 @@ def infer_explicit_clarification(
                 "minutes",
                 "missing_time",
             )
+    return None
+
+
+def infer_explicit_dialogue(utterance: str) -> JALPlan | None:
+    """Route obvious non-executing conversation without asking the model to guess."""
+    normalized = normalize_russian_numbers(utterance.casefold().replace("ё", "е"))
+    normalized = normalized.strip(" ,.!?:;-")
+    if re.fullmatch(
+        r"(?:привет|здравствуй|добрый\s+(?:день|вечер)|как\s+дела|"
+        r"привет\s+джарвис(?:\s+как\s+настроение)?|"
+        r"расскажи\s+что-нибудь\s+интересное)",
+        normalized,
+    ):
+        return JALPlan(DialogueAct.DIALOGUE, reason="general_chat")
     return None
 
 
@@ -146,7 +162,7 @@ def assemble_verified_explicit_execution(
         except (TypeError, ValueError):
             pass
         else:
-            return direct_plan
+            return direct_plan if not plan_completeness_issues(utterance, direct_plan) else None
     parts = _meaningful_parts(split_compound_command(normalized))
     if not parts:
         return None
@@ -157,7 +173,80 @@ def assemble_verified_explicit_execution(
     ):
         return None
     tools = tuple(action.intent for action in actions if action is not None)
-    return assemble_structured_execution(utterance, tools, registry)
+    plan = assemble_structured_execution(utterance, tools, registry)
+    if plan is not None and plan_completeness_issues(utterance, plan):
+        return None
+    return plan
+
+
+def infer_explicit_correction(
+    utterance: str, registry: ToolSchemaRegistry
+) -> JALPlan | None:
+    """Parse common correction forms without depending on legacy NLU history."""
+    normalized = normalize_russian_numbers(utterance.casefold().replace("ё", "е"))
+    normalized = normalized.strip(" ,.!?:;-")
+    replacement_only = (
+        r"(?:я\s+)?(?:имел|имела)\s+в\s+виду\s+(.+?)[, ]+"
+        r"(?:открой|запусти|включи)\s+(?:его|ее|её)$"
+    )
+    match = re.fullmatch(replacement_only, normalized)
+    if match is not None:
+        application = resolve_application(match.group(1).strip(" ,"))
+        if application is not None:
+            plan = JALPlan(
+                DialogueAct.EXECUTE,
+                steps=(ToolCall("open_application", {"application": application.name}),),
+            )
+            registry.validate(plan)
+            return plan
+    instead = re.fullmatch(
+        r"стоп[, ]+вместо\s+(.+?)\s+нуж(?:ен|на|но)\s+(.+)", normalized
+    )
+    if instead is not None:
+        replacement = resolve_application(instead.group(2).strip(" ,"))
+        if replacement is not None:
+            plan = JALPlan(
+                DialogueAct.EXECUTE,
+                steps=(ToolCall("open_application", {"application": replacement.name}),),
+            )
+            registry.validate(plan)
+            return plan
+    if normalized.startswith("поправка:") or normalized.startswith("поправка "):
+        command = re.sub(r"^поправка\s*:?\s*", "", normalized)
+        return assemble_verified_explicit_execution(command, registry)
+    return None
+
+
+def plan_completeness_issues(utterance: str, plan: JALPlan) -> tuple[str, ...]:
+    """Find evidence that an executable plan silently dropped command clauses."""
+    if plan.act != DialogueAct.EXECUTE:
+        return ()
+    normalized = normalize_russian_numbers(utterance.casefold().replace("ё", "е"))
+    parts = _meaningful_parts(split_compound_command(normalized))
+    issues: list[str] = []
+    routed_parts = [route_explicit_command(part) for part in parts]
+    expected_parts = [action for action in routed_parts if action is not None]
+    # Preserve coordinated application lists with an elided second verb, e.g.
+    # "открой калькулятор и затем блокнот".
+    for index, (part, action) in enumerate(zip(parts, routed_parts, strict=True)):
+        if action is not None or index == 0 or resolve_application(part) is None:
+            continue
+        if any(
+            previous is not None and previous.intent == "open_application"
+            for previous in routed_parts[:index]
+        ):
+            expected_parts.append(part)
+    if len(expected_parts) > 1 and len(plan.steps) != len(expected_parts):
+        issues.append("compound_step_count_mismatch")
+    routed_tools = tuple(
+        action.intent
+        for action in routed_parts
+        if action is not None and action.intent in {step.tool for step in plan.steps}
+    )
+    planned_tools = tuple(step.tool for step in plan.steps)
+    if routed_tools and not _is_ordered_subsequence(routed_tools, planned_tools):
+        issues.append("explicit_action_order_mismatch")
+    return tuple(issues)
 
 
 def has_explicit_execution_blocker(utterance: str) -> bool:
@@ -170,6 +259,23 @@ def has_explicit_execution_blocker(utterance: str) -> bool:
         if action is not None and action.intent in _NON_EXECUTING_ROUTES:
             return True
     return False
+
+
+def explicit_rejection_reason(utterance: str) -> str | None:
+    """Conservatively identify clearly unsupported or high-risk domains."""
+    normalized = normalize_russian_numbers(utterance.casefold().replace("ё", "е"))
+    patterns = (
+        r"\b(?:системн\w*\s+)?(?:файл\w*|процесс\w*)\b",
+        r"\bперевед\w*\s+деньг\w*\b",
+        r"\bзакаж\w*\s+(?:мне\s+)?ужин\b",
+        r"\bпозвон\w*\s+случайн\w*\s+человек\w*\b",
+        r"\bотключ\w*\s+антивирус\w*\b",
+        r"\bпарол\w*\s+(?:от\s+)?сосед\w*\s+(?:сет\w*|вайфа\w*)\b",
+        r"\bнастройк\w*\s+чуж\w*\s+аккаунт\w*\b",
+        r"\bкуп\w*\s+акци\w*\b",
+        r"\b(?:очист\w*|форматир\w*|сотр\w*)\s+(?:системн\w*\s+)?диск\w*\b",
+    )
+    return "out_of_scope" if any(re.search(pattern, normalized) for pattern in patterns) else None
 
 
 def assemble_structured_execution(
@@ -250,6 +356,8 @@ def assemble_structured_execution(
         plan = JALPlan(DialogueAct.EXECUTE, steps=tuple(calls))
         registry.validate(plan)
     except (TypeError, ValueError):
+        return None
+    if plan_completeness_issues(utterance, plan):
         return None
     return plan
 

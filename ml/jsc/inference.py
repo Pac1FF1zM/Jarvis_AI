@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
 import torch
 
 from .data import DialogueTurn
-from .jal import JALPlan, ToolSchemaRegistry
+from .jal import DialogueAct, JALPlan, ToolSchemaRegistry, dumps, loads
+from .risk import SelectiveRiskPolicy, evaluate_selective_risk
 from .structured_codec import decode_structured_jal
 from .structured_features import serialize_structured_input
 from .structured_model import StructuredJSCConfig, StructuredJSCModel
@@ -21,6 +22,7 @@ class StructuredPrediction:
     jal: str
     decisions: Mapping[str, int]
     latency_ms: float
+    risk: Mapping[str, Any] = field(default_factory=dict)
 
 
 class StructuredJSCPredictor:
@@ -64,8 +66,10 @@ class StructuredJSCPredictor:
             "span_threshold": training["span_threshold"],
             "missing_threshold": training["missing_threshold"],
         }
-        defaults.update(thresholds or {})
+        supplied = dict(thresholds or {})
+        defaults.update({key: value for key, value in supplied.items() if key in defaults})
         self.thresholds = defaults
+        self.risk_policy = SelectiveRiskPolicy.from_mapping(supplied)
 
     @torch.inference_mode()
     def predict(
@@ -101,8 +105,28 @@ class StructuredJSCPredictor:
             states=[state],
             **self.thresholds,
         )
+        plan = loads(decoded.predictions[0])
+        decision_name = next(iter(decoded.decisions), "unknown")
+        if plan.act == DialogueAct.EXECUTE and decision_name == "structured_execute":
+            act_values = outputs[0][0].float().softmax(-1).cpu().tolist()
+            verifier = float(outputs[6][0].float().softmax(-1).cpu()[1])
+            risk = evaluate_selective_risk(act_values, verifier, self.risk_policy)
+            risk_payload: Mapping[str, Any] = risk.to_dict()
+            prediction = decoded.predictions[0]
+            decisions = decoded.decisions
+            if not risk.accepted:
+                prediction = dumps(JALPlan(DialogueAct.REJECT, reason="calibrated_abstention"))
+                decisions = {"calibrated_abstention": 1}
+        else:
+            risk_payload = {
+                "accepted": plan.act != DialogueAct.EXECUTE or decision_name in {"explicit", "state_completed"},
+                "reason": "deterministic" if decision_name in {"explicit", "state_completed"} else "not_execution",
+            }
+            prediction = decoded.predictions[0]
+            decisions = decoded.decisions
         return StructuredPrediction(
-            decoded.predictions[0],
-            decoded.decisions,
+            prediction,
+            decisions,
             (time.perf_counter() - started) * 1000.0,
+            risk_payload,
         )

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.event_bus import Event, EventBus
-from core.event_payloads import NLUResultPayload
+from core.event_payloads import NLUResultPayload, TranscriptionReadyPayload
 from ml.jsc.data import DialogueTurn
 from ml.jsc.inference import StructuredPrediction
 from ml.jsc.jal import DialogueAct, JALPlan, MissingSlot, ToolCall, dumps
@@ -71,6 +71,40 @@ async def test_shadow_records_comparison_without_publishing_execution(tmp_path):
     assert record["jsc"]["latency_ms"] == 12.346
     assert record["executed_by_jsc"] is False
     assert bus.queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_shadow_predicts_from_transcription_before_nlu_and_emits_no_action_candidate(tmp_path):
+    checkpoint = tmp_path / "best.pt"
+    checkpoint.write_bytes(b"test checkpoint sentinel")
+
+    class FakePredictor:
+        def predict(self, _text, **_kwargs):
+            return StructuredPrediction(
+                dumps(JALPlan(DialogueAct.DIALOGUE, reason="general_chat")),
+                {"explicit_dialogue": 1},
+                1.0,
+                {"accepted": True, "reason": "deterministic"},
+            )
+
+    bus = EventBus()
+    module = JSCShadowModule(
+        _config(tmp_path, checkpoint),
+        predictor_factory=lambda *_args, **_kwargs: FakePredictor(),
+    )
+    await module.start(bus)
+    await module._on_transcription_ready(
+        Event(
+            "transcription_ready",
+            TranscriptionReadyPayload(text="привет", confidence=0.9),
+            trace_id="voice-direct",
+        )
+    )
+
+    candidate = bus.queue.get_nowait()
+    assert candidate.event_type == "jsc_candidate_ready"
+    assert candidate.payload["execution_allowed"] is False
+    assert "voice-direct" in module._candidates
 
 
 @pytest.mark.asyncio
