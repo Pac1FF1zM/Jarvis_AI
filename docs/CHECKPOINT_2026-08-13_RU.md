@@ -1,5 +1,9 @@
 # Jarvis — checkpoint и handoff от 13 августа 2026
 
+> **Исторический документ.** Он описывает состояние до production promotion
+> Parakeet и Structured JSC v8. Актуальный статус:
+> [PROJECT_STATUS_2026-08-14_RU.md](PROJECT_STATUS_2026-08-14_RU.md).
+
 > Исторический снимок состояния до production wiring. Актуальное продолжение:
 > [Experimental production Parakeet](PARAKEET_PRODUCTION_EXPERIMENT_RU.md).
 

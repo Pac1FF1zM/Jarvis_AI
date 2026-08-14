@@ -208,8 +208,9 @@ class StructuredJSCModel(nn.Module):
         memory = self.encoder(embedded, src_key_padding_mask=~source_mask.bool())
         float_mask = source_mask.unsqueeze(-1).to(memory.dtype)
         mean = (memory * float_mask).sum(1) / float_mask.sum(1).clamp_min(1.0)
-        logits = self.semantic_attention(memory).squeeze(-1).masked_fill(
-            ~source_mask.bool(), torch.finfo(memory.dtype).min
+        logits = self.semantic_attention(memory).squeeze(-1)
+        logits = logits.masked_fill(
+            ~source_mask.bool(), torch.finfo(logits.dtype).min
         )
         attended = torch.einsum("bl,bld->bd", logits.softmax(-1), memory)
         maximum = memory.masked_fill(

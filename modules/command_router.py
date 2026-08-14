@@ -25,6 +25,22 @@ class RoutedAction:
         return {"intent": self.intent, "slots": dict(self.slots), "confidence": self.confidence}
 
 
+def _resolve_application_phrase(value: str):
+    """Resolve one allow-listed application embedded in a natural noun phrase."""
+    cleaned = value.strip(" ,.!?:;-")
+    cleaned = re.sub(
+        r"^(?:окно|приложение|программу|программа)\s+", "", cleaned
+    )
+    cleaned = re.sub(
+        r"(?:\s+|,\s*)(?:(?:сейчас|пожалуйста|если можно|джарвис|"
+        r"для работы|к работе)\s*)+$",
+        "",
+        cleaned,
+    )
+    direct = resolve_application(cleaned)
+    return direct
+
+
 _COMMAND_START = (
     r"(?:открой|открыть|запусти|включи|поставь|создай|скажи|покажи|"
     r"найди|поищи|загугли|переключи|перейди|сверни|разверни|закрой|"
@@ -123,7 +139,12 @@ def route_explicit_command(
         "",
         value,
     )
-    value = re.sub(r"\s+(?:пожалуйста|если можно)$", "", value)
+    # Common ASR substitutions and a trailing wake-word must not become part
+    # of an application/window slot. Keep this intentionally narrow.
+    value = re.sub(r"\bотпрой\b", "открой", value)
+    value = re.sub(
+        r"(?:\s+|,\s*)(?:(?:пожалуйста|если можно|джарвис)\s*)+$", "", value
+    )
     if re.fullmatch(
         r"(?:(?:полностью )?(?:очисти|форматируй|сотри) (?:весь )?(?:диск|системный диск)|"
         r"удали (?:все|всё) (?:файлы|данные)|уничтожь (?:все|всё) (?:файлы|данные))",
@@ -314,7 +335,10 @@ def route_explicit_command(
     )
     if incomplete_relative:
         return RoutedAction("set_reminder", {"minutes": incomplete_relative.group(1)})
-    incomplete_reminder = re.match(r"^напомни(?:\s+мне)?\s+(?:о|про|что)?\s*(.+)$", value)
+    incomplete_reminder = re.match(
+        r"^напомни(?:\s+мне)?(?:\s+(?:о|про|что))?\s+(.+)$",
+        value,
+    )
     if incomplete_reminder and not re.search(r"\b(?:через|сегодня|завтра|\d{1,2}:\d{2})\b", value):
         return RoutedAction("set_reminder", {"reminder_text": incomplete_reminder.group(1)})
 
@@ -494,11 +518,22 @@ def route_explicit_command(
             "window_control",
             {"action": "minimize_all" if value.startswith("сверни") else "show_desktop"},
         )
-    window_match = re.match(r"^(переключись на|перейди в|сверни|разверни|восстанови|закрой) (?:окно )?(.+)$", value)
+    pronoun_close = re.match(
+        r"^(?:мне\s+)?(?:больше\s+)?не\s+нуж(?:ен|на|но)\s+(.+?),?\s+"
+        r"(?:закрой|заверши)\s+(?:его|ее|её)$",
+        value,
+    )
+    if pronoun_close:
+        application = _resolve_application_phrase(pronoun_close.group(1))
+        if application is not None:
+            return RoutedAction(
+                "window_control", {"action": "close", "window": application.name}
+            )
+    window_match = re.match(r"^(переключись на|перейди в|сверни|разверни|восстанови|закрой|заверши) (?:окно )?(.+)$", value)
     if window_match:
-        actions = {"переключись на": "switch", "перейди в": "switch", "сверни": "minimize", "разверни": "maximize", "восстанови": "restore", "закрой": "close"}
+        actions = {"переключись на": "switch", "перейди в": "switch", "сверни": "minimize", "разверни": "maximize", "восстанови": "restore", "закрой": "close", "заверши": "close"}
         target = window_match.group(2)
-        application = resolve_application(target)
+        application = _resolve_application_phrase(target)
         return RoutedAction(
             "window_control",
             {
@@ -525,9 +560,22 @@ def route_explicit_command(
     if rename:
         return RoutedAction("file_control", {"action": "rename", "path": rename.group(1), "new_name": rename.group(2)})
 
-    open_match = re.match(r"^(?:открой|запусти|включи)(?: мне)?(?: приложение| программу)?\s+(.+)$", value)
+    pronoun_open = re.match(
+        r"^(?:мне\s+)?нуж(?:ен|на|но)\s+(.+?),?\s+"
+        r"(?:открой|запусти)\s+(?:его|ее|её)$",
+        value,
+    )
+    if pronoun_open:
+        application = _resolve_application_phrase(pronoun_open.group(1))
+        if application is not None:
+            return RoutedAction("open_application", {"application": application.name})
+    open_match = re.match(
+        r"^(?:открой|запусти|включи|покажи(?:\s+мне)?|подготовь|выведи\s+на\s+экран)"
+        r"(?: мне)?(?: приложение| программу)?\s+(.+)$",
+        value,
+    )
     if open_match:
-        application = resolve_application(open_match.group(1))
+        application = _resolve_application_phrase(open_match.group(1))
         if application is not None:
             return RoutedAction("open_application", {"application": application.name})
     return None

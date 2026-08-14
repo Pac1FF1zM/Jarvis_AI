@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import torch
+import pytest
 
 from ml.jsc.data import DialogueTurn, JSCExample
 from ml.jsc.jal import DialogueAct, JALPlan, MissingSlot, ToolCall, loads
@@ -19,7 +20,10 @@ from ml.jsc.structured_features import (
     serialize_structured_source,
     structured_segment_targets,
 )
-from ml.jsc.structured_decoding import assemble_verified_explicit_execution
+from ml.jsc.structured_decoding import (
+    assemble_verified_explicit_execution,
+    infer_explicit_clarification,
+)
 
 
 def test_structured_model_has_only_direct_program_heads():
@@ -198,7 +202,7 @@ def test_structured_codec_builds_ask_plan_without_json_generation():
         missing=(MissingSlot(0, "minutes"),),
         reason="missing_time",
     )
-    assert result.decisions == {"structured_ask": 1}
+    assert result.decisions == {"explicit_ask": 1}
 
 
 def test_structured_codec_blocks_negated_execution_even_with_confident_heads():
@@ -229,6 +233,38 @@ def test_structured_codec_blocks_negated_execution_even_with_confident_heads():
         missing_labels=missing_labels,
         reason_labels=reason_labels,
         **shapes,
+    )
+
+    assert loads(result.predictions[0]).act == DialogueAct.REJECT
+    assert result.decisions == {"blocked": 1}
+
+
+def test_structured_codec_blocks_process_termination_masquerading_as_window_close():
+    registry = build_project_schema_registry()
+    assert assemble_verified_explicit_execution(
+        "заверши все процессы на компьютере", registry
+    ) is not None
+
+    tool_labels = ("<none>", *registry.tool_names)
+    parameter_labels = build_parameter_labels(registry)
+    missing_labels = build_missing_labels(registry)
+    reason_labels = ("<none>", "unsupported_tool")
+    source = "USER:заверши все процессы на компьютере"
+    result = decode_structured_jal(
+        utterances=["заверши все процессы на компьютере"],
+        source_texts=[source],
+        registry=registry,
+        tool_labels=tool_labels,
+        parameter_labels=parameter_labels,
+        missing_labels=missing_labels,
+        reason_labels=reason_labels,
+        **_empty_logits(
+            len(tool_labels),
+            len(parameter_labels),
+            len(missing_labels),
+            len(reason_labels),
+            len(source) + 2,
+        ),
     )
 
     assert loads(result.predictions[0]).act == DialogueAct.REJECT
@@ -361,6 +397,169 @@ def test_explicit_router_covers_courtesy_and_compound_connectors():
             ToolCall("gesture_mode", {"action": "status"}),
         ),
     )
+
+
+@pytest.mark.parametrize(
+    "text",
+    (
+        "выполни по порядку: открой калькулятор, затем закрой пейнт",
+        "одной командой: открой калькулятор и потом закрой пейнт",
+        "мне нужно следующее: открой калькулятор; после этого закрой пейнт",
+        "сначала открой калькулятор, заодно закрой пейнт",
+    ),
+)
+def test_explicit_router_ignores_non_action_compound_wrappers(text):
+    assert assemble_verified_explicit_execution(
+        text, build_project_schema_registry()
+    ) == JALPlan(
+        DialogueAct.EXECUTE,
+        steps=(
+            ToolCall("open_application", {"application": "calculator"}),
+            ToolCall("window_control", {"action": "close", "window": "paint"}),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "tool", "arguments"),
+    (
+        (
+            "мне нужен калькулятор, открой его",
+            "open_application",
+            {"application": "calculator"},
+        ),
+        (
+            "мне больше не нужен пейнт, закрой его",
+            "window_control",
+            {"action": "close", "window": "paint"},
+        ),
+    ),
+)
+def test_explicit_router_preserves_pronoun_antecedent_before_splitting(text, tool, arguments):
+    assert assemble_verified_explicit_execution(
+        text, build_project_schema_registry()
+    ) == JALPlan(
+        DialogueAct.EXECUTE,
+        steps=(ToolCall(tool, arguments),),
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    (
+        (
+            "Открой приложение",
+            JALPlan(
+                DialogueAct.ASK,
+                steps=(ToolCall("open_application"),),
+                missing=(MissingSlot(0, "application"),),
+                reason="missing_application",
+            ),
+        ),
+        (
+            "Нужно закрыть одно окно",
+            JALPlan(
+                DialogueAct.ASK,
+                steps=(ToolCall("window_control", {"action": "close"}),),
+                missing=(MissingSlot(0, "window"),),
+                reason="missing_window",
+            ),
+        ),
+        (
+            "Отмени напоминание",
+            JALPlan(
+                DialogueAct.ASK,
+                steps=(ToolCall("cancel_reminder"),),
+                missing=(MissingSlot(0, "reminder_id"),),
+                reason="missing_reminder_id",
+            ),
+        ),
+    ),
+)
+def test_explicit_incomplete_commands_become_typed_questions(text, expected):
+    assert infer_explicit_clarification(text, build_project_schema_registry()) == expected
+
+
+def test_structured_codec_completes_pending_reminder_with_absolute_time():
+    registry = build_project_schema_registry()
+    tool_labels = ("<none>", *registry.tool_names)
+    parameter_labels = build_parameter_labels(registry)
+    missing_labels = build_missing_labels(registry)
+    reason_labels = ("<none>", "general_chat")
+    source = "USER:завтра в девять утра"
+    state = JALPlan(
+        DialogueAct.ASK,
+        steps=(ToolCall("set_reminder", {"message": "ответить коллеге"}),),
+        missing=(MissingSlot(0, "minutes"),),
+        reason="missing_time",
+    )
+    result = decode_structured_jal(
+        utterances=["завтра в девять утра"],
+        source_texts=[source],
+        states=[state],
+        registry=registry,
+        tool_labels=tool_labels,
+        parameter_labels=parameter_labels,
+        missing_labels=missing_labels,
+        reason_labels=reason_labels,
+        **_empty_logits(
+            len(tool_labels),
+            len(parameter_labels),
+            len(missing_labels),
+            len(reason_labels),
+            len(source) + 2,
+        ),
+    )
+
+    assert loads(result.predictions[0]) == JALPlan(
+        DialogueAct.EXECUTE,
+        steps=(
+            ToolCall(
+                "set_reminder",
+                {
+                    "message": "ответить коллеге",
+                    "clock_time": "09:00",
+                    "day": "завтра",
+                },
+            ),
+        ),
+    )
+
+
+def test_structured_codec_rejects_window_hallucination_for_gesture_request():
+    registry = build_project_schema_registry()
+    tool_labels = ("<none>", *registry.tool_names)
+    parameter_labels = build_parameter_labels(registry)
+    missing_labels = build_missing_labels(registry)
+    reason_labels = ("<none>", "unsupported_tool")
+    source = "USER:сделай с жестами все по порядку"
+    shapes = _empty_logits(
+        len(tool_labels),
+        len(parameter_labels),
+        len(missing_labels),
+        len(reason_labels),
+        len(source) + 2,
+    )
+    shapes["act_logits"][0, ACT_LABELS.index("execute")] = 10.0
+    shapes["count_logits"][0, 1] = 10.0
+    shapes["tool_logits"][0, 0, tool_labels.index("window_control")] = 10.0
+    close_label = parameter_labels.index('window_control|action="close"')
+    shapes["parameter_logits"][0, 0, close_label] = 10.0
+    shapes["verifier_logits"][0, 1] = 10.0
+
+    result = decode_structured_jal(
+        utterances=["сделай с жестами всё по порядку"],
+        source_texts=[source],
+        registry=registry,
+        tool_labels=tool_labels,
+        parameter_labels=parameter_labels,
+        missing_labels=missing_labels,
+        reason_labels=reason_labels,
+        **shapes,
+    )
+
+    assert loads(result.predictions[0]).act == DialogueAct.REJECT
+    assert result.decisions == {"schema_rejected": 1}
 
 
 def _empty_logits(

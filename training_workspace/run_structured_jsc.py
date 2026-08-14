@@ -96,6 +96,7 @@ def _training_config(args: argparse.Namespace, seed: int, output: Path) -> Struc
         use_amp=not args.no_amp,
         resume=str(latest) if latest.is_file() else None,
         smoke=args.smoke,
+        category_balanced_sampling=args.category_balanced_sampling,
     )
 
 
@@ -106,7 +107,18 @@ def _completed_report(output: Path, requested: StructuredTrainingConfig) -> dict
         return None
     report = json.loads(path.read_text(encoding="utf-8"))
     saved = report.get("training_config", {})
-    comparable = ("seed", "d_model", "encoder_layers", "feedforward_dim", "smoke")
+    comparable = (
+        "seed",
+        "d_model",
+        "encoder_layers",
+        "feedforward_dim",
+        "smoke",
+        "category_balanced_sampling",
+    )
+    # Reports created before category-balanced sampling existed do not contain
+    # the flag.  Its historical behaviour is exactly ``False``, so keep those
+    # completed runs reusable for decoder-only re-evaluation.
+    saved.setdefault("category_balanced_sampling", False)
     if any(saved.get(name) != getattr(requested, name) for name in comparable):
         raise ValueError(f"completed Structured JSC run has incompatible config: {output}")
     return report
@@ -501,6 +513,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--encoder-layers", type=int, default=2)
     parser.add_argument("--feedforward-dim", type=int, default=192)
     parser.add_argument("--no-amp", action="store_true")
+    parser.add_argument("--category-balanced-sampling", action="store_true")
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--report", type=Path, default=Path("reports/jsc_structured.json"))
     parser.add_argument(

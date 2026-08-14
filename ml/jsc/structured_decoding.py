@@ -9,13 +9,109 @@ from core.russian_numbers import normalize_russian_numbers
 from modules.command_router import RoutedAction, route_explicit_command, split_compound_command
 from tools._applications import resolve_application
 
-from .jal import DialogueAct, JALPlan, ToolCall, ToolSchemaRegistry
+from .jal import DialogueAct, JALPlan, MissingSlot, ToolCall, ToolSchemaRegistry
 
 
 _SLOT_ALIASES = {
     "set_reminder": {"reminder_text": "message"},
 }
 _NON_EXECUTING_ROUTES = {"negated_command", "unsupported_command"}
+_GENERIC_APPLICATION = r"(?:приложени\w*|программ\w*)"
+_GENERIC_WINDOW = r"(?:окн\w*|приложени\w*|программ\w*)"
+
+
+def infer_explicit_clarification(
+    utterance: str,
+    registry: ToolSchemaRegistry,
+) -> JALPlan | None:
+    """Build a typed pending plan for deterministic incomplete commands.
+
+    This runs before the ordinary explicit router. Generic nouns such as
+    ``приложение`` are missing slots, never literal application/window names.
+    Reminder requests with only one half present are handled the same way.
+    """
+    normalized = normalize_russian_numbers(utterance.casefold().replace("ё", "е"))
+    normalized = normalized.strip(" ,.!?:;-")
+    open_patterns = (
+        rf"^(?:открой|открывай|запусти|запускай|включи)\s+(?:нужн\w*\s+)?{_GENERIC_APPLICATION}$",
+        rf"^(?:мне\s+)?(?:нужно|надо)\s+(?:открыть|запустить)\s+(?:одно\s+|нужн\w*\s+)?{_GENERIC_APPLICATION}$",
+    )
+    close_patterns = (
+        rf"^(?:закрой|закрывай|заверши|убери)\s+(?:одно\s+|нужн\w*\s+)?{_GENERIC_WINDOW}$",
+        rf"^(?:мне\s+)?(?:нужно|надо)\s+(?:закрыть|завершить)\s+(?:одно\s+|нужн\w*\s+)?{_GENERIC_WINDOW}$",
+    )
+    if any(re.fullmatch(pattern, normalized) for pattern in open_patterns):
+        return _validated_ask(
+            registry,
+            ToolCall("open_application"),
+            "application",
+            "missing_application",
+        )
+    if any(re.fullmatch(pattern, normalized) for pattern in close_patterns):
+        return _validated_ask(
+            registry,
+            ToolCall("window_control", {"action": "close"}),
+            "window",
+            "missing_window",
+        )
+    if re.fullmatch(r"(?:отмени|удали)\s+напоминани\w*", normalized):
+        return _validated_ask(
+            registry,
+            ToolCall("cancel_reminder"),
+            "reminder_id",
+            "missing_reminder_id",
+        )
+
+    action = route_explicit_command(normalized)
+    if action is not None and action.intent == "set_reminder":
+        arguments = _arguments_from_route("set_reminder", action, registry)
+        has_message = bool(str(arguments.get("message", "")).strip())
+        has_time = any(name in arguments for name in ("minutes", "due_at", "clock_time"))
+        if has_message and not has_time:
+            return _validated_ask(
+                registry,
+                ToolCall("set_reminder", arguments),
+                "minutes",
+                "missing_time",
+            )
+        if has_time and not has_message:
+            return _validated_ask(
+                registry,
+                ToolCall("set_reminder", arguments),
+                "message",
+                "missing_reminder_text",
+            )
+
+    conversational = re.fullmatch(
+        r"(?:мне\s+(?:нужно|надо)\s+не\s+забыть|не\s+дай\s+мне\s+забыть)\s+(.+)",
+        normalized,
+    )
+    if conversational:
+        message = conversational.group(1).strip(" ,.!?:;-")
+        if message:
+            return _validated_ask(
+                registry,
+                ToolCall("set_reminder", {"message": message}),
+                "minutes",
+                "missing_time",
+            )
+    return None
+
+
+def _validated_ask(
+    registry: ToolSchemaRegistry,
+    call: ToolCall,
+    missing_name: str,
+    reason: str,
+) -> JALPlan:
+    plan = JALPlan(
+        DialogueAct.ASK,
+        steps=(call,),
+        missing=(MissingSlot(0, missing_name),),
+        reason=reason,
+    )
+    registry.validate(plan)
+    return plan
 
 
 def assemble_verified_explicit_execution(
@@ -24,6 +120,33 @@ def assemble_verified_explicit_execution(
 ) -> JALPlan | None:
     """Build a plan only when deterministic routing covers the entire command."""
     normalized = normalize_russian_numbers(utterance.casefold().replace("ё", "е"))
+    # Some single commands contain an internal comma before a pronoun
+    # ("мне нужен Paint, открой его"). Route the complete utterance first so
+    # the antecedent is not destroyed by compound splitting.
+    direct = (
+        route_explicit_command(normalized)
+        if re.search(r"(?:открой|запусти|закрой|заверши)\s+(?:его|ее|её)$", normalized)
+        else None
+    )
+    if direct is not None and direct.intent in registry.tool_names:
+        try:
+            direct_plan = JALPlan(
+                DialogueAct.EXECUTE,
+                steps=(
+                    ToolCall(
+                        direct.intent,
+                        _coerce_arguments(
+                            direct.intent,
+                            _arguments_from_route(direct.intent, direct, registry),
+                        ),
+                    ),
+                ),
+            )
+            registry.validate(direct_plan)
+        except (TypeError, ValueError):
+            pass
+        else:
+            return direct_plan
     parts = _meaningful_parts(split_compound_command(normalized))
     if not parts:
         return None
@@ -40,6 +163,8 @@ def assemble_verified_explicit_execution(
 def has_explicit_execution_blocker(utterance: str) -> bool:
     """Return true when deterministic grammar says execution is forbidden."""
     normalized = normalize_russian_numbers(utterance.casefold().replace("ё", "е"))
+    if re.search(r"\b(?:все\s+|системн\w*\s+)?процесс\w*\b", normalized):
+        return True
     for part in _meaningful_parts(split_compound_command(normalized)):
         action = route_explicit_command(part)
         if action is not None and action.intent in _NON_EXECUTING_ROUTES:
@@ -108,10 +233,7 @@ def assemble_structured_execution(
             # the historical fail-closed requirement by default.
             has_evidence = has_evidence or (
                 allow_neural_evidence
-                and (
-                    bool(arguments)
-                    or _has_zero_argument_lexical_evidence(tool, normalized)
-                )
+                and _has_tool_lexical_evidence(tool, normalized)
             )
         if index < len(raw_steps) and raw_steps[index].tool == tool:
             has_evidence = True
@@ -142,7 +264,23 @@ def _meaningful_parts(parts: Sequence[str]) -> list[str]:
         "джарвис",
         "пожалуйста",
     }
-    return [part.strip(" ,") for part in parts if part.strip(" ,").casefold() not in ignored]
+    wrappers = re.compile(
+        r"^(?:(?:джарвис|будь\s+добр|пожалуйста|сначала)\s*[,;:]?\s*|"
+        r"(?:выполни\s+по\s+порядку|мне\s+нужно\s+следующее|одной\s+командой|"
+        r"сделай\s+все\s+по\s+списку|последовательно|выполни\s+цепочку|"
+        r"действуй\s+последовательно)\s*:\s*)",
+        flags=re.IGNORECASE,
+    )
+    result: list[str] = []
+    for raw in parts:
+        part = raw.strip(" ,")
+        previous = None
+        while part and part != previous:
+            previous = part
+            part = wrappers.sub("", part).strip(" ,")
+        if part and part.casefold() not in ignored:
+            result.append(part)
+    return result
 
 
 def _is_ordered_subsequence(observed: Sequence[str], expected: Sequence[str]) -> bool:
@@ -199,5 +337,24 @@ def _has_zero_argument_lexical_evidence(tool: str, utterance: str) -> bool:
         "list_applications": r"\b(?:приложени\w*|программ\w*)\b",
         "list_reminders": r"\bнапоминани\w*\b",
     }
+    pattern = patterns.get(tool)
+    return pattern is not None and re.search(pattern, utterance) is not None
+
+
+def _has_tool_lexical_evidence(tool: str, utterance: str) -> bool:
+    """Conservative independent grounding for neural-only tool choices."""
+    patterns = {
+        "open_application": r"\b(?:откро\w*|запуст\w*|включ\w*)\b",
+        "window_control": r"\b(?:окн\w*|сверн\w*|разверн\w*|восстанов\w*|переключ\w*)\b",
+        "browser_control": r"\b(?:браузер\w*|вкладк\w*|найд\w*|поищ\w*|загугл\w*)\b",
+        "system_control": r"\b(?:громк\w*|тиш\w*|звук\w*|медиа\w*)\b",
+        "file_control": r"\b(?:файл\w*|папк\w*|документ\w*|корзин\w*|удал\w*)\b",
+        "workspace_control": r"\b(?:проект\w*|рабоч\w*|код\w*)\b",
+        "gesture_mode": r"\bжест\w*\b",
+        "set_reminder": r"\b(?:напомн\w*|напоминани\w*|не\s+забыть)\b",
+        "cancel_reminder": r"\b(?:отмен\w*|удал\w*)\s+напоминани\w*\b",
+    }
+    if _has_zero_argument_lexical_evidence(tool, utterance):
+        return True
     pattern = patterns.get(tool)
     return pattern is not None and re.search(pattern, utterance) is not None

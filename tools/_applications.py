@@ -103,6 +103,9 @@ _DISCOVERED_APPLICATION_GROUPS: dict[str, dict[str, tuple[str, ...]]] = {
             "висуал студио код",
             "вижу студио код",
             "в скот",
+            "вэ скот",
+            "вс кот",
+            "вскод",
             "ваэс код",
             "вэс код",
             "код",
@@ -110,7 +113,7 @@ _DISCOVERED_APPLICATION_GROUPS: dict[str, dict[str, tuple[str, ...]]] = {
     },
     "telegram": {
         "windows_names": ("telegram", "telegram desktop"),
-        "aliases": ("telegram", "телеграм", "телеграмм", "телега"),
+        "aliases": ("telegram", "телеграм", "телеграмм", "телега", "телегу"),
     },
 }
 

@@ -52,11 +52,6 @@ def _format_output(*, stt: dict[str, object] | None, nlu: dict[str, object], nlu
 
 
 def _run_microphone(nlu: ShadowNLU, *, device: int | str | None, timeout: float) -> None:
-    try:
-        import sounddevice as sd
-    except ImportError as exc:
-        raise SystemExit("sounddevice is missing from venv; install project requirements") from exc
-
     print("Загрузка и прогрев Parakeet на GPU. Это происходит один раз...")
     with PersistentParakeetDecoder(
         repository_root=REPOSITORY_ROOT, timeout_seconds=timeout
@@ -75,6 +70,15 @@ def _run_microphone(nlu: ShadowNLU, *, device: int | str | None, timeout: float)
                 return
             if choice in {"q", "quit", "exit", "й"}:
                 break
+            # Do not require or initialise PortAudio until the user actually
+            # starts a capture. Closed/non-interactive stdin must exit cleanly
+            # in diagnostics and environment-isolated tests.
+            try:
+                import sounddevice as sd
+            except ImportError as exc:
+                raise SystemExit(
+                    "sounddevice is missing from venv; install project requirements"
+                ) from exc
             chunks: list[bytes] = []
 
             def callback(indata, _frames, _time_info, status) -> None:

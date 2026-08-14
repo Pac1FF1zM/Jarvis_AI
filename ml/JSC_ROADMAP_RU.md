@@ -1,68 +1,164 @@
-# Jarvis Semantic Core — рабочий roadmap
+# Jarvis Semantic Core — актуальный roadmap
 
-Цель: заменить фиксированный intent-классификатор собственной нейросетевой
-системой, которая понимает контекст, строит исполняемый план, обнаруживает
-ошибки и выбирает `execute / ask / confirm / cancel / reject`. Все веса,
-токенизатор и обучающие генераторы принадлежат проекту; Hugging Face, готовые
-weights/embeddings и внешние AI API не используются.
+Актуально на 14 августа 2026. Полный runtime-контекст находится в
+[`docs/PROJECT_STATUS_2026-08-14_RU.md`](../docs/PROJECT_STATUS_2026-08-14_RU.md).
 
-## Этапы
+## Цель
 
-1. **[готово] JAL v1 и контракт инструментов** — формальный язык планов, канонический
-   codec, типизированная проверка по реальным tool schemas и тесты.
-2. **[готово] Фабрика данных v5** — воспроизводимые одиночные, составные и многотуровые
-   сценарии; ASR-искажения, hard negatives, OOD, цифры и русские числительные;
-   независимые family splits.
-3. **[готово] Честные baselines** — CharCNN, BiGRU и
-   tiny Transformer encoder с общим JAL decoder; одинаковые данные, три seed,
-   checkpoint/resume и единый safety-oriented evaluation protocol.
-4. **[в работе] JSC semantic parser** — собственный Transformer encoder-decoder,
-   copy-механизм, числовые признаки, отдельные головы типа действия, числа
-   шагов, упорядоченного списка инструментов, категориальных параметров и
-   свободных character spans; schema-conditioned сборщик и fail-closed выдача
-   JAL. Следующий шаг — улучшение обобщения act/tool/span heads на новых
-   семействах формулировок и независимый verifier.
-5. **Диалог и исправления** — neural dialogue-state tracker, пропущенные slots,
-   отрицания, замены, подтверждения и составные команды.
-6. **Надёжность** — OOD head, conformal clarification, selective risk,
-   независимый plan verifier и запрет уверенного исполнения при disagreement.
-7. **Персонализация** — явный feedback, user adapters и replay без
-   catastrophic forgetting; никакого скрытого обучения на личных данных.
-8. **Финальный sweep и runtime** — multi-seed/ablation, Pareto accuracy-latency,
-   frozen voice holdout, approved checkpoint и интеграция с orchestrator.
+Построить собственный локальный semantic core, который из текста, истории и
+типизированного dialogue state формирует проверяемый JAL-план и выбирает
+`execute / ask / confirm / cancel / reject`. Все веса, tokenizer, data factory
+и decoder принадлежат проекту; готовые language-model weights и внешние AI API
+не используются.
 
-## Главные гейты
+JSC должен заменить production NLU только после независимых voice/safety gates.
+До этого NLU остаётся execution routing, а JSC работает stateful shadow.
 
-- exact JAL program accuracy ≥ 0.92 на реальных in-domain командах;
-- успешность многотурового сценария ≥ 0.95;
-- OOD recall ≥ 0.97 и ложный запуск инструмента ≤ 0.1%;
-- selective precision автоматически исполненных планов ≥ 0.99;
-- 100% выданных планов проходят grammar/schema validation;
-- CPU p95 ≤ 50 мс и отсутствие регрессии старых навыков;
-- holdout не участвует в подборе параметров или эпохи.
+## Текущая архитектура
 
-Текущий этап отмечается в git и меняется только после тестов и измеримого
-выходного гейта. Baseline-протокол из 21 запуска выполнен на RTX 3050 6GB.
-Лучший validation-эксперимент этапа 4 на сбалансированном JSC v5 (Transformer,
-seed 17, execution threshold 0,90) использует categorical parameter head,
-character-span head, отдельный execution verifier и полную детерминированную
-грамматику только как второй сигнал при согласии verifier. Он дал 100%
-schema-valid планов, 0% ложных исполнений, 28,97% exact JAL, 37,59% argument
-sequence accuracy, 100% OOD recall и 77,50% точности значения для чисел
-словами. Это +4,14 п.п. exact JAL относительно v7. Переобучившийся вариант с
-новым semantic pooling отклонён; encoder и старые головы в выбранном v8
-остались заморожены.
+Structured JSC — компактный Transformer encoder с прямыми prediction heads:
 
-На один раз открытом после выбора v7 test было: 100% schema validity, 18,62%
-exact JAL, 27,24% argument accuracy, 76% OOD recall и 0,34% ложных исполнений.
-V8 подбирался только на validation и повторно на test не проверялся. Эти
-результаты всё ещё запрещают promotion исследовательского checkpoint
-`training_workspace/jsc_runs_v8/legacy_verifier_seed17/best.pt` в runtime.
-Контрольный BiGRU дал 18,62% exact JAL на validation. Ключевая
-четырёхшаговая фраза без пунктуации корректно собрана в
-`open_application → gesture_mode → set_reminder → window_control`, включая
-число «двадцать». До production-гейтов стабильная NLU не заменяется.
-Подробности:
-`ml/jsc/JAL_SPEC_RU.md`,
-`training_workspace/jsc_data/README_RU.md` и
-`training_workspace/JSC_BASELINES_RU.md`.
+- dialogue act;
+- число и порядок шагов;
+- segment boundaries и tool router;
+- categorical arguments и character spans;
+- missing slots и reason;
+- независимый execution verifier.
+
+Autoregressive decoder и генерация JSON отсутствуют. Heads собираются в JAL v1
+через schema validator, semantic grounding и fail-closed structured decoder.
+Runtime shadow передаёт history и pending JAL между ходами, но не публикует
+исполняемые события.
+
+## Выполненные этапы
+
+1. **[готово] JAL v1 и tool contracts.** Канонический codec, typed schema,
+   grammar validation, ordered plans и safety-oriented metrics.
+2. **[готово] Reproducible data factory.** Independent family splits, single,
+   compound, ASR, hard-negative, OOD, correction и multi-turn scenarios.
+3. **[готово] Baselines.** CharCNN, BiGRU, tiny Transformer и direct structured
+   candidates с одинаковым evaluation protocol.
+4. **[готово] Structured heads без JSON.** Segmented router, parameters/spans,
+   missing/reason/verifier heads, AMP-safe training и checkpoint/resume.
+5. **[готово для shadow] Dialogue foundation.** History, typed pending state,
+   generic clarification, reminder slot merge, state logging и reset policy.
+6. **[готово для shadow] Semantic safety layer.** Grounding каждого шага,
+   targetless-close blocker, non-execute draft isolation, negation/process
+   blockers и canonical application allowlist.
+7. **[готово] Data-first v8 cycle.** 4 355 train-примеров,
+   category-balanced sampling, seed comparison и migration gates.
+8. **[готово] Experimental production wiring.** Seed29 загружается из
+   `config.yaml` в `jsc_shadow` с validation-selected thresholds.
+
+## Выбранный checkpoint
+
+- Release path: `models/jsc/structured_v8_seed29.pt`.
+- SHA-256: `968ff79119fb7fc46b0023c813025fc28a9f755451807b8cb49726441cadb5ec`.
+- Parameters: 534 942.
+- Topology: `d_model=96`, 2 encoder layers, FFN 192.
+- Best epoch: 5.
+- Thresholds: execution 0,65; verifier 0,90; parameter 0,35; span 0,25;
+  missing 0,35.
+
+## Последний benchmark
+
+Migration development, 400 примеров:
+
+| Метрика | Результат |
+|---|---:|
+| Exact JAL | 87,75% |
+| Act | 94,00% |
+| Tool sequence | 95,75% |
+| Arguments | 93,75% |
+| Single | 90,00% |
+| 2–3 actions | 93,02% |
+| 4–5 actions | 100,00% |
+| Multi-turn | 100,00% |
+| ASR noise | 100,00% |
+| Hard negative | 83,33% |
+| Correction | 46,67% |
+| OOD exact | 33,33% |
+| Schema valid | 100,00% |
+| False execution | 0,00% |
+| Opposite action | 0,00% |
+
+CPU production-wrapper smoke: warm примерно 6–129 мс, первый cold request
+около 0,5–0,8 с.
+
+Migration development не является новым frozen holdout: результаты
+использовались при анализе decoder/data. Цифра 87,75% разрешает shadow wiring,
+но не доказывает качество на любой пользовательской команде.
+
+## Активный этап — correction, OOD и independent voice holdout
+
+### P0. Correction transaction
+
+- хранить target предыдущего действия и его execution outcome;
+- различать новую команду, replacement и отмену;
+- определить compensation policy для уже открытого/закрытого приложения;
+- журналировать исходный plan, correction plan, compensation и final state;
+- довести correction exact с 46,67% до promotion gate.
+
+### P0. OOD и selective risk
+
+- отделить unsupported tool, свободный диалог и недостаток данных;
+- обучить/калибровать OOD signal без ослабления execution/verifier thresholds;
+- измерять selective precision на auto-execute subset;
+- сохранить false execution 0% и opposite action 0%.
+
+### P0. Frozen voice holdout
+
+- записать новый набор после фиксации data/decoder/thresholds;
+- не использовать его в обучении, alias rules и debugging;
+- включить реальные одиночные, 2–5 actions, multi-turn, corrections, rejects,
+  OOD, ASR noise и long-tail applications;
+- оценивать semantic plan и фактический end-to-end outcome отдельно;
+- хранить private audio только по явному consent и вне Git.
+
+### P1. Runtime telemetry
+
+- накопить новый `logs/jsc_shadow.jsonl` именно с seed29;
+- измерить CPU p50/p95, cold start, memory и long-session drift;
+- сравнить production NLU/JSC на одинаковых traces;
+- добавить offline replay без side effects;
+- зафиксировать disagreement classes и приоритет следующего data cycle.
+
+## Promotion gates
+
+Минимальные gates перед design review execution canary:
+
+- новый frozen voice Exact JAL >= 0,90;
+- multi-turn end-to-end >= 0,95;
+- correction >= 0,90;
+- OOD recall >= 0,97;
+- auto-execute precision >= 0,99;
+- false execution <= 0,1%, целевое значение 0%;
+- opposite action = 0%;
+- schema-valid = 100%;
+- CPU warm p95 <= 100 мс на целевой машине;
+- ноль draft/targetless/destructive hallucinations;
+- отсутствие регрессии production tool families.
+
+Execution canary сначала должен быть no-side-effect replay. Возможное реальное
+выполнение проектируется отдельным решением после review. Удаление NLU — ещё
+более поздний этап и не следует автоматически из успешного canary.
+
+## Дальнейшие этапы
+
+1. **Reliability.** Independent plan verifier, calibrated abstention и
+   disagreement policy.
+2. **Tool-schema scaling.** Новые tools только вместе с data, grounding,
+   regression и holdout.
+3. **Personalization.** Только явный feedback/opt-in adapters; никакого скрытого
+   обучения на личных логах.
+4. **Final multi-seed sweep.** Accuracy/latency Pareto после стабилизации
+   correction/OOD architecture, а не до неё.
+5. **Promotion.** Shadow -> offline canary -> reviewed restricted canary ->
+   production decision -> отдельное решение об удалении NLU.
+
+## Решение на текущую дату
+
+Structured JSC v8 seed29 — выбранный experimental production shadow checkpoint.
+Он достиг пользовательского промежуточного диапазона 85–90% на migration
+development и безопасен в текущем shadow-контуре. Production promotion пока
+запрещён из-за correction/OOD и отсутствия нового frozen voice holdout.

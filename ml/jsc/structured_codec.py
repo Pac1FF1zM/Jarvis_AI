@@ -7,7 +7,10 @@ from typing import Mapping, Sequence
 
 import torch
 
-from core.russian_numbers import extract_russian_cardinals
+import re
+
+from core.russian_numbers import extract_russian_cardinals, normalize_russian_numbers
+from modules.command_router import route_explicit_command
 from tools._applications import resolve_application
 
 from .jal import DialogueAct, JALPlan, MissingSlot, ToolCall, ToolSchemaRegistry, dumps
@@ -17,6 +20,7 @@ from .structured_decoding import (
     assemble_structured_execution,
     assemble_verified_explicit_execution,
     has_explicit_execution_blocker,
+    infer_explicit_clarification,
 )
 from .structured_labels import decode_parameter_logits
 
@@ -118,6 +122,11 @@ def decode_structured_jal(
             predictions.append(dumps(completed))
             decisions["state_completed"] += 1
             continue
+        clarification = infer_explicit_clarification(utterances[index], registry)
+        if clarification is not None:
+            predictions.append(dumps(clarification))
+            decisions["explicit_ask"] += 1
+            continue
         explicit = assemble_verified_explicit_execution(utterances[index], registry)
         if explicit is not None:
             predictions.append(dumps(explicit))
@@ -217,6 +226,8 @@ def decode_structured_jal(
                 missing_slots = _infer_required_missing(calls, registry)
             plan = JALPlan(act, steps=calls, missing=missing_slots, reason=reason)
             registry.validate(plan)
+            if not _non_execute_plan_is_grounded(utterances[index], plan):
+                raise ValueError("non-execute plan is not grounded in the utterance")
         except (TypeError, ValueError):
             predictions.append(dumps(JALPlan(DialogueAct.REJECT, reason="unsupported_tool")))
             decisions["non_execute_schema_rejected"] += 1
@@ -287,23 +298,85 @@ def _complete_pending_state(
     if missing.step != 0:
         return None
     value: str | int | None = None
+    replacement_arguments: dict[str, str | int] | None = None
+    normalized = normalize_russian_numbers(utterance.casefold().replace("ё", "е"))
+    normalized = normalized.strip(" ,.!?:;-")
     if missing.name in {"application", "window"}:
         application = resolve_application(utterance)
         if application is not None:
             value = application.name
-    elif missing.name in {"minutes", "reminder_id", "steps"}:
-        numbers = extract_russian_cardinals(utterance)
+    elif missing.name == "minutes" and state.steps[0].tool == "set_reminder":
+        relative = re.search(r"(?:через\s+|спустя\s+)?(\d+)\s+минут", normalized)
+        clock = re.search(
+            r"(?:(сегодня|завтра)\s+)?(?:в\s+)?(\d{1,2})(?:[:.]([0-5]\d))?\s*(утра|вечера)?",
+            normalized,
+        )
+        if relative:
+            replacement_arguments = {"minutes": int(relative.group(1))}
+        elif clock:
+            hour = int(clock.group(2))
+            if clock.group(4) == "вечера" and hour < 12:
+                hour += 12
+            replacement_arguments = {
+                "clock_time": f"{hour:02d}:{int(clock.group(3) or 0):02d}"
+            }
+            if clock.group(1):
+                replacement_arguments["day"] = clock.group(1)
+        else:
+            numbers = extract_russian_cardinals(normalized)
+            day = next(
+                (candidate for candidate in ("сегодня", "завтра") if candidate in normalized),
+                None,
+            )
+            if day is not None and len(numbers) == 1 and 0 <= numbers[0] <= 23:
+                replacement_arguments = {
+                    "clock_time": f"{numbers[0]:02d}:00",
+                    "day": day,
+                }
+    elif missing.name in {"reminder_id", "steps"}:
+        numbers = extract_russian_cardinals(normalized)
         if len(numbers) == 1:
             value = numbers[0]
-    if value is None:
+    elif missing.name == "message" and state.steps[0].tool == "set_reminder":
+        routed = route_explicit_command(normalized)
+        if routed is None or routed.intent == "set_reminder":
+            message = re.sub(
+                r"^(?:напомни(?:\s+мне)?|о\s+том\s+что|что|про)\s+",
+                "",
+                normalized,
+            ).strip(" ,.!?:;-")
+            if message:
+                value = message
+    if value is None and replacement_arguments is None:
         return None
     call = state.steps[0]
+    arguments = dict(call.arguments)
+    if replacement_arguments is not None:
+        arguments.update(replacement_arguments)
+    else:
+        arguments[missing.name] = value
     try:
         plan = JALPlan(
             DialogueAct.EXECUTE,
-            steps=(ToolCall(call.tool, {**call.arguments, missing.name: value}),),
+            steps=(ToolCall(call.tool, arguments),),
         )
         registry.validate(plan)
     except (TypeError, ValueError):
         return None
     return plan
+
+
+def _non_execute_plan_is_grounded(utterance: str, plan: JALPlan) -> bool:
+    """Reject latent destructive or unrelated drafts inside ask/confirm."""
+    normalized = utterance.casefold().replace("ё", "е")
+    for step in plan.steps:
+        if step.tool == "file_control" and step.arguments.get("action") == "delete":
+            if not re.search(r"\b(?:удал\w*|корзин\w*)\b", normalized):
+                return False
+        if step.tool == "window_control" and "жест" in normalized:
+            return False
+        if step.tool == "system_control" and not re.search(
+            r"\b(?:громк\w*|тиш\w*|звук\w*|медиа\w*|пауз\w*)\b", normalized
+        ):
+            return False
+    return True

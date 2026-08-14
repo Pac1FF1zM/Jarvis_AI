@@ -7,7 +7,9 @@ import pytest
 
 from core.event_bus import Event, EventBus
 from core.event_payloads import NLUResultPayload
+from ml.jsc.data import DialogueTurn
 from ml.jsc.inference import StructuredPrediction
+from ml.jsc.jal import DialogueAct, JALPlan, MissingSlot, ToolCall, dumps
 from modules.jsc_shadow import JSCShadowModule
 
 
@@ -26,10 +28,10 @@ async def test_shadow_records_comparison_without_publishing_execution(tmp_path):
     calls: list[str] = []
 
     class FakePredictor:
-        def predict(self, text):
+        def predict(self, text, **_kwargs):
             calls.append(text)
             return StructuredPrediction(
-                '{"act":"execute","steps":[]}',
+                dumps(JALPlan(DialogueAct.REJECT, reason="unsupported_tool")),
                 {"accepted": 1},
                 12.3456,
             )
@@ -98,7 +100,7 @@ async def test_shadow_prediction_failure_never_escapes_to_runtime(tmp_path):
     checkpoint.write_bytes(b"test checkpoint sentinel")
 
     class BrokenPredictor:
-        def predict(self, text):
+        def predict(self, text, **_kwargs):
             raise RuntimeError("broken experimental model")
 
     bus = EventBus()
@@ -117,3 +119,56 @@ async def test_shadow_prediction_failure_never_escapes_to_runtime(tmp_path):
     )
 
     assert not (tmp_path / "jsc_shadow.jsonl").exists()
+
+
+@pytest.mark.asyncio
+async def test_shadow_carries_typed_pending_state_into_follow_up(tmp_path):
+    checkpoint = tmp_path / "best.pt"
+    checkpoint.write_bytes(b"test checkpoint sentinel")
+    observed = []
+    pending = JALPlan(
+        DialogueAct.ASK,
+        steps=(ToolCall("window_control", {"action": "close"}),),
+        missing=(MissingSlot(0, "window"),),
+        reason="missing_window",
+    )
+
+    class FakePredictor:
+        def predict(self, text, *, history=(), state=None):
+            observed.append((text, history, state))
+            plan = pending if state is None else JALPlan(
+                DialogueAct.EXECUTE,
+                steps=(
+                    ToolCall(
+                        "window_control",
+                        {"action": "close", "window": "calculator"},
+                    ),
+                ),
+            )
+            return StructuredPrediction(dumps(plan), {"test": 1}, 1.0)
+
+    bus = EventBus()
+    module = JSCShadowModule(
+        _config(tmp_path, checkpoint),
+        predictor_factory=lambda *args, **kwargs: FakePredictor(),
+    )
+    await module.start(bus)
+    await module._on_nlu_result(
+        Event("nlu_result", NLUResultPayload(text="закрой приложение", intent="unknown"), trace_id="turn1")
+    )
+    await module._on_nlu_result(
+        Event("nlu_result", NLUResultPayload(text="калькулятор", intent="unknown"), trace_id="turn2")
+    )
+
+    assert observed[0][2] is None
+    assert observed[1][2] == pending
+    assert observed[1][1][-1] == DialogueTurn(
+        "jarvis", "Какое окно или приложение закрыть?"
+    )
+    records = [
+        json.loads(line)
+        for line in (tmp_path / "jsc_shadow.jsonl").read_text("utf-8").splitlines()
+    ]
+    assert records[0]["dialogue"]["state_after"] == dumps(pending)
+    assert records[1]["dialogue"]["state_before"] == dumps(pending)
+    assert records[1]["dialogue"]["state_after"] is None

@@ -6,6 +6,7 @@ test and evaluation_holdout are not inputs to this generator.
 from __future__ import annotations
 
 import hashlib
+import argparse
 import json
 import random
 import sys
@@ -372,6 +373,288 @@ def build_augmentations() -> list[JSCExample]:
             JALPlan(DialogueAct.CANCEL),
             f"cancel.variant_{index}",
         )
+
+    # Voice-derived v2 curriculum. These templates come from observed failure
+    # families, not from migration/test/holdout files. They deliberately teach
+    # the initial ASK turn as well as the slot-filling answer; the previous
+    # augmentation mostly contained only the second half of application
+    # clarifications, which made the offline multi-turn score misleading.
+    open_prompts = (
+        "открой приложение",
+        "открой нужное приложение",
+        "запусти программу",
+        "запусти нужную программу",
+        "мне нужно открыть приложение",
+        "надо запустить одну программу",
+    )
+    close_prompts = (
+        "закрой приложение",
+        "закрой нужное окно",
+        "заверши нужную программу",
+        "нужно закрыть одно окно",
+        "мне надо завершить приложение",
+        "убери программу с экрана",
+    )
+    for prompt_index, prompt in enumerate(open_prompts):
+        add(
+            "multi_turn",
+            prompt,
+            open_state,
+            f"voice.ask.open.prompt_{prompt_index}",
+        )
+    for prompt_index, prompt in enumerate(close_prompts):
+        add(
+            "multi_turn",
+            prompt,
+            close_state,
+            f"voice.ask.close.prompt_{prompt_index}",
+        )
+
+    app_surfaces = {
+        "calculator": ("калькулятор", "калькулятором"),
+        "notepad": ("блокнот", "блокнотом"),
+        "explorer": ("проводник", "проводником"),
+        "paint": ("пейнт", "paint"),
+        "discord": ("дискорд", "discord"),
+        "visual_studio_code": (
+            "вэскод",
+            "вс код",
+            "visual studio code",
+            "вижуал студио код",
+            "вест код",
+            "вес код",
+        ),
+        "telegram": ("телеграм", "telegram"),
+        "browser": ("браузер", "интернет браузер"),
+    }
+    answer_frames = ("{app}", "это {app}", "нужен {app}", "я имею в виду {app}")
+    for canonical, surfaces in app_surfaces.items():
+        for surface_index, surface in enumerate(surfaces):
+            for frame_index, frame in enumerate(answer_frames):
+                answer = frame.format(app=surface)
+                add(
+                    "multi_turn",
+                    answer,
+                    _execute(ToolCall("open_application", {"application": canonical})),
+                    f"voice.fill.open.{canonical}.surface_{surface_index}.frame_{frame_index}",
+                    history=(
+                        DialogueTurn("user", open_prompts[(surface_index + frame_index) % len(open_prompts)]),
+                        DialogueTurn("jarvis", "Какое приложение открыть?"),
+                    ),
+                    state=open_state,
+                )
+                add(
+                    "multi_turn",
+                    answer,
+                    _execute(
+                        ToolCall(
+                            "window_control",
+                            {"action": "close", "window": canonical},
+                        )
+                    ),
+                    f"voice.fill.close.{canonical}.surface_{surface_index}.frame_{frame_index}",
+                    history=(
+                        DialogueTurn("user", close_prompts[(surface_index + frame_index) % len(close_prompts)]),
+                        DialogueTurn("jarvis", "Какое окно или приложение закрыть?"),
+                    ),
+                    state=close_state,
+                )
+
+    reminder_messages = (
+        "проверить духовку",
+        "позвонить другу",
+        "ответить коллеге",
+        "размяться",
+        "проверить почту",
+        "выключить чайник",
+        "забрать посылку",
+        "принять лекарство",
+        "начать встречу",
+        "оплатить интернет",
+    )
+    reminder_frames = (
+        "напомни мне {message}",
+        "создай напоминание {message}",
+        "мне нужно не забыть {message}",
+        "не дай мне забыть {message}",
+        "поставь напоминание {message}",
+    )
+    time_answers = (
+        (5, "через пять минут"),
+        (10, "через десять минут"),
+        (20, "спустя двадцать минут"),
+        (25, "через двадцать пять минут"),
+        (40, "давай через сорок минут"),
+    )
+    for message_index, message in enumerate(reminder_messages):
+        pending = JALPlan(
+            DialogueAct.ASK,
+            steps=(ToolCall("set_reminder", {"message": message}),),
+            missing=(MissingSlot(0, "minutes"),),
+            reason="missing_time",
+        )
+        for frame_index, frame in enumerate(reminder_frames):
+            request = frame.format(message=message)
+            add(
+                "multi_turn",
+                request,
+                pending,
+                f"voice.ask.reminder.message_{message_index}.frame_{frame_index}",
+            )
+        for time_index, (minutes, answer) in enumerate(time_answers):
+            add(
+                "multi_turn",
+                answer,
+                _execute(
+                    ToolCall(
+                        "set_reminder",
+                        {"minutes": minutes, "message": message},
+                    )
+                ),
+                f"voice.fill.reminder.message_{message_index}.time_{time_index}",
+                history=(
+                    DialogueTurn("user", reminder_frames[message_index % len(reminder_frames)].format(message=message)),
+                    DialogueTurn("jarvis", "Когда вам напомнить?"),
+                ),
+                state=pending,
+            )
+
+    for time_index, (minutes, answer) in enumerate(time_answers):
+        missing_message = JALPlan(
+            DialogueAct.ASK,
+            steps=(ToolCall("set_reminder", {"minutes": minutes}),),
+            missing=(MissingSlot(0, "message"),),
+            reason="missing_reminder_text",
+        )
+        add(
+            "multi_turn",
+            f"{answer} напомни",
+            missing_message,
+            f"voice.ask.reminder_text.time_{time_index}",
+        )
+        for message_index, message in enumerate(reminder_messages):
+            add(
+                "multi_turn",
+                message,
+                _execute(
+                    ToolCall(
+                        "set_reminder",
+                        {"minutes": minutes, "message": message},
+                    )
+                ),
+                f"voice.fill.reminder_text.time_{time_index}.message_{message_index}",
+                history=(
+                    DialogueTurn("user", f"{answer} напомни"),
+                    DialogueTurn("jarvis", "О чём вам напомнить?"),
+                ),
+                state=missing_message,
+            )
+
+    for previous, previous_surfaces in app_surfaces.items():
+        previous_surface = previous_surfaces[0]
+        previous_plan = _execute(
+            ToolCall("open_application", {"application": previous})
+        )
+        for replacement, replacement_surfaces in app_surfaces.items():
+            if replacement == previous:
+                continue
+            replacement_surface = replacement_surfaces[0]
+            for frame_index, frame in enumerate(
+                (
+                    "нет, я имел в виду {app}",
+                    "поправка, нужен {app}",
+                    "не то, открой {app}",
+                )
+            ):
+                add(
+                    "correction",
+                    frame.format(app=replacement_surface),
+                    _execute(
+                        ToolCall(
+                            "open_application",
+                            {"application": replacement},
+                        )
+                    ),
+                    f"voice.correction.{previous}.to_{replacement}.frame_{frame_index}",
+                    history=(
+                        DialogueTurn("user", f"открой {previous_surface}"),
+                        DialogueTurn("jarvis", f"Открываю {previous_surface}."),
+                    ),
+                    state=previous_plan,
+                )
+
+    gesture_surfaces = {
+        "enable": ("включи жесты", "активируй жестовый режим"),
+        "status": ("проверь жесты", "покажи состояние жестов"),
+        "pause": ("поставь жесты на паузу", "временно останови жесты"),
+        "resume": ("возобнови жесты", "продолжи распознавание жестов"),
+        "disable": ("отключи жесты", "выключи жестовый режим"),
+    }
+    gesture_order = ("enable", "status", "pause", "resume", "disable")
+    for variant in range(32):
+        count = 2 + variant % 4
+        actions = gesture_order[:count]
+        phrases = [
+            gesture_surfaces[action][(variant // (index + 1)) % 2]
+            for index, action in enumerate(actions)
+        ]
+        text = ", ".join(phrases[:-1]) + " и " + phrases[-1]
+        add(
+            "compound",
+            text,
+            _execute(
+                *(ToolCall("gesture_mode", {"action": action}) for action in actions)
+            ),
+            f"voice.gesture_sequence.steps_{count}.variant_{variant}",
+        )
+
+    voice_bank = (
+        ("открой калькулятор", ToolCall("open_application", {"application": "calculator"})),
+        ("открой пейнт", ToolCall("open_application", {"application": "paint"})),
+        ("открой блокнот", ToolCall("open_application", {"application": "notepad"})),
+        ("открой проводник", ToolCall("open_application", {"application": "explorer"})),
+        ("скажи время", ToolCall("get_current_time")),
+        ("покажи приложения", ToolCall("list_applications")),
+        ("покажи напоминания", ToolCall("list_reminders")),
+        ("сделай громче", ToolCall("system_control", {"action": "volume_up"})),
+        ("сделай тише", ToolCall("system_control", {"action": "volume_down"})),
+        ("включи жесты", ToolCall("gesture_mode", {"action": "enable"})),
+        ("отключи жесты", ToolCall("gesture_mode", {"action": "disable"})),
+        ("создай вкладку", ToolCall("browser_control", {"action": "new_tab"})),
+    )
+    for step_count in range(2, 6):
+        for variant in range(320):
+            selected = rng.sample(voice_bank, step_count)
+            phrases = [text for text, _call in selected]
+            connector = (", ", ", затем ", " и потом ")[variant % 3]
+            text = connector.join(phrases[:-1]) + " и " + phrases[-1]
+            add(
+                "compound",
+                text,
+                _execute(*(call for _text, call in selected)),
+                f"voice.compound.steps_{step_count}.variant_{variant}",
+            )
+
+    for index, text in enumerate(
+        (
+            "проверить духовку",
+            "ответить коллеге",
+            "создай напоминание ответить коллеге",
+            "мне нужно не забыть позвонить другу",
+            "отмени напоминание",
+            "номер тридцать один",
+        )
+    ):
+        # These contrastive surfaces were involved in false global-cancel
+        # predictions. Their true targets are already represented above; the
+        # standalone fragments must never teach an unrelated destructive tool.
+        if text in {"проверить духовку", "ответить коллеге", "номер тридцать один"}:
+            add(
+                "hard_negative",
+                text,
+                JALPlan(DialogueAct.DIALOGUE, reason="general_chat"),
+                f"voice.cancel_negative.fragment_{index}",
+            )
     return rows
 
 
@@ -461,7 +744,11 @@ def build(source: Path = SOURCE, output: Path = OUTPUT) -> dict[str, Any]:
 
 
 def main() -> int:
-    report = build()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", type=Path, default=SOURCE)
+    parser.add_argument("--output", type=Path, default=OUTPUT)
+    args = parser.parse_args()
+    report = build(args.source, args.output)
     print(json.dumps(report["structured_augmentation"], ensure_ascii=False, indent=2))
     return 0
 

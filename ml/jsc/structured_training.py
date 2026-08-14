@@ -14,7 +14,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 from .data import JSCExample, load_jsc_jsonl
 from .jal import DialogueAct, JALPlan, ToolSchemaRegistry, dumps
@@ -63,6 +63,7 @@ class StructuredTrainingConfig:
     resume: str | None = None
     smoke: bool = False
     segmented_router: bool = True
+    category_balanced_sampling: bool = False
 
     def __post_init__(self) -> None:
         if self.device not in {"auto", "cpu", "cuda"}:
@@ -211,7 +212,7 @@ def train_structured(config: StructuredTrainingConfig) -> dict[str, Any]:
         stale = state["stale"]
         history = list(state["history"])
     started = time.perf_counter()
-    class_weights = _class_weights(context, device)
+    class_weights = _class_weights(context, device, config)
     for epoch in range(start_epoch, 1 if config.smoke else config.epochs):
         train_loader = _train_loader(
             train_dataset, context.train, collate, config, epoch
@@ -783,7 +784,11 @@ def _load_context(config: StructuredTrainingConfig) -> _Context:
     )
 
 
-def _class_weights(context: _Context, device: torch.device) -> dict[str, torch.Tensor]:
+def _class_weights(
+    context: _Context,
+    device: torch.device,
+    config: StructuredTrainingConfig,
+) -> dict[str, torch.Tensor]:
     def weights(values: Sequence[int], size: int) -> torch.Tensor:
         counts = Counter(values)
         result = torch.ones(size, dtype=torch.float32, device=device)
@@ -803,7 +808,7 @@ def _class_weights(context: _Context, device: torch.device) -> dict[str, torch.T
     reason_to_id = {name: index for index, name in enumerate(context.reason_labels)}
     reason_values = [reason_to_id[example.target.reason or "<none>"] for example in context.train]
     execution = [int(example.target.act == DialogueAct.EXECUTE) for example in context.train]
-    return {
+    result = {
         # Apply imbalance correction once, at the loss.  Combining this with
         # replacement sampling previously distorted the real command prior.
         "act": weights(act_values, len(ACT_LABELS)),
@@ -818,14 +823,40 @@ def _class_weights(context: _Context, device: torch.device) -> dict[str, torch.T
             (len(context.missing_labels),), 8.0, device=device
         ),
     }
+    if config.category_balanced_sampling:
+        # Category sampling already corrects the dominant execute prior. Do
+        # not apply a second act/reason/verifier correction on top of it.
+        result["act"] = torch.ones_like(result["act"])
+        result["reason"] = torch.ones_like(result["reason"])
+        result["verifier"] = torch.ones_like(result["verifier"])
+    return result
 
 
 def _train_loader(dataset, examples, collate, config, epoch):
+    generator = torch.Generator().manual_seed(config.seed + epoch * 10_007)
+    if config.category_balanced_sampling:
+        category_counts = Counter(example.category for example in examples)
+        sample_weights = torch.tensor(
+            [1.0 / category_counts[example.category] for example in examples],
+            dtype=torch.double,
+        )
+        sampler = WeightedRandomSampler(
+            sample_weights,
+            num_samples=len(examples),
+            replacement=True,
+            generator=generator,
+        )
+        return DataLoader(
+            dataset,
+            batch_size=4 if config.smoke else config.batch_size,
+            sampler=sampler,
+            collate_fn=collate,
+        )
     return DataLoader(
         dataset,
         batch_size=4 if config.smoke else config.batch_size,
         shuffle=True,
-        generator=torch.Generator().manual_seed(config.seed + epoch * 10_007),
+        generator=generator,
         collate_fn=collate,
     )
 

@@ -5,6 +5,7 @@ import asyncio
 import json
 from pathlib import Path
 import threading
+import pytest
 
 from core.config_loader import ModuleConfig
 from core.event_bus import Event, EventBus
@@ -102,6 +103,57 @@ def test_application_name_is_extracted_on_unseen_phrase_family():
     result = predictor.predict("открой мне калькулятор")
     assert result.intent == "open_application"
     assert result.slots == {"application": "калькулятор"}
+
+
+@pytest.mark.parametrize(
+    ("text", "intent", "slots"),
+    (
+        ("открой мне калькулятор сейчас", "open_application", {"application": "calculator"}),
+        ("покажи мне пейнт", "open_application", {"application": "paint"}),
+        ("подготовь блокнот к работе", "open_application", {"application": "notepad"}),
+        ("мне нужен проводник, открой его", "open_application", {"application": "explorer"}),
+        ("закрой приложение калькулятор", "window_control", {"action": "close", "window": "calculator"}),
+        ("мне больше не нужен дискорд, закрой его", "window_control", {"action": "close", "window": "discord"}),
+    ),
+)
+def test_explicit_router_extracts_application_from_natural_frames(text, intent, slots):
+    assert route_explicit_command(text) == RoutedAction(intent, slots)
+
+
+@pytest.mark.parametrize(
+    ("text", "intent", "slots"),
+    (
+        ("отпрой калькулятор", "open_application", {"application": "calculator"}),
+        (
+            "открой вскод джарвис",
+            "open_application",
+            {"application": "visual_studio_code"},
+        ),
+        (
+            "закрой вэ скот джарвис",
+            "window_control",
+            {"action": "close", "window": "visual_studio_code"},
+        ),
+        (
+            "закрой вс, кот джарвис",
+            "window_control",
+            {"action": "close", "window": "visual_studio_code"},
+        ),
+        ("открой дискод джарвис", "open_application", {"application": "discord"}),
+        (
+            "закрой паинт джарвис",
+            "window_control",
+            {"action": "close", "window": "paint"},
+        ),
+        (
+            "закрой телегу джарвис",
+            "window_control",
+            {"action": "close", "window": "telegram"},
+        ),
+    ),
+)
+def test_explicit_router_asr_aliases_and_trailing_wake_word(text, intent, slots):
+    assert route_explicit_command(text) == RoutedAction(intent, slots)
 
 
 def test_talking_about_application_does_not_trigger_launch_intent():
@@ -277,6 +329,14 @@ def test_reminder_guardrails_cover_create_list_cancel_and_absolute_time():
         assert result.intent == intent
         assert result.slots == slots
         assert result.confidence >= 0.99
+
+
+def test_incomplete_reminder_prefix_does_not_strip_start_of_message_word():
+    action = route_explicit_command("напомни мне проверить духовку")
+
+    assert action == RoutedAction(
+        "set_reminder", {"reminder_text": "проверить духовку"}
+    )
 
 
 def test_reminder_guardrail_does_not_treat_discussion_as_action():
